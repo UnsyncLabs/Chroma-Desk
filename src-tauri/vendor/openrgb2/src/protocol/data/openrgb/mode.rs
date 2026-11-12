@@ -219,6 +219,7 @@ impl ModeData {
         self.color_mode as u32
     }
 
+    /// Sets the brightness (chroma-desk patch: documented to satisfy `missing_docs`).
     pub fn set_brightness(&mut self, b: u32) {
         if self.flags.contains(ModeFlag::HasBrightness) {
             self.brightness.replace(b);

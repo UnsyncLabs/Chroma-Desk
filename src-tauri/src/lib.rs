@@ -1,7 +1,10 @@
 mod config;
+mod error;
+mod identity;
 mod sdk;
 
 use config::{zone_key, Config};
+use error::{ApiError, Res};
 use openrgb2::{ControllerGroup, OpenRgbClient};
 use sdk::{DeviceDto, ModeRequest, Rgb};
 use tokio::sync::Mutex;
@@ -17,15 +20,13 @@ struct AppState {
     config: std::sync::Mutex<Config>,
 }
 
-type Res<T> = Result<T, String>;
-
 impl AppState {
     /// Conecta si hace falta y vuelve a leer todos los dispositivos.
     async fn refresh(&self) -> Res<()> {
         let mut guard = self.conn.lock().await;
         if guard.is_none() {
             let client = sdk::connect().await?;
-            let group = client.get_all_controllers().await.map_err(|e| e.to_string())?;
+            let group = client.get_all_controllers().await.map_err(ApiError::sdk)?;
             *guard = Some(Conn { client, group });
         } else {
             let conn = guard.as_mut().unwrap();
@@ -46,16 +47,18 @@ impl AppState {
     async fn apply_saved_zone_sizes(&self) -> Res<bool> {
         let sizes = self.config.lock().unwrap().zone_sizes.clone();
         let guard = self.conn.lock().await;
-        let conn = guard.as_ref().ok_or("Sin conexión")?;
+        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
         let mut changed = false;
         for c in conn.group.iter() {
             for z in c.get_all_zones() {
                 let key = zone_key(c.name(), c.location(), z.name());
-                if let Some(&n) = sizes.get(&key) {
-                    if n != z.num_leds() && n >= z.leds_min() && n <= z.leds_max() {
-                        z.resize(n).await.map_err(|e| e.to_string())?;
-                        changed = true;
-                    }
+                if let Some(&n) = sizes.get(&key)
+                    && n != z.num_leds()
+                    && n >= z.leds_min()
+                    && n <= z.leds_max()
+                {
+                    z.resize(n).await.map_err(ApiError::sdk)?;
+                    changed = true;
                 }
             }
         }
@@ -64,8 +67,13 @@ impl AppState {
 
     async fn devices(&self) -> Res<Vec<DeviceDto>> {
         let guard = self.conn.lock().await;
-        let conn = guard.as_ref().ok_or("Sin conexión")?;
-        Ok(conn.group.iter().map(sdk::device_dto).collect())
+        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+        let mut dtos: Vec<DeviceDto> = conn.group.iter().map(sdk::device_dto).collect();
+        let keys = identity::device_keys(dtos.iter().map(|d| (d.name.as_str(), d.serial.as_str())));
+        for (d, k) in dtos.iter_mut().zip(keys) {
+            d.key = k;
+        }
+        Ok(dtos)
     }
 }
 
@@ -89,7 +97,7 @@ async fn rescan(state: tauri::State<'_, AppState>) -> Res<Vec<DeviceDto>> {
     {
         let guard = state.conn.lock().await;
         if let Some(conn) = guard.as_ref() {
-            conn.client.rescan_devices().await.map_err(|e| e.to_string())?;
+            conn.client.rescan_devices().await.map_err(ApiError::sdk)?;
         }
     }
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -99,7 +107,7 @@ async fn rescan(state: tauri::State<'_, AppState>) -> Res<Vec<DeviceDto>> {
 #[tauri::command]
 async fn set_color_all(state: tauri::State<'_, AppState>, color: Rgb) -> Res<Vec<String>> {
     let guard = state.conn.lock().await;
-    let conn = guard.as_ref().ok_or("Sin conexión")?;
+    let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
     let mut errors = vec![];
     for c in conn.group.iter() {
         if let Err(e) = sdk::set_device_color(c, color).await {
@@ -112,8 +120,8 @@ async fn set_color_all(state: tauri::State<'_, AppState>, color: Rgb) -> Res<Vec
 #[tauri::command]
 async fn set_device_color(state: tauri::State<'_, AppState>, device: usize, color: Rgb) -> Res<()> {
     let guard = state.conn.lock().await;
-    let conn = guard.as_ref().ok_or("Sin conexión")?;
-    let c = conn.group.get_controller(device).map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+    let c = conn.group.get_controller(device).map_err(ApiError::sdk)?;
     sdk::set_device_color(c, color).await
 }
 
@@ -126,16 +134,16 @@ async fn set_leds(
     ensure_direct: Option<bool>,
 ) -> Res<()> {
     let guard = state.conn.lock().await;
-    let conn = guard.as_ref().ok_or("Sin conexión")?;
-    let c = conn.group.get_controller(device).map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+    let c = conn.group.get_controller(device).map_err(ApiError::sdk)?;
     sdk::set_leds(c, &colors, ensure_direct.unwrap_or(false)).await
 }
 
 #[tauri::command]
 async fn set_mode(state: tauri::State<'_, AppState>, device: usize, req: ModeRequest) -> Res<()> {
     let guard = state.conn.lock().await;
-    let conn = guard.as_ref().ok_or("Sin conexión")?;
-    let c = conn.group.get_controller(device).map_err(|e| e.to_string())?;
+    let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+    let c = conn.group.get_controller(device).map_err(ApiError::sdk)?;
     sdk::apply_mode(c, &req).await
 }
 
@@ -149,13 +157,13 @@ async fn resize_zone(
 ) -> Res<Vec<DeviceDto>> {
     {
         let guard = state.conn.lock().await;
-        let conn = guard.as_ref().ok_or("Sin conexión")?;
-        let c = conn.group.get_controller(device).map_err(|e| e.to_string())?;
-        let z = c.get_zone(zone).map_err(|e| e.to_string())?;
+        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+        let c = conn.group.get_controller(device).map_err(ApiError::sdk)?;
+        let z = c.get_zone(zone).map_err(ApiError::sdk)?;
         if size < z.leds_min() || size > z.leds_max() {
-            return Err(format!("Tamaño fuera de rango ({}–{})", z.leds_min(), z.leds_max()));
+            return Err(ApiError::new("size_out_of_range", format!("{}-{}", z.leds_min(), z.leds_max())));
         }
-        z.resize(size).await.map_err(|e| e.to_string())?;
+        z.resize(size).await.map_err(ApiError::sdk)?;
         let mut cfg = state.config.lock().unwrap();
         cfg.zone_sizes.insert(zone_key(c.name(), c.location(), z.name()), size);
         cfg.save()?;

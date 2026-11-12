@@ -1,0 +1,53 @@
+/* Design tokens: dark by default; a light theme only needs to override these variables. */
+:root {
+  --bg: #111116;
+  --panel: #18181f;
+  --panel-2: #22222b;
+  --control: #2a2a35;
+  --border: #ffffff1a;
+  --text: #e8e8ef;
+  --muted: #9a9aab;
+  --accent: #7dd3fc;
+  --accent-fg: #0d1a22;
+  --danger: #ff7b7b;
+  --ok: #7be0a3;
+  --canvas-bg: #0c0c10;
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
+}
+:root[data-theme="light"] {
+  --bg: #f4f4f8;
+  --panel: #ffffff;
+  --panel-2: #ebebf2;
+  --control: #e2e2ea;
+  --border: #00000022;
+  --text: #1b1b22;
+  --muted: #5d5d6d;
+  --accent: #0b73b8;
+  --accent-fg: #ffffff;
+  --danger: #c62828;
+  --ok: #1b7f45;
+  --canvas-bg: #dcdce6;
+  color-scheme: light;
+}
+body { margin: 0; }
+button {
+  background: var(--control); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font: inherit;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+input, select, textarea {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 5px; padding: 0.25rem 0.4rem; font: inherit;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="range"] { accent-color: var(--accent); padding: 0; }
+h2, h3 { margin: 0 0 0.5rem; }
+.muted { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

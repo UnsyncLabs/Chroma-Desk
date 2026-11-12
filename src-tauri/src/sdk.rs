@@ -3,6 +3,7 @@
 //! Convierte los datos del servidor en estructuras serializables para el frontend
 //! y ofrece operaciones de alto nivel (color, LEDs, modos, tamaño de zonas).
 
+use crate::error::{ApiError, Res};
 use openrgb2::{Color, Controller, Direction, ModeFlag, OpenRgbClient};
 use serde::{Deserialize, Serialize};
 use std::net::TcpStream;
@@ -71,6 +72,8 @@ pub struct ModeDto {
 #[derive(Debug, Clone, Serialize)]
 pub struct DeviceDto {
     pub id: usize,
+    /// Stable identity (see `identity`), filled in by the caller.
+    pub key: String,
     pub name: String,
     pub vendor: String,
     pub description: String,
@@ -91,7 +94,7 @@ pub fn server_running() -> bool {
 }
 
 /// Arranca `openrgb --server` en segundo plano si no está corriendo y espera a que responda.
-pub async fn ensure_server() -> Result<(), String> {
+pub async fn ensure_server() -> Res<()> {
     if server_running() {
         return Ok(());
     }
@@ -101,7 +104,7 @@ pub async fn ensure_server() -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| format!("No se pudo iniciar openrgb: {e}"))?;
+        .map_err(|e| ApiError::new("server_start_failed", e))?;
     for _ in 0..60 {
         tokio::time::sleep(Duration::from_millis(500)).await;
         if server_running() {
@@ -110,12 +113,12 @@ pub async fn ensure_server() -> Result<(), String> {
             return Ok(());
         }
     }
-    Err("El servidor de OpenRGB no respondió en 30 s".into())
+    Err(ApiError::new("server_timeout", ""))
 }
 
-pub async fn connect() -> Result<OpenRgbClient, String> {
+pub async fn connect() -> Res<OpenRgbClient> {
     ensure_server().await?;
-    let mut client = OpenRgbClient::connect().await.map_err(|e| e.to_string())?;
+    let mut client = OpenRgbClient::connect().await.map_err(ApiError::sdk)?;
     let _ = client.set_name("chroma-desk").await;
     Ok(client)
 }
@@ -193,6 +196,7 @@ pub fn device_dto(c: &Controller) -> DeviceDto {
 
     DeviceDto {
         id: c.id(),
+        key: String::new(),
         name: c.name().to_string(),
         vendor: c.vendor().to_string(),
         description: c.description().to_string(),
@@ -210,35 +214,35 @@ pub fn device_dto(c: &Controller) -> DeviceDto {
 
 /// Pone el dispositivo en modo Direct (o Static si no tiene Direct).
 /// Devuelve `true` si quedó en Direct (control por LED).
-pub async fn controllable(c: &Controller) -> Result<bool, String> {
+pub async fn controllable(c: &Controller) -> Res<bool> {
     if c.set_controllable_mode().await.is_ok() {
         return Ok(true);
     }
     if let Some(m) = c.modes().iter().find(|m| m.name().eq_ignore_ascii_case("static")) {
-        c.update_mode(m).await.map_err(|e| e.to_string())?;
+        c.update_mode(m).await.map_err(ApiError::sdk)?;
     }
     Ok(false)
 }
 
 /// Pinta todo el dispositivo de un color (usa Static con color si no hay Direct).
-pub async fn set_device_color(c: &Controller, color: Rgb) -> Result<(), String> {
+pub async fn set_device_color(c: &Controller, color: Rgb) -> Res<()> {
     if controllable(c).await? {
-        c.set_all_leds(color).await.map_err(|e| e.to_string())
+        c.set_all_leds(color).await.map_err(ApiError::sdk)
     } else if let Some(m) = c.modes().iter().find(|m| m.name().eq_ignore_ascii_case("static")) {
         let mut m = m.clone();
         let n = m.colors().len().max(1);
         m.set_colors(vec![color.into(); n]);
-        c.update_mode(&m).await.map_err(|e| e.to_string())
+        c.update_mode(&m).await.map_err(ApiError::sdk)
     } else {
-        Err(format!("{} no admite color fijo", c.name()))
+        Err(ApiError::new("no_static_color", c.name()))
     }
 }
 
-pub async fn set_leds(c: &Controller, colors: &[Rgb], ensure_direct: bool) -> Result<(), String> {
+pub async fn set_leds(c: &Controller, colors: &[Rgb], ensure_direct: bool) -> Res<()> {
     if ensure_direct {
         controllable(c).await?;
     }
-    c.set_leds(colors.iter().copied()).await.map_err(|e| e.to_string())
+    c.set_leds(colors.iter().copied()).await.map_err(ApiError::sdk)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -252,11 +256,11 @@ pub struct ModeRequest {
     pub save: bool,
 }
 
-pub async fn apply_mode(c: &Controller, req: &ModeRequest) -> Result<(), String> {
+pub async fn apply_mode(c: &Controller, req: &ModeRequest) -> Res<()> {
     let mut m = c
         .modes()
         .get(req.mode)
-        .ok_or("Modo no encontrado")?
+        .ok_or_else(|| ApiError::new("mode_not_found", ""))?
         .clone();
     if let Some(s) = req.speed {
         m.set_speed(s);
@@ -270,9 +274,9 @@ pub async fn apply_mode(c: &Controller, req: &ModeRequest) -> Result<(), String>
     if let Some(cols) = &req.colors {
         m.set_colors(cols.iter().map(|&c| c.into()).collect());
     }
-    c.update_mode(&m).await.map_err(|e| e.to_string())?;
+    c.update_mode(&m).await.map_err(ApiError::sdk)?;
     if req.save {
-        c.save_mode().await.map_err(|e| e.to_string())?;
+        c.save_mode().await.map_err(ApiError::sdk)?;
     }
     Ok(())
 }

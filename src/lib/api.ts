@@ -42,6 +42,8 @@ export interface Mode {
 
 export interface Device {
   id: number;
+  /** Stable identity (name#serial or name@ordinal). */
+  key: string;
   name: string;
   vendor: string;
   description: string;
@@ -85,32 +87,7 @@ export const fromHex = (h: string): Rgb => [
   parseInt(h.slice(5, 7), 16),
 ];
 
-export const DEVICE_LABEL: Record<string, string> = {
-  Motherboard: "Placa base",
-  Dram: "RAM",
-  DRAM: "RAM",
-  Gpu: "GPU",
-  GPU: "GPU",
-  Cooler: "Refrigeración",
-  LedStrip: "Tira LED",
-  Keyboard: "Teclado",
-  Mouse: "Ratón",
-  MouseMat: "Alfombrilla",
-  Headset: "Auriculares",
-  HeadsetStand: "Soporte",
-  Gamepad: "Mando",
-  Light: "Luz",
-  Speaker: "Altavoz",
-  Virtual: "Virtual",
-  Storage: "Almacenamiento",
-  Case: "Caja",
-  Microphone: "Micrófono",
-  Accessory: "Accesorio",
-  Keypad: "Keypad",
-  Unknown: "Otro",
-};
-
-/** Ejecuta `fn` como mucho cada `ms`, asegurando que la última llamada se aplique. */
+/** Runs `fn` at most every `ms`, making sure the last call is applied. */
 export function throttle<A extends unknown[]>(fn: (...a: A) => void, ms: number) {
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;

@@ -33,12 +33,12 @@ impl Config {
             .unwrap_or_default()
     }
 
-    pub fn save(&self) -> Result<(), String> {
+    pub fn save(&self) -> crate::error::Res<()> {
         let p = path();
         if let Some(dir) = p.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(dir).map_err(crate::error::ApiError::io)?;
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(p, json).map_err(|e| e.to_string())
+        let json = serde_json::to_string_pretty(self).map_err(crate::error::ApiError::io)?;
+        std::fs::write(p, json).map_err(crate::error::ApiError::io)
     }
 }
