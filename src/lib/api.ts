@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type Rgb = [number, number, number];
 
@@ -67,18 +68,94 @@ export interface ModeRequest {
   save?: boolean;
 }
 
+// ---------- scene (mirrors src-tauri/src/engine) ----------
+
+export type Blend = "normal" | "add" | "multiply" | "screen";
+export type Mask = { type: "all" } | { type: "zone"; id: number } | { type: "leds"; leds: number[] };
+export type ParamValue = number | boolean | Rgb | Rgb[] | Record<string, Rgb>;
+
+export interface Layer {
+  id: string;
+  name: string;
+  enabled: boolean;
+  opacity: number;
+  blend: Blend;
+  mask: Mask;
+  effect: string;
+  params: Record<string, ParamValue>;
+}
+
+export interface HardwareMode {
+  mode: string;
+  speed?: number | null;
+  brightness?: number | null;
+  direction?: number | null;
+  colors?: Rgb[] | null;
+}
+
+export interface DeviceScene {
+  mode: "effects" | "hardware";
+  layers: Layer[];
+  brightness: number;
+  fps: number | null;
+  follow_global: boolean;
+  fan_leds: Record<string, number>;
+  hardware: HardwareMode | null;
+}
+
+export interface Scene {
+  master_brightness: number;
+  sync: boolean;
+  order: string[];
+  global_layers: Layer[];
+  devices: Record<string, DeviceScene>;
+}
+
+export interface ParamDef {
+  key: string;
+  kind: "slider" | "angle" | "color" | "colors" | "bool" | "paint";
+  min: number;
+  max: number;
+  step: number;
+  default: ParamValue;
+}
+
+export interface EffectDef {
+  id: string;
+  params: ParamDef[];
+}
+
+export interface FrameEvent {
+  key: string;
+  /** Flat RGB bytes. */
+  colors: number[];
+}
+
+export type EngineStatus = "ok" | "reconnecting" | "server_down";
+
 export const api = {
   connect: () => invoke<Device[]>("connect"),
   listDevices: () => invoke<Device[]>("list_devices"),
   rescan: () => invoke<Device[]>("rescan"),
-  setColorAll: (color: Rgb) => invoke<string[]>("set_color_all", { color }),
-  setDeviceColor: (device: number, color: Rgb) => invoke<void>("set_device_color", { device, color }),
   setLeds: (device: number, colors: Rgb[], ensureDirect = false) =>
     invoke<void>("set_leds", { device, colors, ensureDirect }),
   setMode: (device: number, req: ModeRequest) => invoke<void>("set_mode", { device, req }),
   resizeZone: (device: number, zone: number, size: number) =>
     invoke<Device[]>("resize_zone", { device, zone, size }),
+  getScene: () => invoke<Scene>("get_scene"),
+  setScene: (scene: Scene) => invoke<void>("set_scene", { scene }),
+  setLedPositions: (key: string, positions: [number, number][]) => invoke<void>("set_led_positions", { key, positions }),
+  setVisibleDevices: (keys: string[]) => invoke<void>("set_visible_devices", { keys }),
+  effectDefs: () => invoke<EffectDef[]>("effect_defs"),
+  effectDefaults: () => invoke<Record<string, Record<string, ParamValue>>>("effect_defaults"),
+  setFpsByType: (fps: Record<string, number>) => invoke<void>("set_fps_by_type", { fps }),
+  getBlackout: () => invoke<boolean>("get_blackout"),
+  setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
 };
+
+/** Subscribes to a backend event; resolves to the unsubscribe function. */
+export const on = <T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> =>
+  listen<T>(event, (e) => cb(e.payload));
 
 export const hex = (c: Rgb) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
 export const fromHex = (h: string): Rgb => [

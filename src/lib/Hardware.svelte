@@ -1,10 +1,19 @@
 <script lang="ts">
   /** Native (hardware) modes of a device: speed, brightness, direction, colours, save to device. */
-  import { api, hex, fromHex, type Device, type Mode } from "./api";
+  import { api, hex, fromHex, type Device, type Mode, type ModeRequest } from "./api";
   import { t } from "./i18n/index.svelte";
   import { toast, toastError } from "./state.svelte";
 
-  let { device, onapplied }: { device: Device; onapplied?: (mode: number) => void } = $props();
+  let {
+    device,
+    beforeApply,
+    onapplied,
+  }: {
+    device: Device;
+    /** Runs before the mode is sent (the engine must release the device first). */
+    beforeApply?: () => Promise<void>;
+    onapplied?: (req: ModeRequest, modeName: string) => void;
+  } = $props();
 
   let modeIdx = $state(0);
   let speed = $state(0);
@@ -30,15 +39,17 @@
   async function applyMode(save = false) {
     if (!mode) return;
     try {
-      await api.setMode(device.id, {
+      await beforeApply?.();
+      const req: ModeRequest = {
         mode: mode.id,
         speed: mode.has_speed ? speed : undefined,
         brightness: mode.has_brightness ? brightness : undefined,
         direction: mode.has_direction ? direction : undefined,
         colors: mode.color_mode === 2 ? modeColors.map(fromHex) : undefined,
         save,
-      });
-      onapplied?.(mode.id);
+      };
+      await api.setMode(device.id, req);
+      onapplied?.(req, mode.name);
       toast(t(save ? "hw.savedToDevice" : "hw.applied", { mode: mode.name }), "ok");
     } catch (e) {
       toastError(e);

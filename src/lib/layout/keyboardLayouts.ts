@@ -120,5 +120,6 @@ const SHORT: Record<string, string> = {
 export function shortLabel(ledName: string): string {
   const base = ledName.replace(/^(Key|Media|Keyboard):\s*/i, "");
   if (base in SHORT) return SHORT[base];
-  return base.replace(/^Number Pad /, "").replace(/^Media /, "");
+  const out = base.replace(/^Number Pad /, "").replace(/^Media /, "");
+  return out.length > 6 ? `${out.slice(0, 5)}…` : out;
 }

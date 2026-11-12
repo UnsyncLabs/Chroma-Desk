@@ -2,10 +2,19 @@ import { defineConfig } from "vitest/config";
 import { sveltekit } from "@sveltejs/kit/vite";
 import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
+// MOCK=1: run the UI in a plain browser against an in-memory fake backend (dev/screenshots only).
+/** @type {Record<string, string>} */
+const mock = process.env.MOCK
+  ? {
+      "@tauri-apps/api/core": new URL("./src/lib/mock/tauri.ts", import.meta.url).pathname,
+      "@tauri-apps/api/event": new URL("./src/lib/mock/tauri.ts", import.meta.url).pathname,
+    }
+  : {};
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [sveltekit()],
+  resolve: { alias: mock },
   test: { include: ["src/**/*.test.ts"] },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

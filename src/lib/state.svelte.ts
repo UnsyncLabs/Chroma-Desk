@@ -56,22 +56,20 @@ export async function rescan() {
   if (!app.error) toast(t("toast.rescanned", { n: app.devices.length }), "ok");
 }
 
-// ---------- fan presets (LEDs per fan by zone), per device ----------
-const FAN_KEY = "chroma-desk.fans";
-function loadFans(): Record<string, Record<string, number>> {
-  try {
-    return JSON.parse(localStorage.getItem(FAN_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-export const fans = $state<{ map: Record<string, Record<string, number>> }>({ map: loadFans() });
+// ---------- confirmation dialog ----------
+export const confirmState = $state<{ open: boolean; text: string; confirmLabel: string; resolve: ((ok: boolean) => void) | null }>({
+  open: false,
+  text: "",
+  confirmLabel: "",
+  resolve: null,
+});
 
-export function setFanLeds(deviceKey: string, zone: string, perFan: number) {
-  fans.map = { ...fans.map, [deviceKey]: { ...fans.map[deviceKey], [zone]: perFan } };
-  try {
-    localStorage.setItem(FAN_KEY, JSON.stringify(fans.map));
-  } catch {
-    /* storage unavailable */
-  }
+/** Asks the user to confirm a destructive action. */
+export function confirmDialog(text: string, confirmLabel = ""): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmState.text = text;
+    confirmState.confirmLabel = confirmLabel;
+    confirmState.resolve = resolve;
+    confirmState.open = true;
+  });
 }

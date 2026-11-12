@@ -2,7 +2,8 @@
   /** Advanced tab: zone sizes + fan presets, per-LED table and device information. */
   import { api, hex, fromHex, type Device, type Rgb } from "./api";
   import { t } from "./i18n/index.svelte";
-  import { setFanLeds, setDevices, toast, toastError } from "./state.svelte";
+  import { setDevices, toast, toastError } from "./state.svelte";
+  import { setFanLeds } from "./scene.svelte";
 
   let { device }: { device: Device } = $props();
 

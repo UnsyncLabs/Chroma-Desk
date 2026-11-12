@@ -330,7 +330,7 @@
 
 <style>
   .toolbar, .groups, .recent { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
-  .tools { display: flex; gap: 0.25rem; }
+  .tools { display: flex; gap: 0.25rem; flex-wrap: wrap; }
   .tools button { display: inline-flex; align-items: center; gap: 0.35rem; }
   .tools button.on { background: var(--accent); color: var(--accent-fg); }
   .tools svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
