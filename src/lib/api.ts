@@ -131,6 +131,25 @@ export interface FrameEvent {
   colors: number[];
 }
 
+export interface Settings {
+  language: string | null;
+  start_hidden: boolean;
+  default_profile: string | null;
+  current_profile: string | null;
+  fps_by_type: Record<string, number>;
+}
+
+export interface ProfileInfo {
+  name: string;
+  file: string;
+  openrgb: boolean;
+}
+
+export interface ProfileList {
+  profiles: ProfileInfo[];
+  corrupt: string[];
+}
+
 export type EngineStatus = "ok" | "reconnecting" | "server_down";
 
 export const api = {
@@ -149,6 +168,20 @@ export const api = {
   effectDefs: () => invoke<EffectDef[]>("effect_defs"),
   effectDefaults: () => invoke<Record<string, Record<string, ParamValue>>>("effect_defaults"),
   setFpsByType: (fps: Record<string, number>) => invoke<void>("set_fps_by_type", { fps }),
+  waitStartup: () => invoke<void>("wait_startup"),
+  listProfiles: () => invoke<ProfileList>("list_profiles"),
+  profilesPath: () => invoke<string>("profiles_path"),
+  saveProfile: (name: string) => invoke<ProfileInfo>("save_profile", { name }),
+  applyProfile: (name: string) => invoke<Scene>("apply_profile", { name }),
+  deleteProfile: (name: string) => invoke<void>("delete_profile", { name }),
+  renameProfile: (old: string, newName: string) => invoke<ProfileInfo>("rename_profile", { old, new: newName }),
+  duplicateProfile: (name: string, newName: string) => invoke<ProfileInfo>("duplicate_profile", { name, new: newName }),
+  exportProfile: (name: string, path: string) => invoke<void>("export_profile", { name, path }),
+  importProfile: (path: string) => invoke<ProfileInfo>("import_profile", { path }),
+  listOpenrgbProfiles: () => invoke<string[]>("list_openrgb_profiles"),
+  importOpenrgbProfile: (name: string) => invoke<ProfileInfo>("import_openrgb_profile", { name }),
+  getSettings: () => invoke<Settings>("get_settings"),
+  setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
   getBlackout: () => invoke<boolean>("get_blackout"),
   setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
 };

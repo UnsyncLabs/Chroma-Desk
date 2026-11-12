@@ -3,7 +3,9 @@
   import { api, hex, type Device, type Rgb } from "$lib/api";
   import { t, deviceLabel } from "$lib/i18n/index.svelte";
   import { app, loadDevices, rescan } from "$lib/state.svelte";
-  import { frames, listenEngine, loadEngine, sceneStore, syncPositions, commit } from "$lib/scene.svelte";
+  import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
+  import { loadProfiles, profiles } from "$lib/profiles.svelte";
+  import Profiles from "$lib/Profiles.svelte";
   import AllDevices from "$lib/AllDevices.svelte";
   import DeviceView from "$lib/DeviceView.svelte";
   import Settings from "$lib/Settings.svelte";
@@ -13,12 +15,15 @@
   const device = $derived(app.view.kind === "device" ? (app.devices.find((d) => d.key === (app.view as { key: string }).key) ?? null) : null);
 
   async function start() {
+    await api.waitStartup();
+    await loadProfiles();
     await loadDevices(api.connect);
     if (app.error) return;
     await loadEngine();
     syncPositions(app.devices);
     // Dev aid (screenshots): `#d=<index>` opens that device.
     const m = import.meta.env.DEV ? location.hash.match(/^#d=(\d+)/) : null;
+    if (import.meta.env.DEV && location.hash === "#profiles") app.view = { kind: "profiles" };
     if (m && app.devices[Number(m[1])]) app.view = { kind: "device", key: app.devices[Number(m[1])].key };
   }
 
@@ -69,6 +74,10 @@
       {/each}
     </nav>
     <footer>
+      <button class="dev" class:active={app.view.kind === "profiles"} onclick={() => go({ kind: "profiles" })}>
+        <span class="name">{t("nav.profiles")}{#if isDirty()}<span class="dirty" title={t("prof.unsaved")}> ●</span>{/if}</span>
+        <small>{profiles.settings.current_profile ?? t("prof.none")}</small>
+      </button>
       <button class="dev" class:active={app.view.kind === "settings"} onclick={() => go({ kind: "settings" })}>
         <span class="name">{t("nav.settings")}</span>
       </button>
@@ -99,6 +108,8 @@
       <p class="muted">{t("common.connecting")}</p>
     {:else if app.view.kind === "settings"}
       <Settings />
+    {:else if app.view.kind === "profiles"}
+      <Profiles />
     {:else if !app.devices.length}
       <div class="empty">
         <h2>{t("empty.noDevices")}</h2>
@@ -133,7 +144,8 @@
   .dev small { color: var(--muted); grid-column: 2; }
   footer { padding: 0.6rem 0.5rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
   footer .dev { grid-template-columns: 1fr; margin: 0; }
-  footer .dev .name { grid-column: 1; }
+  .dirty { color: var(--danger); }
+  footer .dev .name, footer .dev small { grid-column: 1; }
   main { padding: 1.2rem 1.6rem; overflow-y: auto; min-width: 0; }
   .banner { background: var(--panel-2); border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; gap: 0.6rem; align-items: center; margin: 0 0 0.8rem; flex-wrap: wrap; }
   .banner.warn { border-left: 4px solid var(--danger); }

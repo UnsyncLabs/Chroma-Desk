@@ -98,6 +98,7 @@ export async function listenEngine(onDevicesChanged: () => void): Promise<() => 
     }),
     on<{ state: EngineStatus }>("engine-status", (s) => (sceneStore.status = s.state)),
     on<null>("devices-changed", onDevicesChanged),
+    on<{ code: string; detail?: string }>("startup-error", (e) => toastError(e)),
     on<boolean>("blackout", (b) => (sceneStore.blackout = b)),
     on<Scene>("scene-changed", (s) => {
       setScene(s);

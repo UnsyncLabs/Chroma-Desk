@@ -96,7 +96,8 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "effect_defaults": return Object.fromEntries(DEFS.map((d) => [d.id, Object.fromEntries(d.params.map((p) => [p.key, p.default]))]));
     case "get_blackout": return false;
     case "get_settings": return { language: "en", start_hidden: false, fps_by_type: {}, default_profile: null };
-    case "list_profiles": return [];
+    case "list_profiles": return { profiles: [{ name: "Gaming", file: "gaming.json", openrgb: false }, { name: "OpenRGB: yado1", file: "o.json", openrgb: true }], corrupt: ["broken.json"] };
+    case "profiles_path": return "~/.config/chroma-desk/profiles";
     case "get_autostart": return false;
     case "server_status": return { running: true, version: "mock", gui_open: false, service_installed: false, service_active: false };
     default: return null;

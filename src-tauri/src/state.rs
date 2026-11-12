@@ -1,12 +1,14 @@
 //! Shared application state: the SDK connection, persisted config and the animation engine.
 
-use crate::config::{Config, zone_key};
+use crate::config::{Config, LegacyDevice, migrate_zone_sizes, zone_key};
 use crate::engine::{DevInfo, Engine};
 use crate::error::{ApiError, Res};
 use crate::identity;
 use crate::sdk::{self, DeviceDto};
 use openrgb2::{ControllerGroup, OpenRgbClient};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::Notify;
 use tokio::sync::Mutex;
 
 pub struct Conn {
@@ -20,9 +22,56 @@ pub struct AppState {
     pub conn: Arc<Mutex<Option<Conn>>>,
     pub config: Arc<std::sync::Mutex<Config>>,
     pub engine: Arc<Engine>,
+    /// Set once the startup sequence has finished.
+    ready: Arc<(AtomicBool, Notify)>,
 }
 
 impl AppState {
+    pub fn mark_ready(&self) {
+        self.ready.0.store(true, Ordering::SeqCst);
+        self.ready.1.notify_waiters();
+    }
+
+    pub async fn wait_ready(&self) {
+        loop {
+            let waiter = self.ready.1.notified();
+            if self.ready.0.load(Ordering::SeqCst) {
+                return;
+            }
+            waiter.await;
+        }
+    }
+
+    /// Remembers which profile is applied (shown in the UI).
+    pub fn set_current_profile(&self, name: Option<String>) -> Res<()> {
+        let mut cfg = self.config.lock().unwrap();
+        cfg.settings.current_profile = name;
+        cfg.save()
+    }
+
+    /// A profile was deleted: drop references to it.
+    pub fn forget_profile(&self, name: &str) -> Res<()> {
+        let mut cfg = self.config.lock().unwrap();
+        if cfg.settings.current_profile.as_deref() == Some(name) {
+            cfg.settings.current_profile = None;
+        }
+        if cfg.settings.default_profile.as_deref() == Some(name) {
+            cfg.settings.default_profile = None;
+        }
+        cfg.save()
+    }
+
+    pub fn rename_profile_refs(&self, old: &str, new: &str) -> Res<()> {
+        let mut guard = self.config.lock().unwrap();
+        let cfg = &mut *guard;
+        for slot in [&mut cfg.settings.current_profile, &mut cfg.settings.default_profile] {
+            if slot.as_deref() == Some(old) {
+                *slot = Some(new.to_string());
+            }
+        }
+        cfg.save()
+    }
+
     pub fn new(config: Config) -> Self {
         Self { config: Arc::new(std::sync::Mutex::new(config)), ..Default::default() }
     }
@@ -46,16 +95,48 @@ impl AppState {
         Ok(())
     }
 
-    /// Re-applies saved zone sizes (OpenRGB forgets them on restart). True if anything changed.
+    /// Identity keys of the connected devices, in server order.
+    pub fn keys_of(conn: &Conn) -> Vec<String> {
+        identity::device_keys(conn.group.iter().map(|c| (c.name(), c.serial())))
+    }
+
+    /// Re-applies remembered zone sizes (OpenRGB forgets them on restart), migrating the
+    /// phase 1-3 config format first. True if any zone changed size.
     pub async fn apply_saved_zone_sizes(&self) -> Res<bool> {
-        let sizes = self.config.lock().unwrap().zone_sizes.clone();
+        self.migrate_legacy_sizes().await?;
+        let sizes = self.config.lock().unwrap().zone_sizes_by_key.clone();
+        self.apply_zone_sizes(&sizes).await
+    }
+
+    async fn migrate_legacy_sizes(&self) -> Res<()> {
+        if self.config.lock().unwrap().zone_sizes.is_empty() {
+            return Ok(());
+        }
         let guard = self.conn.lock().await;
         let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+        let keys = Self::keys_of(conn);
+        let zone_names: Vec<Vec<String>> = conn.group.iter().map(|c| c.get_all_zones().map(|z| z.name().to_string()).collect()).collect();
+        let locations: Vec<String> = conn.group.iter().map(|c| c.location().to_string()).collect();
+        let names: Vec<String> = conn.group.iter().map(|c| c.name().to_string()).collect();
+        let devs: Vec<LegacyDevice> = (0..keys.len())
+            .map(|i| LegacyDevice { name: &names[i], location: &locations[i], key: &keys[i], zones: zone_names[i].iter().map(String::as_str).collect() })
+            .collect();
+        let mut cfg = self.config.lock().unwrap();
+        let migrated = migrate_zone_sizes(&cfg.zone_sizes, &devs);
+        cfg.zone_sizes_by_key.extend(migrated);
+        cfg.zone_sizes.clear();
+        cfg.save()
+    }
+
+    /// Resizes zones to `sizes` (by `<device key>|<zone>`) where valid; true if any changed.
+    pub async fn apply_zone_sizes(&self, sizes: &std::collections::BTreeMap<String, usize>) -> Res<bool> {
+        let guard = self.conn.lock().await;
+        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+        let keys = Self::keys_of(conn);
         let mut changed = false;
-        for c in conn.group.iter() {
+        for (c, key) in conn.group.iter().zip(&keys) {
             for z in c.get_all_zones() {
-                let key = zone_key(c.name(), c.location(), z.name());
-                if let Some(&n) = sizes.get(&key)
+                if let Some(&n) = sizes.get(&zone_key(key, z.name()))
                     && n != z.num_leds()
                     && n >= z.leds_min()
                     && n <= z.leds_max()
@@ -66,6 +147,20 @@ impl AppState {
             }
         }
         Ok(changed)
+    }
+
+    /// Current size of every resizable zone, by `<device key>|<zone>`.
+    pub async fn resizable_zone_sizes(&self) -> Res<std::collections::BTreeMap<String, usize>> {
+        let guard = self.conn.lock().await;
+        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+        let keys = Self::keys_of(conn);
+        let mut out = std::collections::BTreeMap::new();
+        for (c, key) in conn.group.iter().zip(&keys) {
+            for z in c.get_all_zones().filter(|z| z.leds_min() != z.leds_max()) {
+                out.insert(zone_key(key, z.name()), z.num_leds());
+            }
+        }
+        Ok(out)
     }
 
     /// Device list with stable keys; also refreshes the engine's view of the devices.

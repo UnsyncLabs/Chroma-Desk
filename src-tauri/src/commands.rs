@@ -1,8 +1,10 @@
 //! Tauri commands exposed to the frontend.
 
-use crate::config::zone_key;
+use crate::apply;
+use crate::config::{Settings, zone_key};
+use crate::profiles::{self, Profile, ProfileInfo, ProfileList};
 use crate::engine::effects::{self, EffectDef, Params, Pos};
-use crate::engine::{Scene, SceneMode};
+use crate::engine::Scene;
 use crate::error::{ApiError, Res};
 use crate::sdk::{self, DeviceDto, ModeRequest, Rgb};
 use crate::state::AppState;
@@ -66,8 +68,10 @@ pub async fn resize_zone(state: State<'_, AppState>, device: usize, zone: usize,
             return Err(ApiError::new("size_out_of_range", format!("{}-{}", z.leds_min(), z.leds_max())));
         }
         z.resize(size).await.map_err(ApiError::sdk)?;
+        let pos = conn.group.iter().position(|x| x.id() == device).ok_or_else(ApiError::no_connection)?;
+        let key = zone_key(&AppState::keys_of(conn)[pos], z.name());
         let mut cfg = state.config.lock().unwrap();
-        cfg.zone_sizes.insert(zone_key(c.name(), c.location(), z.name()), size);
+        cfg.zone_sizes_by_key.insert(key, size);
         cfg.save()?;
     }
     state.refresh(true).await?;
@@ -126,27 +130,107 @@ pub async fn set_blackout(state: State<'_, AppState>, on: bool) -> Res<()> {
     state.set_blackout(on).await
 }
 
-impl AppState {
-    pub async fn set_blackout(&self, on: bool) -> Res<()> {
-        self.engine.blackout.store(on, Ordering::Relaxed);
-        let scene = self.engine.scene.lock().unwrap().clone();
-        let devs = self.engine.devs.lock().unwrap().clone();
-        let guard = self.conn.lock().await;
-        let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
-        for d in devs {
-            let ds = scene.devices.get(&d.key);
-            if ds.is_some_and(|s| s.mode == SceneMode::Effects) {
-                continue;
-            }
-            let Ok(c) = conn.group.get_controller(d.index) else { continue };
-            if on {
-                let _ = sdk::set_device_color(c, Rgb(0, 0, 0)).await;
-            } else if let Some(hw) = ds.and_then(|s| s.hardware.as_ref())
-                && let Some(idx) = c.modes().iter().position(|m| m.name() == hw.mode)
-            {
-                let _ = sdk::apply_mode(c, &hw.to_request(idx)).await;
-            }
-        }
-        Ok(())
-    }
+// ---------- profiles and settings ----------
+
+#[tauri::command]
+pub fn list_profiles() -> ProfileList {
+    profiles::list(&profiles::profiles_dir())
+}
+
+#[tauri::command]
+pub fn profiles_path() -> String {
+    profiles::profiles_dir().to_string_lossy().into_owned()
+}
+
+/// Saves the live scene (and current zone sizes) as profile `name`.
+#[tauri::command]
+pub async fn save_profile(state: State<'_, AppState>, name: String) -> Res<ProfileInfo> {
+    let zone_sizes = state.resizable_zone_sizes().await.unwrap_or_default();
+    let scene = state.engine.scene.lock().unwrap().clone();
+    let existing = profiles::load(&profiles::profiles_dir(), name.trim()).ok();
+    let profile = Profile {
+        schema_version: profiles::SCHEMA_VERSION,
+        name,
+        openrgb_profile: existing.and_then(|p| p.openrgb_profile),
+        zone_sizes,
+        scene,
+    };
+    let info = profiles::save(&profiles::profiles_dir(), &profile)?;
+    state.set_current_profile(Some(info.name.clone()))?;
+    Ok(info)
+}
+
+#[tauri::command]
+pub async fn apply_profile(app: tauri::AppHandle, state: State<'_, AppState>, name: String) -> Res<Scene> {
+    apply::apply_profile(&state, &apply::emitter(&app), &name).await
+}
+
+#[tauri::command]
+pub fn delete_profile(state: State<'_, AppState>, name: String) -> Res<()> {
+    profiles::delete(&profiles::profiles_dir(), &name)?;
+    state.forget_profile(&name)
+}
+
+#[tauri::command]
+pub fn rename_profile(state: State<'_, AppState>, old: String, new: String) -> Res<ProfileInfo> {
+    let info = profiles::rename(&profiles::profiles_dir(), &old, &new)?;
+    state.rename_profile_refs(&old, &info.name)?;
+    Ok(info)
+}
+
+#[tauri::command]
+pub fn duplicate_profile(name: String, new: String) -> Res<ProfileInfo> {
+    profiles::duplicate(&profiles::profiles_dir(), &name, &new)
+}
+
+#[tauri::command]
+pub fn export_profile(name: String, path: String) -> Res<()> {
+    profiles::export(&profiles::profiles_dir(), &name, std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub fn import_profile(path: String) -> Res<ProfileInfo> {
+    profiles::import(&profiles::profiles_dir(), std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub async fn list_openrgb_profiles(state: State<'_, AppState>) -> Res<Vec<String>> {
+    let guard = state.conn.lock().await;
+    let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
+    conn.client.get_profiles().await.map_err(ApiError::sdk)
+}
+
+/// Creates a chroma-desk profile that loads the OpenRGB profile `name` when applied.
+#[tauri::command]
+pub fn import_openrgb_profile(name: String) -> Res<ProfileInfo> {
+    let dir = profiles::profiles_dir();
+    let pname = format!("OpenRGB: {name}");
+    let profile = Profile {
+        schema_version: profiles::SCHEMA_VERSION,
+        name: pname,
+        openrgb_profile: Some(name),
+        zone_sizes: Default::default(),
+        scene: Scene::default(),
+    };
+    profiles::save(&dir, &profile)
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> Settings {
+    state.config.lock().unwrap().settings.clone()
+}
+
+#[tauri::command]
+pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
+    *state.engine.fps_by_type.lock().unwrap() = settings.fps_by_type.clone();
+    let mut cfg = state.config.lock().unwrap();
+    cfg.settings = settings;
+    cfg.save()
+}
+
+/// Resolves once the startup sequence (connect, default profile) has finished.
+#[tauri::command]
+pub async fn wait_startup(state: State<'_, AppState>) -> Res<()> {
+    state.wait_ready().await;
+    Ok(())
 }
