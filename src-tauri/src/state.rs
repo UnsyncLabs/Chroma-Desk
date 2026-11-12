@@ -24,6 +24,7 @@ pub struct AppState {
     pub engine: Arc<Engine>,
     /// Set once the startup sequence has finished.
     ready: Arc<(AtomicBool, Notify)>,
+    pub tray: Arc<crate::tray::TrayState>,
 }
 
 impl AppState {

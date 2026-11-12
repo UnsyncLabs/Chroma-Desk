@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, hex, type Device, type Rgb } from "$lib/api";
-  import { t, deviceLabel } from "$lib/i18n/index.svelte";
+  import { t, deviceLabel, getLocale } from "$lib/i18n/index.svelte";
   import { app, loadDevices, rescan } from "$lib/state.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
   import { loadProfiles, profiles } from "$lib/profiles.svelte";
@@ -12,6 +12,8 @@
   import Toasts from "$lib/Toasts.svelte";
   import Confirm from "$lib/Confirm.svelte";
 
+  let guiOpen = $state(false);
+
   const device = $derived(app.view.kind === "device" ? (app.devices.find((d) => d.key === (app.view as { key: string }).key) ?? null) : null);
 
   async function start() {
@@ -21,6 +23,7 @@
     if (app.error) return;
     await loadEngine();
     syncPositions(app.devices);
+    api.serverStatus().then((s) => (guiOpen = s.gui_open)).catch(() => {});
     // Dev aid (screenshots): `#d=<index>` opens that device.
     const m = import.meta.env.DEV ? location.hash.match(/^#d=(\d+)/) : null;
     if (import.meta.env.DEV && location.hash === "#profiles") app.view = { kind: "profiles" };
@@ -35,6 +38,20 @@
       syncPositions(app.devices);
     }).then((f) => (off = f));
     return () => off();
+  });
+
+  // Keep the tray menu in the UI language and in sync with the profile list.
+  $effect(() => {
+    getLocale();
+    profiles.list;
+    api.setTrayLabels({
+      show: t("tray.show"),
+      profiles: t("nav.profiles"),
+      no_profiles: t("tray.noProfiles"),
+      lights_off: t("all.lightsOff"),
+      lights_on: t("all.lightsOn"),
+      quit: t("tray.quit"),
+    }).catch(() => {});
   });
 
   // Tell the engine which devices are on screen: only those get live preview frames.
@@ -88,6 +105,12 @@
   <main>
     {#if sceneStore.status !== "ok"}
       <p class="banner warn" role="status">{t(sceneStore.status === "server_down" ? "status.serverDown" : "status.reconnecting")}</p>
+    {/if}
+    {#if guiOpen}
+      <p class="banner warn" role="status">
+        {t("status.guiOpen")}
+        <button onclick={() => (guiOpen = false)}>{t("common.dismiss")}</button>
+      </p>
     {/if}
     {#if sceneStore.blackout}
       <p class="banner" role="status">

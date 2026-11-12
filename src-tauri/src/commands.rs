@@ -1,6 +1,8 @@
 //! Tauri commands exposed to the frontend.
 
 use crate::apply;
+use crate::server::{self, ServerStatus};
+use crate::tray::{self, TrayLabels};
 use crate::config::{Settings, zone_key};
 use crate::profiles::{self, Profile, ProfileInfo, ProfileList};
 use crate::engine::effects::{self, EffectDef, Params, Pos};
@@ -233,4 +235,52 @@ pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
 pub async fn wait_startup(state: State<'_, AppState>) -> Res<()> {
     state.wait_ready().await;
     Ok(())
+}
+
+// ---------- background, autostart and server ----------
+
+#[tauri::command]
+pub fn get_autostart(app: tauri::AppHandle) -> Res<bool> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().map_err(ApiError::io)
+}
+
+#[tauri::command]
+pub fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Res<()> {
+    use tauri_plugin_autostart::ManagerExt;
+    let al = app.autolaunch();
+    if enabled { al.enable() } else { al.disable() }.map_err(ApiError::io)
+}
+
+#[tauri::command]
+pub async fn server_status(state: State<'_, AppState>) -> Res<ServerStatus> {
+    let protocol = state.conn.lock().await.as_mut().map(|c| c.client.get_protocol_version());
+    Ok(server::status(protocol))
+}
+
+#[tauri::command]
+pub fn set_server_service(enabled: bool) -> Res<()> {
+    server::set_service(enabled).map_err(|e| ApiError::new("service_failed", e))
+}
+
+/// Labels for the tray menu in the UI language; rebuilds the menu.
+#[tauri::command]
+pub fn set_tray_labels(app: tauri::AppHandle, state: State<'_, AppState>, labels: TrayLabels) {
+    *state.tray.labels.lock().unwrap() = labels;
+    tray::refresh(&app);
+}
+
+#[tauri::command]
+pub fn refresh_tray(app: tauri::AppHandle) {
+    tray::refresh(&app);
+}
+
+#[tauri::command]
+pub fn show_window(app: tauri::AppHandle) {
+    tray::show_main(&app);
+}
+
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }

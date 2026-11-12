@@ -234,5 +234,14 @@
   "err.profile_corrupt": "El archivo del perfil está dañado.",
   "err.profile_too_new": "Este perfil lo creó una versión más nueva de chroma-desk.",
   "err.profile_exists": "Ya existe un perfil con ese nombre.",
-  "err.profile_name_invalid": "Nombre de perfil no válido (1–64 caracteres)."
+  "err.profile_name_invalid": "Nombre de perfil no válido (1–64 caracteres).",
+  "common.dismiss": "Descartar",
+  "toast.noTray": "No se encontró bandeja del sistema: cerrar la ventana la minimiza.",
+  "quit.confirmUnsaved": "Tienes cambios sin guardar en el perfil actual. ¿Salir de todos modos?",
+  "quit.quit": "Salir",
+  "status.guiOpen": "La ventana de OpenRGB está abierta. Si usas ambas aplicaciones a la vez, gana la que escribe la última.",
+  "tray.show": "Mostrar",
+  "tray.noProfiles": "Sin perfiles",
+  "tray.quit": "Salir",
+  "err.service_failed": "No se pudo cambiar el servicio de systemd"
 }

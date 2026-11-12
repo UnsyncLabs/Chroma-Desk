@@ -234,5 +234,14 @@
   "err.profile_corrupt": "The profile file is corrupt.",
   "err.profile_too_new": "This profile was created by a newer version of chroma-desk.",
   "err.profile_exists": "A profile with that name already exists.",
-  "err.profile_name_invalid": "Invalid profile name (1–64 characters)."
+  "err.profile_name_invalid": "Invalid profile name (1–64 characters).",
+  "common.dismiss": "Dismiss",
+  "toast.noTray": "No system tray found: closing the window minimises it instead.",
+  "quit.confirmUnsaved": "You have unsaved changes in the current profile. Quit anyway?",
+  "quit.quit": "Quit",
+  "status.guiOpen": "The OpenRGB window is open. If you use both apps at once, whichever writes last wins.",
+  "tray.show": "Show",
+  "tray.noProfiles": "No profiles",
+  "tray.quit": "Quit",
+  "err.service_failed": "Could not change the systemd service"
 }

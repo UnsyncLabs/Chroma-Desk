@@ -1,7 +1,8 @@
 /** Scene store: the frontend owns the scene and pushes every change to the engine. */
 import { api, on, throttle, type Device, type DeviceScene, type EffectDef, type EngineStatus, type Layer, type ParamValue, type Rgb, type Scene } from "./api";
 import { buildLayout } from "./layout/buildLayout";
-import { toastError } from "./state.svelte";
+import { confirmDialog, toast, toastError } from "./state.svelte";
+import { t } from "./i18n/index.svelte";
 
 export const emptyScene = (): Scene => ({ master_brightness: 1, sync: false, order: [], global_layers: [], devices: {} });
 export const emptyDevice = (): DeviceScene => ({ mode: "hardware", layers: [], brightness: 1, fps: null, follow_global: true, fan_leds: {}, hardware: null });
@@ -99,6 +100,14 @@ export async function listenEngine(onDevicesChanged: () => void): Promise<() => 
     on<{ state: EngineStatus }>("engine-status", (s) => (sceneStore.status = s.state)),
     on<null>("devices-changed", onDevicesChanged),
     on<{ code: string; detail?: string }>("startup-error", (e) => toastError(e)),
+    on<null>("tray-unavailable", () => toast(t("toast.noTray"), "info", 8000)),
+    on<null>("request-quit", async () => {
+      if (isDirty()) {
+        await api.showWindow();
+        if (!(await confirmDialog(t("quit.confirmUnsaved"), t("quit.quit")))) return;
+      }
+      await api.quitApp();
+    }),
     on<boolean>("blackout", (b) => (sceneStore.blackout = b)),
     on<Scene>("scene-changed", (s) => {
       setScene(s);

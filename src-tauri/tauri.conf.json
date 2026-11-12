@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "chroma-desk",
+        "visible": false,
         "minWidth": 360,
         "minHeight": 300,
         "width": 1100,

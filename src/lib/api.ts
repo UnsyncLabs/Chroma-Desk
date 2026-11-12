@@ -150,6 +150,23 @@ export interface ProfileList {
   corrupt: string[];
 }
 
+export interface ServerStatus {
+  running: boolean;
+  gui_open: boolean;
+  service_installed: boolean;
+  service_enabled: boolean;
+  protocol: number | null;
+}
+
+export interface TrayLabels {
+  show: string;
+  profiles: string;
+  no_profiles: string;
+  lights_off: string;
+  lights_on: string;
+  quit: string;
+}
+
 export type EngineStatus = "ok" | "reconnecting" | "server_down";
 
 export const api = {
@@ -182,6 +199,14 @@ export const api = {
   importOpenrgbProfile: (name: string) => invoke<ProfileInfo>("import_openrgb_profile", { name }),
   getSettings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
+  getAutostart: () => invoke<boolean>("get_autostart"),
+  setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),
+  serverStatus: () => invoke<ServerStatus>("server_status"),
+  setServerService: (enabled: boolean) => invoke<void>("set_server_service", { enabled }),
+  setTrayLabels: (labels: TrayLabels) => invoke<void>("set_tray_labels", { labels }),
+  refreshTray: () => invoke<void>("refresh_tray"),
+  showWindow: () => invoke<void>("show_window"),
+  quitApp: () => invoke<void>("quit_app"),
   getBlackout: () => invoke<boolean>("get_blackout"),
   setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
 };
