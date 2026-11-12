@@ -11,7 +11,7 @@ use std::time::Duration;
 
 pub const SDK_PORT: u16 = 6742;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
 impl From<Rgb> for Color {
@@ -116,8 +116,14 @@ pub async fn ensure_server() -> Res<()> {
     Err(ApiError::new("server_timeout", ""))
 }
 
-pub async fn connect() -> Res<OpenRgbClient> {
-    ensure_server().await?;
+/// Connects to the SDK server. With `spawn`, starts `openrgb --server` if it is not running;
+/// without it (background reconnects) a missing server is reported as `server_down`.
+pub async fn connect(spawn: bool) -> Res<OpenRgbClient> {
+    if spawn {
+        ensure_server().await?;
+    } else if !server_running() {
+        return Err(ApiError::new("server_down", ""));
+    }
     let mut client = OpenRgbClient::connect().await.map_err(ApiError::sdk)?;
     let _ = client.set_name("chroma-desk").await;
     Ok(client)
