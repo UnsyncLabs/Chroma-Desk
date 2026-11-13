@@ -157,6 +157,8 @@ pub fn run() {
             commands::trigger,
             commands::test_automation,
             commands::stop_triggers,
+            commands::resume_triggers,
+            commands::paused_automations,
             commands::trigger_socket_path,
             commands::profile_get,
             commands::profile_update,

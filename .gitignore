@@ -4,3 +4,6 @@ build/
 src-tauri/target/
 e2e/screenshots/
 e2e/*.log
+packaging/arch/*.pkg.tar.zst
+packaging/arch/pkg/
+packaging/arch/src/

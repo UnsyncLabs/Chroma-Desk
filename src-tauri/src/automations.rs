@@ -20,6 +20,11 @@ const ALWAYS_SECS: f64 = 3600.0;
 /// After a failed start (no device in Effects mode yet) wait before trying again.
 const RETRY: Duration = Duration::from_secs(2);
 
+/// A duration from user data: NaN, infinite or negative values must not panic the engine loop.
+fn secs(v: f32) -> Duration {
+    Duration::from_secs_f32(if v.is_finite() { v.clamp(0.0, 86_400.0) } else { 0.0 })
+}
+
 /// State of one threshold rule.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThresholdState {
@@ -57,8 +62,8 @@ impl ThresholdState {
             return false;
         }
         let since = *self.since.get_or_insert(now);
-        let cooled = self.last_fire.is_none_or(|l| now.saturating_duration_since(l) >= Duration::from_secs_f32(cfg.cooldown_secs));
-        if now.saturating_duration_since(since) >= Duration::from_secs_f32(cfg.for_secs) && cooled {
+        let cooled = self.last_fire.is_none_or(|l| now.saturating_duration_since(l) >= secs(cfg.cooldown_secs));
+        if now.saturating_duration_since(since) >= secs(cfg.for_secs) && cooled {
             self.armed = false;
             self.since = None;
             self.last_fire = Some(now);
@@ -87,6 +92,10 @@ pub struct Scheduler {
     next_poll: Option<Instant>,
 }
 
+fn every_dur(v: f64) -> Duration {
+    Duration::from_secs_f64(if v.is_finite() { v.clamp(1.0, 86_400.0) } else { 60.0 })
+}
+
 fn prefix(name: &str) -> String {
     format!("notif:{name}#")
 }
@@ -104,6 +113,8 @@ impl Scheduler {
         }
         // Gone, disabled, edited: forget the state and take an always-on overlay down.
         let stale: Vec<String> = self.entries.iter().filter(|(k, e)| all.get(*k).is_none_or(|n| !is_scheduled(n) || *n != e.n)).map(|(k, _)| k.clone()).collect();
+        // A pause only lasts while the automation is unchanged and enabled.
+        engine.paused_always.lock().unwrap().retain(|k, p| all.get(k) == Some(p));
         for k in stale {
             if let Some(e) = self.entries.remove(&k)
                 && e.n.sources.always
@@ -114,7 +125,7 @@ impl Scheduler {
         for (name, n) in all.iter().filter(|(_, n)| is_scheduled(n)) {
             let e = self.entries.entry(name.clone()).or_insert_with(|| Entry {
                 n: n.clone(),
-                next_every: n.sources.every.as_ref().map(|ev| now + Duration::from_secs_f64(ev.every_secs)),
+                next_every: n.sources.every.as_ref().map(|ev| now + every_dur(ev.every_secs)),
                 threshold: ThresholdState::default(),
                 retry_at: None,
             });
@@ -128,13 +139,14 @@ impl Scheduler {
                     e.retry_at = Some(now + RETRY);
                 }
             };
-            if n.sources.always && !engine.overlays.lock().unwrap().any_prefix(&prefix(name), now) {
+            let paused = engine.paused_always.lock().unwrap().contains_key(name);
+            if n.sources.always && !paused && !engine.overlays.lock().unwrap().any_prefix(&prefix(name), now) {
                 start(Some(ALWAYS_SECS), e);
             }
             if let (Some(ev), Some(at)) = (&n.sources.every, e.next_every)
                 && now >= at
             {
-                let every = Duration::from_secs_f64(ev.every_secs);
+                let every = every_dur(ev.every_secs);
                 e.next_every = Some(if now.saturating_duration_since(at) > every { now + every } else { at + every });
                 start(Some(ev.for_secs), e);
             }
@@ -264,6 +276,45 @@ mod tests {
         e.global_triggers.lock().unwrap().clear();
         sch.tick(&e, &dir, t0 + Duration::from_secs(4));
         assert_eq!(e.overlays.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn stop_all_pauses_always_on_until_resumed_or_edited() {
+        let e = engine();
+        let dir = crate::fsutil::test_dir("auto-pause");
+        let mut sch = Scheduler::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        e.global_triggers.lock().unwrap().insert("mon".into(), auto(Sources { always: true, ..Default::default() }));
+        sch.tick(&e, &dir, at(0));
+        assert!(active(&e, "mon", at(0)));
+        assert_eq!(triggers::stop_all(&e), 1);
+        assert_eq!(triggers::paused_always(&e), vec!["mon".to_string()]);
+        sch.tick(&e, &dir, at(1));
+        sch.tick(&e, &dir, at(2));
+        assert!(!active(&e, "mon", at(2)), "stays stopped");
+        assert_eq!(triggers::resume_always(&e), 1);
+        sch.tick(&e, &dir, at(3));
+        assert!(active(&e, "mon", at(3)), "resumed");
+        // Editing a paused automation (here: a different colour) un-pauses it.
+        triggers::stop_all(&e);
+        let mut edited = auto(Sources { always: true, ..Default::default() });
+        edited.color = Some("#ff0000".into());
+        e.global_triggers.lock().unwrap().insert("mon".into(), edited);
+        sch.tick(&e, &dir, at(4));
+        assert!(triggers::paused_always(&e).is_empty());
+        assert!(active(&e, "mon", at(4)));
+    }
+
+    #[test]
+    fn nonsense_numbers_from_a_hand_edited_profile_do_not_panic() {
+        let cfg = Threshold { metric: "cpu.temp".into(), op: "gt".into(), value: 1.0, for_secs: f32::NAN, hysteresis: 0.0, cooldown_secs: -5.0 };
+        let mut s = ThresholdState::default();
+        let t0 = Instant::now();
+        assert!(s.update(&cfg, Some(9.0), t0));
+        assert!(!s.update(&cfg, Some(9.0), t0 + Duration::from_secs(1)));
+        assert_eq!(every_dur(f64::NAN), Duration::from_secs(60));
+        assert_eq!(every_dur(-3.0), Duration::from_secs(1));
     }
 
     #[test]

@@ -45,7 +45,7 @@ export default async function (t, url) {
   const trig = (await t.mockState("triggers"))[0];
   assert.deepEqual(trig.keys, ["W", "A", "S", "D"]);
   assert.equal(trig.animation, "Alert");
-  await t.clickText("section button", "^Stop all triggers$");
+  await t.clickText("section button", "^Stop all$");
   await t.waitFor(async () => /Stopped 1 trigger/.test(await t.page.evaluate(() => document.body.innerText)), "stopped");
   await t.shot("settings-triggers", 1200, 800);
   await t.shot("settings-triggers", 400, 400);

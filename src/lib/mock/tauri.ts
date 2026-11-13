@@ -13,7 +13,7 @@ import builtinsJson from "./builtins.json";
 import { renderAnimation, renderEffect, flatten, cycleSecs, type Px } from "../anim/render";
 import { setLive } from "../anim/live";
 import * as SM from "./sysmon";
-import { makeScheduler } from "./automations";
+import { makeScheduler, paused as pausedAlways } from "./automations";
 import templatesJson from "./templates.json";
 import { buildLayout } from "../layout/buildLayout";
 
@@ -435,7 +435,17 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
       const sp = args.spec as Record<string, unknown>;
       return TM.notifications()[String(sp.animation ?? "")] ? TM.fireNamed(String(sp.animation), sp) : trigger(sp);
     }
-    case "stop_triggers": { const n = M.overlays.length; M.overlays = []; return n; }
+    case "stop_triggers": {
+      for (const [k, n] of Object.entries(TM.notifications())) if (n.enabled !== false && n.sources?.always) pausedAlways.set(k, JSON.stringify(n));
+      const n = M.overlays.length;
+      M.overlays = [];
+      return n;
+    }
+    case "resume_triggers": { const n = pausedAlways.size; pausedAlways.clear(); return n; }
+    case "paused_automations": {
+      const all = TM.notifications();
+      return [...pausedAlways].filter(([k, j]) => all[k] && JSON.stringify(all[k]) === j).map(([k]) => k);
+    }
     case "trigger_socket_path": return "/run/user/1000/chroma-desk.sock";
     // native dialogs (tauri-plugin-dialog goes through invoke)
     case "plugin:dialog|open": { const p = M.nextOpen ?? "/mock/import.json"; M.nextOpen = null; return p; }

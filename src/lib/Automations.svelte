@@ -10,7 +10,7 @@
   import { buildLayout } from "./layout/buildLayout";
   import AnimThumb from "./AnimThumb.svelte";
   import AutomationEditor from "./AutomationEditor.svelte";
-  import { watchMetrics } from "./sysmon.svelte";
+  import { metricLabel, watchMetrics } from "./sysmon.svelte";
   import { allTemplates, canEditProfile, categoryOf, deleteNotification, describeKeys, listNotifications, loadTemplates, plain, saveNotification, setEnabled, slugName, templateName, tplStore, whenChips, type Category, type NotifItem, type Scope, type Template } from "./automations.svelte";
 
   let editing: { item: NotifItem; isNew: boolean } | null = $state(null);
@@ -61,7 +61,7 @@
     const item: NotifItem = { name: freeName(templateName(tpl.id)), scope: defaultScope, n: plain(tpl.n) };
     try {
       await saveNotification(item);
-      toast(t("auto.created", { name: item.name }), "ok", 2500);
+      toast(t("auto.created", { name: item.name }), "ok", 4000);
     } catch (e) {
       toastError(e);
     }
@@ -90,15 +90,41 @@
       toastError(e);
     }
   }
+  /** Always-on automations that "Stop all" paused (they stay off until resumed or edited). */
+  let paused: string[] = $state([]);
+  const refreshPaused = () => api.pausedAutomations().then((p) => (paused = p), () => {});
+  $effect(() => {
+    void items; // editing, disabling or deleting an automation un-pauses it in the backend
+    void refreshPaused();
+  });
   async function stopAll() {
     try {
       toast(t("trg.stopped", { n: await api.stopTriggers() }), "ok", 2000);
+      await refreshPaused();
+    } catch (e) {
+      toastError(e);
+    }
+  }
+  async function resume() {
+    try {
+      await api.resumeTriggers();
+      await refreshPaused();
+      toast(t("auto.resumed"), "ok", 2000);
     } catch (e) {
       toastError(e);
     }
   }
 
-  const doesLabel = (n: NamedTrigger) => (n.sequence ? t("auto.sequenceOf", { n: n.sequence.kind.type === "sequence" ? n.sequence.kind.steps.length : 0 }) : (animOf(n) ? animName(animOf(n) as Animation) : n.anim));
+  /** "GPU memory + GPU usage" for meters, "Blink · Orbit · Off" for other steps: what the card actually shows. */
+  function sequenceSummary(seq: Animation): string {
+    if (seq.kind.type !== "sequence") return "";
+    const steps = seq.kind.steps;
+    const meters = steps.filter((s) => s.effect === "meter").map((s) => metricLabel(String(s.params.metric ?? "")));
+    if (meters.length) return `${[...new Set(meters)].join(" + ")} · ${t("auto.keysCount", { n: Math.max(...steps.map((s) => s.keys?.length ?? 0)) })}`;
+    const names = steps.map((s) => (t(`seq.style.${s.effect}`) !== `seq.style.${s.effect}` ? t(`seq.style.${s.effect}`) : s.effect));
+    return [...new Set(names)].join(" · ");
+  }
+  const doesLabel = (n: NamedTrigger) => (n.sequence ? sequenceSummary(n.sequence) || t("auto.sequenceOf", { n: 0 }) : (animOf(n) ? animName(animOf(n) as Animation) : n.anim));
 </script>
 
 {#snippet tplGrid(list: Template[])}
@@ -125,9 +151,15 @@
     </div>
     <span class="btns">
       <button class="primary" onclick={create} data-create>{t("auto.create")}</button>
-      <button onclick={stopAll}>{t("trg.stop")}</button>
+      <button onclick={stopAll} data-stop title={t("auto.stopHint")}>{t("trg.stop")}</button>
     </span>
   </div>
+  {#if paused.length}
+    <p class="paused" role="status" data-paused-banner>
+      <span>{t("auto.pausedBanner", { n: paused.length })}</span>
+      <button onclick={resume} data-resume>{t("auto.resume")}</button>
+    </p>
+  {/if}
   <p class="muted lead">{t("auto.lead")}</p>
   <p class="muted small">
     {#if canEditProfile()}{t("notif.scopeProfile", { name: activeProfile.value?.name ?? "" })}{:else}{t("notif.scopeGlobalOnly")}{/if}
@@ -155,6 +187,7 @@
               <div class="title">
                 <code>{i.name}</code>
                 <span class="badge">{i.scope === "global" ? t("notif.allProfiles") : t("notif.thisProfile")}</span>
+                {#if paused.includes(i.name)}<span class="badge warn" data-paused>{t("auto.paused")}</span>{/if}
               </div>
               <p class="chips" data-when-chips>{#each whenChips(i.n) as c (c)}<span class="chip when">{c}</span>{/each}</p>
               <p class="does">
@@ -186,6 +219,8 @@
   .head h2 { margin: 0.2rem 0 0; }
   .sub { margin: 0; color: var(--muted); font-size: 0.9rem; }
   .btns { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .paused { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0.6rem 0 0; padding: 0.45rem 0.7rem; border-radius: 10px; background: color-mix(in srgb, var(--warn, #e6a700) 18%, transparent); border: 1px solid color-mix(in srgb, var(--warn, #e6a700) 50%, transparent); font-size: 0.88rem; }
+  .badge.warn { color: var(--text); border-color: var(--warn, #e6a700); }
   .lead { margin: 0.6rem 0 0.2rem; max-width: 46rem; }
   .small { font-size: 0.82rem; margin: 0 0 1rem; }
   .group { margin: 1.1rem 0 0.4rem; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }

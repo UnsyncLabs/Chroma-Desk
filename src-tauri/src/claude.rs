@@ -42,7 +42,9 @@ pub struct ClaudeStatus {
 }
 
 fn is_ours(command: &str) -> bool {
-    command.trim().starts_with("chroma-desk event ai:attention")
+    // Our command, possibly with extra flags; a hook for another tool (`--from codex`) is never touched.
+    let c = command.trim();
+    c == COMMAND || c.strip_prefix(COMMAND).is_some_and(|rest| rest.starts_with(char::is_whitespace))
 }
 
 fn read(path: &Path) -> Res<Option<Map<String, Value>>> {
@@ -103,6 +105,9 @@ fn backup(path: &Path) -> Res<PathBuf> {
 }
 
 fn save(path: &Path, doc: Map<String, Value>) -> Res<()> {
+    // A settings.json symlinked from a dotfiles repo stays a symlink: write to its target.
+    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = resolved.as_path();
     let mut text = serde_json::to_string_pretty(&Value::Object(doc)).map_err(ApiError::io)?;
     text.push('\n');
     let mode = std::fs::metadata(path).ok().map(|m| m.permissions());
@@ -270,6 +275,25 @@ mod tests {
         let st = install(&q).unwrap();
         assert!(st.backup.unwrap().ends_with("backup-2"));
         assert_eq!(std::fs::read_to_string(q.with_file_name("settings.json.chroma-desk-backup")).unwrap(), "old");
+    }
+
+    #[test]
+    fn other_tools_and_symlinked_files_are_respected() {
+        let other = r#"{"hooks":{"Notification":[{"hooks":[{"type":"command","command":"chroma-desk event ai:attention --from codex"},{"type":"command","command":"chroma-desk event ai:attention --from claudette"}]}]}}"#;
+        let p = file("claude-other", other);
+        assert!(!status(&p).installed);
+        install(&p).unwrap();
+        remove(&p).unwrap();
+        assert_eq!(json_of(&p), serde_json::from_str::<Value>(other).unwrap(), "user's hooks for other tools survive");
+        // A dotfiles symlink stays a symlink and its target is what changes.
+        let dir = test_dir("claude-link");
+        let target = dir.join("dotfiles.json");
+        std::fs::write(&target, USER).unwrap();
+        let link = dir.join("settings.json");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        install(&link).unwrap();
+        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(status(&target).installed);
     }
 
     #[test]

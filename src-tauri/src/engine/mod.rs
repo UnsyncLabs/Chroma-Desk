@@ -304,6 +304,8 @@ pub struct Engine {
     pub desktop_enabled: std::sync::Arc<AtomicBool>,
     /// `off`, `listening` or `error: ...` (desktop notification source).
     pub desktop_status: Mutex<String>,
+    /// "Stop all" silences always-on automations until they are edited, disabled or resumed.
+    pub paused_always: Mutex<BTreeMap<String, crate::profiles::NamedTrigger>>,
     /// Everything off until cleared (tray "Lights off").
     pub blackout: AtomicBool,
     pub start: Instant,
@@ -340,6 +342,7 @@ impl Default for Engine {
             global_triggers: Mutex::default(),
             desktop_status: Mutex::new("off".into()),
             desktop_enabled: std::sync::Arc::default(),
+            paused_always: Mutex::default(),
             blackout: AtomicBool::new(false),
             start: Instant::now(),
         }

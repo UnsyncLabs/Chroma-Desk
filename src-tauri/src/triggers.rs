@@ -334,9 +334,26 @@ fn start_one(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant, tag:
     Ok(TriggerResult { overlay: id, devices, duration: secs })
 }
 
-/// Stops every overlay; returns how many were active.
+/// Stops every overlay; returns how many were active. Always-on automations would start again
+/// within a poll, so they are paused until edited, disabled and re-enabled, or [`resume_always`].
 pub fn stop_all(engine: &Engine) -> usize {
+    let always: Vec<(String, NamedTrigger)> = engine.notifications().into_iter().filter(|(_, n)| n.enabled && n.sources.always).collect();
+    engine.paused_always.lock().unwrap().extend(always);
     engine.overlays.lock().unwrap().clear()
+}
+
+/// Lets paused always-on automations run again; returns how many were paused.
+pub fn resume_always(engine: &Engine) -> usize {
+    let mut p = engine.paused_always.lock().unwrap();
+    let n = p.len();
+    p.clear();
+    n
+}
+
+/// Names of the always-on automations that "Stop all" paused (and are still unchanged).
+pub fn paused_always(engine: &Engine) -> Vec<String> {
+    let all = engine.notifications();
+    engine.paused_always.lock().unwrap().iter().filter(|(k, n)| all.get(*k) == Some(n)).map(|(k, _)| k.clone()).collect()
 }
 
 fn err_json(e: &ApiError) -> Value {
@@ -385,6 +402,7 @@ pub fn handle_line(engine: &Engine, dir: &Path, line: &str, now: Instant) -> Val
     match cmd.as_str() {
         "ping" => json!({ "ok": true }),
         "stop" => json!({ "ok": true, "stopped": stop_all(engine) }),
+        "resume" => json!({ "ok": true, "resumed": resume_always(engine) }),
         "event" => {
             let text = |k: &str| match obj.get(k) {
                 None => Some(String::new()),

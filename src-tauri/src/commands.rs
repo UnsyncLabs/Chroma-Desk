@@ -531,6 +531,19 @@ pub fn test_automation(state: State<'_, AppState>, name: String, automation: pro
     triggers::test_notification(&state.engine, &animations::animations_dir(), name.trim(), &automation, std::time::Instant::now())
 }
 
+/// Lets paused always-on automations run again.
+#[tauri::command]
+pub fn resume_triggers(state: State<'_, AppState>) -> usize {
+    triggers::resume_always(&state.engine)
+}
+
+/// Always-on automations that "Stop all" paused.
+#[tauri::command]
+pub fn paused_automations(state: State<'_, AppState>) -> Vec<String> {
+    triggers::paused_always(&state.engine)
+}
+
+/// Stops every running overlay and pauses always-on automations.
 #[tauri::command]
 pub fn stop_triggers(state: State<'_, AppState>) -> usize {
     triggers::stop_all(&state.engine)

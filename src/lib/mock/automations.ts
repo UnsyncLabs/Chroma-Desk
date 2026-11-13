@@ -51,6 +51,9 @@ export interface SchedCtx {
   stop: (name: string) => void;
 }
 
+/** Always-on automations paused by "Stop all" (name -> JSON of the automation when paused). */
+export const paused = new Map<string, string>();
+
 const scheduled = (n: NamedTrigger) => n.enabled !== false && !!(n.sources?.always || n.sources?.every || n.sources?.threshold);
 
 export function makeScheduler(ctx: SchedCtx) {
@@ -59,6 +62,7 @@ export function makeScheduler(ctx: SchedCtx) {
     entries,
     tick(now = Date.now()) {
       const all = ctx.notifications();
+      for (const [k, json] of [...paused]) if (!all[k] || JSON.stringify(all[k]) !== json) paused.delete(k);
       for (const [k, e] of [...entries]) {
         const n = all[k];
         if (!n || !scheduled(n) || JSON.stringify(n) !== e.json) {
@@ -74,7 +78,7 @@ export function makeScheduler(ctx: SchedCtx) {
           entries.set(name, e);
         }
         try {
-          if (n.sources?.always && !ctx.active(name)) ctx.start(name, 3600);
+          if (n.sources?.always && !paused.has(name) && !ctx.active(name)) ctx.start(name, 3600);
           const ev = n.sources?.every;
           if (ev && e.nextEvery !== null && now >= e.nextEvery) {
             e.nextEvery = now - e.nextEvery > ev.every_secs * 1000 ? now + ev.every_secs * 1000 : e.nextEvery + ev.every_secs * 1000;

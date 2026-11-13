@@ -137,14 +137,16 @@ pub fn run_control(cmd: &Result<ControlCmd, String>) -> i32 {
 pub enum TriggerCmd {
     Fire(TriggerSpec),
     Stop,
+    Resume,
 }
 
-pub const TRIGGER_USAGE: &str = "usage: chroma-desk trigger <animation> [--device <name>] [--keys W,A,S,D] [--duration 3s] [--color #ff0000] [--repeat N] [--priority N]\n       chroma-desk trigger --stop";
+pub const TRIGGER_USAGE: &str = "usage: chroma-desk trigger <animation> [--device <name>] [--keys W,A,S,D] [--duration 3s] [--color #ff0000] [--repeat N] [--priority N]\n       chroma-desk trigger --stop   (also pauses always-on automations)\n       chroma-desk trigger --resume";
 
 /// Parses the arguments after `trigger`.
 pub fn parse_trigger<I: IntoIterator<Item = String>>(args: I) -> Result<TriggerCmd, String> {
     let mut spec = TriggerSpec::default();
     let mut stop = false;
+    let mut resume = false;
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         let (flag, inline) = match a.split_once('=') {
@@ -154,6 +156,7 @@ pub fn parse_trigger<I: IntoIterator<Item = String>>(args: I) -> Result<TriggerC
         let mut value = |name: &str| inline.clone().or_else(|| it.next()).ok_or_else(|| format!("{name} needs a value"));
         match flag.as_str() {
             "--stop" => stop = true,
+            "--resume" => resume = true,
             "--device" | "-d" => spec.device = Some(value("--device")?),
             "--keys" | "-k" => spec.keys.extend(value("--keys")?.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty())),
             "--duration" | "-t" => {
@@ -182,6 +185,9 @@ pub fn parse_trigger<I: IntoIterator<Item = String>>(args: I) -> Result<TriggerC
     if stop {
         return Ok(TriggerCmd::Stop);
     }
+    if resume {
+        return Ok(TriggerCmd::Resume);
+    }
     if spec.animation.trim().is_empty() {
         return Err("missing animation name".into());
     }
@@ -200,6 +206,7 @@ pub fn run_trigger(cmd: &Result<TriggerCmd, String>) -> i32 {
     };
     let line = match cmd {
         TriggerCmd::Stop => serde_json::json!({ "cmd": "stop" }),
+        TriggerCmd::Resume => serde_json::json!({ "cmd": "resume" }),
         TriggerCmd::Fire(spec) => {
             let mut v = serde_json::to_value(spec).unwrap_or_default();
             v["cmd"] = "trigger".into();
@@ -311,6 +318,7 @@ mod tests {
         let Ok(TriggerCmd::Fire(s)) = trig(&["--keys=Q,E", "--duration=500ms", "Pulse"]) else { panic!() };
         assert_eq!((s.animation.as_str(), s.keys.len()), ("Pulse", 2));
         assert_eq!(trig(&["--stop"]), Ok(TriggerCmd::Stop));
+        assert_eq!(trig(&["--resume"]), Ok(TriggerCmd::Resume));
         let Ok(TriggerCmd::Fire(s)) = trig(&["Multi word name"]) else { panic!() };
         assert_eq!(s.animation, "Multi word name");
     }
