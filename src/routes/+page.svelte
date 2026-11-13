@@ -156,7 +156,7 @@
 <Confirm />
 
 <style>
-  .app { display: grid; grid-template-columns: 17rem 1fr; height: 100vh; }
+  .app { display: grid; grid-template-columns: 17rem minmax(0, 1fr); height: 100vh; }
   aside { background: var(--panel); display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
   header h1 { font-size: 1.25rem; margin: 1rem; letter-spacing: 0.02em; }
   header h1 span { color: var(--accent); }
@@ -184,7 +184,7 @@
   @keyframes shimmer { to { background-position: -200% 0; } }
   @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   @media (max-width: 760px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
     aside { border-right: none; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto; align-items: center; }
     header h1 { margin: 0.5rem 0.8rem; font-size: 1.05rem; }
     nav { grid-column: 1 / -1; grid-row: 2; display: flex; gap: 0.3rem; overflow-x: auto; padding: 0.3rem 0.5rem 0.5rem; }
