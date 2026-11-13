@@ -6,7 +6,10 @@
 import type { Device, EffectDef, Scene } from "../api";
 
 type Handler = (e: { payload: unknown }) => void;
-const listeners = new Map<string, Set<Handler>>();
+// Vite may instantiate this module twice (once per aliased specifier); keep one shared state.
+const G = globalThis as unknown as { __chromaMock?: { listeners: Map<string, Set<Handler>>; scene: Scene; visible: string[]; started: boolean } };
+const M = (G.__chromaMock ??= { listeners: new Map<string, Set<Handler>>(), scene: { master_brightness: 1, sync: false, order: [], global_layers: [], devices: {} } as Scene, visible: [], started: false });
+const listeners = M.listeners;
 const emit = (event: string, payload: unknown) => listeners.get(event)?.forEach((h) => h({ payload }));
 
 export async function listen(event: string, cb: Handler) {
@@ -51,12 +54,10 @@ function makeDevices(): Device[] {
 }
 
 let devices = makeDevices();
-let scene: Scene = { master_brightness: 1, sync: false, order: [], global_layers: [], devices: {} };
-let visible: string[] = [];
 const L = (id: string, effect: string, params: Record<string, unknown> = {}) => ({ id, name: "", enabled: true, opacity: 1, blend: "normal", mask: { type: "all" }, effect, params }) as Scene["devices"][string]["layers"][number];
 const base = { mode: "effects", brightness: 1, fps: null, follow_global: true, hardware: null } as const;
-scene.devices[devices[0].key] = { ...base, fan_leds: {}, layers: [L("a", "rainbow", { speed: 0.25, angle: 0 }), L("b", "paint", { leds: { 36: [255, 0, 0], 52: [255, 0, 0] } })] };
-scene.devices[devices[1].key] = { ...base, fan_leds: { "Corsair RGB Header 1": 8 }, layers: [L("c", "chase", { colors: [[255, 0, 0]], reverse: false })] };
+if (!M.started) M.scene.devices[devices[0].key] = { ...base, fan_leds: {}, layers: [L("a", "rainbow", { speed: 0.25, angle: 0 }), L("b", "paint", { leds: { 36: [255, 0, 0], 52: [255, 0, 0] } })] };
+if (!M.started) M.scene.devices[devices[1].key] = { ...base, fan_leds: { "Corsair RGB Header 1": 8 }, layers: [L("c", "chase", { colors: [[255, 0, 0]], reverse: false })] };
 
 const hsv = (h: number): number[] => {
   const f = (n: number) => Math.round(255 * (0.5 + 0.5 * Math.cos(2 * Math.PI * (h + n / 3))));
@@ -64,11 +65,11 @@ const hsv = (h: number): number[] => {
 };
 
 // Fake engine: a rainbow over every visible device in effects mode (paint layers shown as painted).
-setInterval(() => {
+if (!M.started) setInterval(() => {
   const t = Date.now() / 3000;
-  for (const key of visible) {
+  for (const key of M.visible) {
     const d = devices.find((x) => x.key === key);
-    const ds = scene.devices[key];
+    const ds = M.scene.devices[key];
     if (!d || ds?.mode !== "effects") continue;
     const flat: number[] = [];
     d.colors.forEach((_, i) => {
@@ -78,6 +79,8 @@ setInterval(() => {
     emit("frame", { key, colors: flat });
   }
 }, 100);
+
+M.started = true;
 
 const DEFS: EffectDef[] = [
   { id: "solid", params: [{ key: "color", kind: "color", min: 0, max: 0, step: 0, default: [255, 0, 0] }] },
@@ -89,9 +92,9 @@ const DEFS: EffectDef[] = [
 export async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   switch (cmd) {
     case "connect": case "list_devices": case "rescan": case "resize_zone": return devices;
-    case "get_scene": return scene;
-    case "set_scene": scene = args.scene as Scene; return null;
-    case "set_visible_devices": visible = args.keys as string[]; return null;
+    case "get_scene": return M.scene;
+    case "set_scene": M.scene = args.scene as Scene; return null;
+    case "set_visible_devices": M.visible = args.keys as string[]; return null;
     case "effect_defs": return DEFS;
     case "effect_defaults": return Object.fromEntries(DEFS.map((d) => [d.id, Object.fromEntries(d.params.map((p) => [p.key, p.default]))]));
     case "get_blackout": return false;

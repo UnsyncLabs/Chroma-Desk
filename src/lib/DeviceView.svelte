@@ -42,10 +42,42 @@
     return out;
   }
 
-  function fromPaint(l: Layer, p: Paint) {
-    const leds: Record<string, Rgb> = {};
-    p.forEach((c, i) => {
-      if (c) leds[i] = c;
+  /**
+   * Paint layer that receives brush strokes. Painting must always work, so this switches the
+   * device to effects mode (seeding a Paint layer with the current colours) and picks or
+   * creates a Paint layer when the selected one is not paintable.
+   */
+  function paintTarget(): Layer {
+    const d = ensureDev(device.key);
+    if (d.mode !== "effects") {
+      d.mode = "effects";
+      if (!d.layers.length) {
+        const leds: Record<string, Rgb> = {};
+        device.colors.forEach((c, i) => (leds[i] = [...c] as Rgb));
+        d.layers.push(newLayer("paint", { params: { leds } }));
+      }
+    }
+    let l = d.layers.find((x) => x.id === selectedId && x.effect === "paint") ?? d.layers.findLast((x) => x.effect === "paint");
+    if (!l) {
+      d.layers.push(newLayer("paint", { params: { leds: {} } }));
+      l = d.layers.at(-1)!;
+    }
+    selectedId = l.id;
+    return l;
+  }
+
+  const same = (a: Rgb | null | undefined, b: Rgb | null | undefined) =>
+    (!a && !b) || (!!a && !!b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]);
+
+  /** Applies only the LEDs that changed in this stroke to the target Paint layer. */
+  function onPaint(next: Paint) {
+    const prev = canvasColors;
+    const l = paintTarget();
+    const leds = { ...((l.params.leds ?? {}) as Record<string, Rgb>) };
+    next.forEach((c, i) => {
+      if (same(c, prev[i])) return;
+      if (c) leds[i] = [...c] as Rgb;
+      else delete leds[i];
     });
     l.params.leds = leds;
     commit();
@@ -131,7 +163,7 @@
             <button onclick={addPaintLayer}>{t("paint.addLayer")}</button>
           </p>
         {/if}
-        <LedCanvas {layout} colors={canvasColors} {display} editable={isPaint} transparent bind:selected resetKey={selectedId ?? ""} onchange={(p) => layer && fromPaint(layer, p)} />
+        <LedCanvas {layout} colors={canvasColors} {display} transparent={isPaint} bind:selected resetKey={selectedId ?? ""} onchange={onPaint} />
       </div>
       <LayersPanel layers={ds.layers} oncommit={commit} bind:selectedId zones={device.zones} selection={selected} />
     </div>
@@ -156,7 +188,7 @@
       <p>{ds.hardware ? t("mode.hardwareActive", { mode: ds.hardware.mode }) : t("mode.hardwareNote")}</p>
       <button class="primary" onclick={enableEffects}>{t("mode.useEffects")}</button>
     </div>
-    <LedCanvas {layout} colors={device.colors} editable={false} bind:selected onchange={() => {}} />
+    <LedCanvas {layout} colors={device.colors} bind:selected onchange={onPaint} />
   {/if}
 {:else if tab === "hardware"}
   {#key device.key}<Hardware {device} beforeApply={beforeHardwareApply} onapplied={hardwareApplied} />{/key}

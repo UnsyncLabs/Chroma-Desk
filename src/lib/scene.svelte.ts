@@ -18,7 +18,11 @@ export const sceneStore = $state({
 });
 
 /** Live frames by device key (RGB triples). Replaced wholesale on each event. */
-export const frames = $state.raw({ map: {} as Record<string, Rgb[]> });
+class Frames {
+  /** Reassigned wholesale on every event (a `$state.raw` field is reactive on reassignment). */
+  map = $state.raw<Record<string, Rgb[]>>({});
+}
+export const frames = new Frames();
 
 const push = throttle((s: Scene) => api.setScene($state.snapshot(s) as Scene).catch(toastError), 40);
 
@@ -58,7 +62,7 @@ export function newLayer(effect: string, extra: Partial<Layer> = {}): Layer {
     blend: "normal",
     mask: { type: "all" },
     effect,
-    params: structuredClone(sceneStore.defaults[effect] ?? {}),
+    params: $state.snapshot(sceneStore.defaults[effect] ?? {}) as Record<string, ParamValue>,
     ...extra,
   };
 }

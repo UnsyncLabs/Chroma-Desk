@@ -127,7 +127,7 @@
   "mode.hardwareNote": "El dispositivo ejecuta su propio modo nativo. Cambia a Efectos para pintar LEDs y usar capas.",
   "mode.hardwareActive": "El dispositivo ejecuta el modo nativo \"{mode}\". Cambia a Efectos para pintar LEDs y usar capas.",
   "mode.useEffects": "Usar efectos",
-  "paint.needLayer": "Selecciona una capa Pintura para pintar en el lienzo.",
+  "paint.needLayer": "Al pintar, tus trazos se añaden a una capa Pintura encima del efecto seleccionado.",
   "paint.addLayer": "Añadir capa Pintura",
   "dev.brightness": "Brillo del dispositivo",
   "dev.fps": "Fps máximos",

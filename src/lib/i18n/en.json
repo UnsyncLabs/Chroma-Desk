@@ -127,7 +127,7 @@
   "mode.hardwareNote": "The device is running its own native mode. Switch to Effects to paint LEDs and use layers.",
   "mode.hardwareActive": "The device is running the native mode \"{mode}\". Switch to Effects to paint LEDs and use layers.",
   "mode.useEffects": "Use effects",
-  "paint.needLayer": "Select a Paint layer to paint on the canvas.",
+  "paint.needLayer": "Painting adds your strokes to a Paint layer above the selected effect.",
   "paint.addLayer": "Add Paint layer",
   "dev.brightness": "Device brightness",
   "dev.fps": "Max fps",

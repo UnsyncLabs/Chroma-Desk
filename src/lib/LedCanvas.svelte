@@ -125,7 +125,8 @@
       return;
     }
     if (tool === "picker") {
-      const c = colors[it.led];
+      // Pick what is on screen (the live frame), not only the edited layer.
+      const c = shown(it.led);
       if (c) current = hex(c);
       tool = "brush";
       return;
