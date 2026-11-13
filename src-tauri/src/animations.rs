@@ -1008,6 +1008,18 @@ mod tests {
         assert_eq!(list_all(&test_dir("anim-none")).animations.len(), 9);
     }
 
+    /// The mock backend and the TS tests read the presets from this file; regenerate it with
+    /// `UPDATE_FIXTURES=1 cargo test builtins_fixture`.
+    #[test]
+    fn builtins_fixture_is_current() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/lib/mock/builtins.json");
+        let json = serde_json::to_string_pretty(&builtins()).unwrap() + "\n";
+        if std::env::var_os("UPDATE_FIXTURES").is_some() {
+            std::fs::write(path, &json).unwrap();
+        }
+        assert_eq!(std::fs::read_to_string(path).unwrap_or_default(), json, "run `UPDATE_FIXTURES=1 cargo test builtins_fixture` to refresh {path}");
+    }
+
     #[test]
     fn lookup_by_id_or_name() {
         let d = test_dir("anim-lookup");

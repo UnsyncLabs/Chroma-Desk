@@ -15,6 +15,8 @@ const mock = process.env.MOCK
 export default defineConfig(() => ({
   plugins: [sveltekit()],
   resolve: { alias: mock },
+  // MOCK: the dialog plugin must import the (aliased, live) mock, not a stale pre-bundled copy of it.
+  optimizeDeps: process.env.MOCK ? { exclude: ["@tauri-apps/plugin-dialog"] } : undefined,
   test: { include: ["src/**/*.test.ts"] },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

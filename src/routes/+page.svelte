@@ -2,7 +2,9 @@
   import { onMount } from "svelte";
   import { api, hex, on, type Device, type Rgb } from "$lib/api";
   import { t, deviceLabel, getLocale } from "$lib/i18n/index.svelte";
-  import { app, loadDevices, rescan } from "$lib/state.svelte";
+  import { app, loadDevices, navigate, rescan } from "$lib/state.svelte";
+  import { loadAnimations } from "$lib/animations.svelte";
+  import Animations from "$lib/Animations.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
   import { loadProfiles, profiles } from "$lib/profiles.svelte";
   import Profiles from "$lib/Profiles.svelte";
@@ -19,6 +21,7 @@
   async function start() {
     await api.waitStartup();
     await loadProfiles();
+    loadAnimations();
     await loadDevices(api.connect);
     if (app.error) return;
     await loadEngine();
@@ -27,6 +30,7 @@
     // Dev aid (screenshots): `#d=<index>` opens that device.
     const m = import.meta.env.DEV ? location.hash.match(/^#d=(\d+)/) : null;
     if (import.meta.env.DEV && location.hash === "#profiles") app.view = { kind: "profiles" };
+    if (import.meta.env.DEV && location.hash === "#animations") app.view = { kind: "animations" };
     if (m && app.devices[Number(m[1])]) app.view = { kind: "device", key: app.devices[Number(m[1])].key };
   }
 
@@ -72,7 +76,7 @@
     return hex(lit);
   }
 
-  const go = (v: typeof app.view) => (app.view = v);
+  const go = (v: typeof app.view) => navigate(v);
 </script>
 
 <div class="app">
@@ -96,6 +100,10 @@
       {/each}
     </nav>
     <footer>
+      <button class="dev" class:active={app.view.kind === "animations"} onclick={() => go({ kind: "animations" })}>
+        <span class="name">{t("nav.animations")}</span>
+        <small>{t("nav.animationsHint")}</small>
+      </button>
       <button class="dev" class:active={app.view.kind === "profiles"} onclick={() => go({ kind: "profiles" })}>
         <span class="name">{t("nav.profiles")}{#if isDirty()}<span class="dirty" title={t("prof.unsaved")}> ●</span>{/if}</span>
         <small>{profiles.settings.current_profile ?? t("prof.none")}</small>
@@ -136,6 +144,8 @@
       <p class="muted">{t("common.connecting")}</p>
     {:else if app.view.kind === "settings"}
       <Settings />
+    {:else if app.view.kind === "animations"}
+      <Animations />
     {:else if app.view.kind === "profiles"}
       <Profiles />
     {:else if !app.devices.length}

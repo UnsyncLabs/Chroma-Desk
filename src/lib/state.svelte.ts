@@ -2,7 +2,7 @@
 import { api, type Device } from "./api";
 import { errText, t } from "./i18n/index.svelte";
 
-export type View = { kind: "all" } | { kind: "device"; key: string } | { kind: "profiles" } | { kind: "settings" };
+export type View = { kind: "all" } | { kind: "device"; key: string } | { kind: "animations" } | { kind: "profiles" } | { kind: "settings" };
 
 export const app = $state({
   devices: [] as Device[],
@@ -10,7 +10,25 @@ export const app = $state({
   /** Connection error shown as a full-screen empty state. */
   error: "",
   view: { kind: "all" } as View,
+  /** An animation the library asked to edit on a device (consumed by that device's Draw tab). */
+  pendingEdit: null as import("./api").Animation | "new" | null,
 });
+
+/** Hooks of screens that hold unsaved work (the animation editor): consulted before leaving. */
+export const leaveGuard: { dirty: (() => boolean) | null } = { dirty: null };
+
+/** True when it is fine to leave the current screen (asks the user when there are unsaved edits). */
+export async function confirmLeave(): Promise<boolean> {
+  if (!leaveGuard.dirty?.()) return true;
+  return confirmDialog(t("draw.confirmLeave"), t("draw.leave"));
+}
+
+/** Navigates to `view`, unless the user decides to keep editing. */
+export async function navigate(view: View): Promise<boolean> {
+  if (!(await confirmLeave())) return false;
+  app.view = view;
+  return true;
+}
 
 export const currentDevice = () => (app.view.kind === "device" ? app.devices.find((d) => d.key === (app.view as { key: string }).key) : undefined);
 

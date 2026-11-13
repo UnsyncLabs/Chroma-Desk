@@ -5,6 +5,9 @@
   import { confirmDialog } from "./state.svelte";
   import { newLayer, sceneStore } from "./scene.svelte";
   import EffectParams from "./EffectParams.svelte";
+  import AnimationLayerParams from "./AnimationLayerParams.svelte";
+  import { animName } from "./animations.svelte";
+  import type { Animation } from "./api";
 
   let {
     layers,
@@ -31,9 +34,13 @@
   const selected = $derived(layers.find((l) => l.id === selectedId) ?? null);
   const def = $derived(sceneStore.defs.find((d) => d.id === selected?.effect));
   /** Effects driven by animation data are created from the Draw tab and the library, not here. */
-  const DATA_EFFECTS = ["frames", "path", "palette", "animation"];
-  const effects = $derived(sceneStore.defs.filter((d) => (allowPaint || d.id !== "paint") && !DATA_EFFECTS.includes(d.id)));
-  const label = (l: Layer) => l.name || t(`fx.${l.effect}`);
+  const DATA_EFFECTS = ["frames", "path", "palette"];
+  const effects = $derived(sceneStore.defs.filter((d) => (allowPaint || d.id !== "paint") && !DATA_EFFECTS.includes(d.id) && (d.id !== "animation" || allowPaint)));
+  const label = (l: Layer) => {
+    if (l.name) return l.name;
+    const snap = l.params.snapshot as unknown as Animation | null;
+    return l.effect === "animation" && snap ? `${t("fx.animation")}: ${animName(snap)}` : t(`fx.${l.effect}`);
+  };
 
   function add() {
     const l = newLayer(newEffect);
@@ -155,6 +162,7 @@
           }}>{t("layers.useSelection", { n: selection.size })}</button
         >
       {/if}
+      {#if selected.effect === "animation"}<AnimationLayerParams layer={selected} {oncommit} />{/if}
       <EffectParams {def} params={selected.params} {oncommit} />
     </div>
   {/if}

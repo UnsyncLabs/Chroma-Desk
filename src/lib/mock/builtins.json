@@ -1,0 +1,1621 @@
+[
+  {
+    "schema_version": 1,
+    "id": "builtin:rainbow",
+    "name": "Rainbow",
+    "description": null,
+    "tags": [
+      "classic"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "rainbow",
+      "params": {
+        "angle": 0,
+        "scale": 1.0,
+        "speed": 0.25
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:breathing",
+    "name": "Breathing",
+    "description": null,
+    "tags": [
+      "calm"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "breathing",
+      "params": {
+        "colors": [
+          [
+            80,
+            140,
+            255
+          ]
+        ],
+        "period": 4.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:starlight",
+    "name": "Starlight",
+    "description": null,
+    "tags": [
+      "calm"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "starlight",
+      "params": {
+        "colors": [
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            160,
+            200,
+            255
+          ]
+        ],
+        "density": 0.35,
+        "duration": 1.5,
+        "random": false
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:wave",
+    "name": "Wave",
+    "description": null,
+    "tags": [
+      "classic"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "color_wave",
+      "params": {
+        "angle": 0,
+        "colors": [
+          [
+            0,
+            60,
+            200
+          ],
+          [
+            0,
+            220,
+            220
+          ],
+          [
+            0,
+            60,
+            200
+          ]
+        ],
+        "scale": 1.0,
+        "speed": 0.3
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:chase",
+    "name": "Chase",
+    "description": null,
+    "tags": [
+      "classic"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "chase",
+      "params": {
+        "colors": [
+          [
+            255,
+            60,
+            0
+          ]
+        ],
+        "gap": 0.35,
+        "length": 0.25,
+        "speed": 0.6
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:alert",
+    "name": "Alert",
+    "description": null,
+    "tags": [
+      "notification"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "strobe",
+      "params": {
+        "colors": [
+          [
+            255,
+            0,
+            0
+          ],
+          [
+            255,
+            255,
+            255
+          ]
+        ],
+        "duty": 0.6,
+        "rate": 4.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:heartbeat",
+    "name": "Heartbeat",
+    "description": null,
+    "tags": [
+      "frames"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "keyboard",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "frames",
+      "frames": [
+        {
+          "leds": {
+            "name:Key: '": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: ,": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: -": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: .": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: /": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 0": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 1": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 2": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 3": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 4": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 5": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 6": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 7": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 8": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: 9": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: ;": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: =": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: A": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: B": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: C": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: D": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: E": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: F": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: G": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: H": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: I": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: J": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: K": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: L": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: M": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: N": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: O": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: P": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: Q": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: R": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: S": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: Space": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: T": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: U": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: V": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: W": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: X": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: Y": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: Z": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: [": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: ]": [
+              70,
+              0,
+              6
+            ],
+            "name:Key: `": [
+              70,
+              0,
+              6
+            ]
+          },
+          "duration_ms": 140
+        },
+        {
+          "leds": {
+            "name:Key: '": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ,": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: -": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: .": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: /": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 0": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 1": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 2": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 3": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 4": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 5": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 6": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 7": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 8": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 9": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ;": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: =": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: A": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: B": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: C": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: D": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: E": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: F": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: G": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: H": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: I": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: J": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: K": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: L": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: M": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: N": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: O": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: P": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Q": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: R": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: S": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Space": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: T": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: U": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: V": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: W": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: X": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Y": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Z": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: [": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ]": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: `": [
+              255,
+              0,
+              30
+            ]
+          },
+          "duration_ms": 110
+        },
+        {
+          "leds": {
+            "name:Key: '": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: ,": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: -": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: .": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: /": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 0": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 1": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 2": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 3": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 4": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 5": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 6": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 7": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 8": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: 9": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: ;": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: =": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: A": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: B": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: C": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: D": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: E": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: F": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: G": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: H": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: I": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: J": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: K": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: L": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: M": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: N": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: O": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: P": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: Q": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: R": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: S": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: Space": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: T": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: U": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: V": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: W": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: X": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: Y": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: Z": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: [": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: ]": [
+              100,
+              0,
+              10
+            ],
+            "name:Key: `": [
+              100,
+              0,
+              10
+            ]
+          },
+          "duration_ms": 140
+        },
+        {
+          "leds": {
+            "name:Key: '": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ,": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: -": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: .": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: /": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 0": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 1": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 2": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 3": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 4": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 5": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 6": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 7": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 8": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: 9": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ;": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: =": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: A": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: B": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: C": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: D": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: E": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: F": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: G": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: H": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: I": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: J": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: K": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: L": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: M": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: N": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: O": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: P": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Q": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: R": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: S": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Space": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: T": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: U": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: V": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: W": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: X": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Y": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: Z": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: [": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: ]": [
+              255,
+              0,
+              30
+            ],
+            "name:Key: `": [
+              255,
+              0,
+              30
+            ]
+          },
+          "duration_ms": 110
+        },
+        {
+          "leds": {
+            "name:Key: '": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: ,": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: -": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: .": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: /": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 0": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 1": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 2": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 3": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 4": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 5": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 6": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 7": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 8": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: 9": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: ;": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: =": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: A": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: B": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: C": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: D": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: E": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: F": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: G": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: H": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: I": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: J": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: K": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: L": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: M": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: N": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: O": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: P": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: Q": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: R": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: S": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: Space": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: T": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: U": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: V": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: W": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: X": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: Y": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: Z": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: [": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: ]": [
+              40,
+              0,
+              4
+            ],
+            "name:Key: `": [
+              40,
+              0,
+              4
+            ]
+          },
+          "duration_ms": 700
+        }
+      ],
+      "frame_ms": 200,
+      "loop": "loop",
+      "crossfade": 0.6
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:snake",
+    "name": "Snake",
+    "description": null,
+    "tags": [
+      "path"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "keyboard",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "path",
+      "path": [
+        "name:Key: Q",
+        "name:Key: W",
+        "name:Key: E",
+        "name:Key: R",
+        "name:Key: T",
+        "name:Key: Y",
+        "name:Key: U",
+        "name:Key: I",
+        "name:Key: O",
+        "name:Key: P",
+        "name:Key: ;",
+        "name:Key: L",
+        "name:Key: K",
+        "name:Key: J",
+        "name:Key: H",
+        "name:Key: G",
+        "name:Key: F",
+        "name:Key: D",
+        "name:Key: S",
+        "name:Key: A",
+        "name:Key: Z",
+        "name:Key: X",
+        "name:Key: C",
+        "name:Key: V",
+        "name:Key: B",
+        "name:Key: N",
+        "name:Key: M",
+        "name:Key: ,",
+        "name:Key: .",
+        "name:Key: /"
+      ],
+      "palette": [
+        {
+          "pos": 0.0,
+          "color": [
+            200,
+            255,
+            220
+          ]
+        },
+        {
+          "pos": 0.4,
+          "color": [
+            0,
+            230,
+            120
+          ]
+        },
+        {
+          "pos": 1.0,
+          "color": [
+            0,
+            60,
+            90
+          ]
+        }
+      ],
+      "speed": 0.45,
+      "length": 0.3,
+      "gap": 0.2,
+      "reverse": false,
+      "tail_fade": 0.7
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:soft-fire",
+    "name": "Soft fire",
+    "description": null,
+    "tags": [
+      "palette"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "keyboard",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "palette",
+      "cells": {
+        "name:Key: '": 0.6227273,
+        "name:Key: ,": 0.735,
+        "name:Key: -": 0.25384617,
+        "name:Key: .": 0.765,
+        "name:Key: /": 0.79499996,
+        "name:Key: 0": 0.23076925,
+        "name:Key: 1": 0.023076925,
+        "name:Key: 2": 0.04615385,
+        "name:Key: 3": 0.06923077,
+        "name:Key: 4": 0.0923077,
+        "name:Key: 5": 0.11538462,
+        "name:Key: 6": 0.13846155,
+        "name:Key: 7": 0.16153848,
+        "name:Key: 8": 0.1846154,
+        "name:Key: 9": 0.20769233,
+        "name:Key: ;": 0.5954546,
+        "name:Key: =": 0.2769231,
+        "name:Key: A": 0.35,
+        "name:Key: B": 0.645,
+        "name:Key: C": 0.585,
+        "name:Key: D": 0.40454546,
+        "name:Key: E": 0.225,
+        "name:Key: F": 0.4318182,
+        "name:Key: G": 0.45909092,
+        "name:Key: H": 0.48636365,
+        "name:Key: I": 0.35,
+        "name:Key: J": 0.51363635,
+        "name:Key: K": 0.5409091,
+        "name:Key: L": 0.5681818,
+        "name:Key: M": 0.705,
+        "name:Key: N": 0.67499995,
+        "name:Key: O": 0.375,
+        "name:Key: P": 0.4,
+        "name:Key: Q": 0.175,
+        "name:Key: R": 0.25,
+        "name:Key: S": 0.37727273,
+        "name:Key: T": 0.275,
+        "name:Key: U": 0.325,
+        "name:Key: V": 0.615,
+        "name:Key: W": 0.2,
+        "name:Key: X": 0.55499995,
+        "name:Key: Y": 0.3,
+        "name:Key: Z": 0.525,
+        "name:Key: [": 0.425,
+        "name:Key: ]": 0.45,
+        "name:Key: `": 0.0
+      },
+      "palette": [
+        {
+          "pos": 0.0,
+          "color": [
+            40,
+            0,
+            0
+          ]
+        },
+        {
+          "pos": 0.3,
+          "color": [
+            200,
+            30,
+            0
+          ]
+        },
+        {
+          "pos": 0.6,
+          "color": [
+            255,
+            140,
+            0
+          ]
+        },
+        {
+          "pos": 0.8,
+          "color": [
+            255,
+            200,
+            40
+          ]
+        },
+        {
+          "pos": 1.0,
+          "color": [
+            40,
+            0,
+            0
+          ]
+        }
+      ],
+      "speed": 0.25,
+      "reverse": false
+    }
+  }
+]

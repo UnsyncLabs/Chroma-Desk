@@ -136,7 +136,27 @@ export class T {
   }
 
   /** Opens the screen where the paint brush lives (Draw > Paint). */
-  async gotoPaint() {}
+  async gotoPaint() {
+    await this.level("Draw");
+  }
+
+  /** Lighting level (Quick / Draw / Layers). */
+  async level(name) {
+    await this.clickText(".level", `^${name}`);
+    await sleep(250);
+  }
+
+  /** Canvas pixel sum of an animated thumbnail: changes while it animates. */
+  thumbSig(animId) {
+    return this.page.evaluate((id) => {
+      const c = document.querySelector(`[data-anim="${id}"] canvas`);
+      if (!c) return null;
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0;
+      return h;
+    }, animId);
+  }
 
   async setColor(hex) {
     await this.page.$eval('.toolbar input[type="color"]', (el, v) => {

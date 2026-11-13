@@ -1,21 +1,34 @@
 <script lang="ts">
-  /** One device: Lighting (canvas + layers), Hardware mode and Advanced tabs. */
-  import { api, type Device, type Layer, type ModeRequest, type Rgb } from "./api";
+  /** One device: Lighting (Quick / Draw / Layers), Hardware mode and Advanced tabs. */
+  import { api, type Device, type ModeRequest } from "./api";
   import { t, deviceLabel } from "./i18n/index.svelte";
-  import { toastError } from "./state.svelte";
-  import { commit, devScene, ensureDev, flush, frames, newLayer, sceneStore, syncPositions } from "./scene.svelte";
+  import { app, confirmLeave, toastError } from "./state.svelte";
+  import { commit, devScene, ensureDev, flush, frames, newLayer, syncPositions } from "./scene.svelte";
   import { buildLayout } from "./layout/buildLayout";
+  import { applyStroke, paintTarget, toPaint } from "./paintLayer";
   import LedCanvas, { type Paint } from "./LedCanvas.svelte";
   import LayersPanel from "./LayersPanel.svelte";
   import Hardware from "./Hardware.svelte";
   import Advanced from "./Advanced.svelte";
+  import Quick from "./Quick.svelte";
+  import DrawTab from "./DrawTab.svelte";
 
   let { device }: { device: Device } = $props();
 
   type Tab = "lighting" | "hardware" | "advanced";
+  type Level = "quick" | "draw" | "layers";
   let tab: Tab = $state("lighting");
+  let level: Level = $state(app.pendingEdit ? "draw" : "quick");
   let selected = $state(new Set<number>());
   let selectedId: string | null = $state(null);
+
+  // The library asked to edit something here.
+  $effect(() => {
+    if (app.pendingEdit) {
+      tab = "lighting";
+      level = "draw";
+    }
+  });
 
   const ds = $derived(devScene(device.key));
   const effects = $derived(ds.mode === "effects");
@@ -35,64 +48,25 @@
   const layer = $derived(ds.layers.find((l) => l.id === selectedId) ?? null);
   const isPaint = $derived(layer?.effect === "paint");
 
-  function toPaint(l: Layer): Paint {
-    const out: Paint = Array.from({ length: n }, () => null);
-    const leds = (l.params.leds ?? {}) as Record<string, Rgb>;
-    for (const [k, c] of Object.entries(leds)) if (Number(k) < n) out[Number(k)] = c;
-    return out;
-  }
-
-  /**
-   * Paint layer that receives brush strokes. Painting must always work, so this switches the
-   * device to effects mode (seeding a Paint layer with the current colours) and picks or
-   * creates a Paint layer when the selected one is not paintable.
-   */
-  function paintTarget(): Layer {
-    const d = ensureDev(device.key);
-    if (d.mode !== "effects") {
-      d.mode = "effects";
-      if (!d.layers.length) {
-        const leds: Record<string, Rgb> = {};
-        device.colors.forEach((c, i) => (leds[i] = [...c] as Rgb));
-        d.layers.push(newLayer("paint", { params: { leds } }));
-      }
-    }
-    let l = d.layers.find((x) => x.id === selectedId && x.effect === "paint") ?? d.layers.findLast((x) => x.effect === "paint");
-    if (!l) {
-      d.layers.push(newLayer("paint", { params: { leds: {} } }));
-      l = d.layers.at(-1)!;
-    }
-    selectedId = l.id;
-    return l;
-  }
-
-  const same = (a: Rgb | null | undefined, b: Rgb | null | undefined) =>
-    (!a && !b) || (!!a && !!b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]);
-
   /** Applies only the LEDs that changed in this stroke to the target Paint layer. */
   function onPaint(next: Paint) {
     const prev = canvasColors;
-    const l = paintTarget();
-    const leds = { ...((l.params.leds ?? {}) as Record<string, Rgb>) };
-    next.forEach((c, i) => {
-      if (same(c, prev[i])) return;
-      if (c) leds[i] = [...c] as Rgb;
-      else delete leds[i];
-    });
-    l.params.leds = leds;
+    const l = paintTarget(device, selectedId);
+    selectedId = l.id;
+    applyStroke(l, prev, next);
     commit();
   }
 
   const frame = $derived(frames.map[device.key]);
-  const canvasColors: Paint = $derived(isPaint && layer ? toPaint(layer) : (frame ?? device.colors));
+  const canvasColors: Paint = $derived(isPaint && layer ? toPaint(layer, n) : (frame ?? device.colors));
   const display = $derived(effects ? (frame ?? null) : null);
 
   async function enableEffects() {
     const d = ensureDev(device.key);
     if (!d.layers.length) {
       // Start from what the device shows now, as an editable Paint layer.
-      const leds: Record<string, Rgb> = {};
-      device.colors.forEach((c, i) => (leds[i] = [...c] as Rgb));
+      const leds: Record<string, [number, number, number]> = {};
+      device.colors.forEach((c, i) => (leds[i] = [...c] as [number, number, number]));
       d.layers.push(newLayer("paint", { params: { leds } }));
     }
     d.mode = "effects";
@@ -134,7 +108,20 @@
     commit();
   }
 
+  async function setTab(k: Tab) {
+    if (k === tab) return;
+    if (tab === "lighting" && level === "draw" && !(await confirmLeave())) return;
+    tab = k;
+  }
+
+  async function setLevel(l: Level) {
+    if (l === level) return;
+    if (level === "draw" && !(await confirmLeave())) return;
+    level = l;
+  }
+
   const TABS: Tab[] = ["lighting", "hardware", "advanced"];
+  const LEVELS: Level[] = ["quick", "draw", "layers"];
 </script>
 
 <div class="title">
@@ -144,51 +131,65 @@
 
 <div class="tabs" role="tablist" aria-label={device.name}>
   {#each TABS as k (k)}
-    <button role="tab" aria-selected={tab === k} class:on={tab === k} onclick={() => (tab = k)}>{t(`tab.${k}`)}</button>
+    <button role="tab" aria-selected={tab === k} class:on={tab === k} onclick={() => setTab(k)}>{t(`tab.${k}`)}</button>
   {/each}
 </div>
 
 {#if tab === "lighting"}
-  <div class="mode" role="radiogroup" aria-label={t("mode.label")}>
-    <button role="radio" aria-checked={effects} class:on={effects} onclick={enableEffects}>{t("mode.effects")}</button>
-    <button role="radio" aria-checked={!effects} class:on={!effects} onclick={enableHardware}>{t("mode.hardware")}</button>
+  <div class="levels" role="group" aria-label={t("level.label")}>
+    {#each LEVELS as l (l)}
+      <button class="level" class:on={level === l} aria-pressed={level === l} onclick={() => setLevel(l)}>
+        <b>{t(`level.${l}`)}</b>
+        <small>{t(`level.${l}.hint`)}</small>
+      </button>
+    {/each}
   </div>
 
-  {#if effects}
-    <div class="split">
-      <div class="canvasCol">
-        {#if !isPaint}
-          <p class="banner">
-            {t("paint.needLayer")}
-            <button onclick={addPaintLayer}>{t("paint.addLayer")}</button>
-          </p>
-        {/if}
-        <LedCanvas {layout} colors={canvasColors} {display} transparent={isPaint} bind:selected resetKey={selectedId ?? ""} onchange={onPaint} />
-      </div>
-      <LayersPanel layers={ds.layers} oncommit={commit} bind:selectedId zones={device.zones} selection={selected} />
-    </div>
-    <div class="extra">
-      <label>{t("dev.brightness")}
-        <input type="range" min="0" max="1" step="0.01" value={ds.brightness} oninput={(e) => { ensureDev(device.key).brightness = Number(e.currentTarget.value); commit(); }} />
-        {Math.round(ds.brightness * 100)}%
-      </label>
-      <label>{t("dev.fps")}
-        <input
-          type="number" min="1" max="60" placeholder={t("dev.fpsAuto")} value={ds.fps ?? ""}
-          onchange={(e) => { ensureDev(device.key).fps = e.currentTarget.value ? Number(e.currentTarget.value) : null; commit(); }}
-        />
-      </label>
-      <label>
-        <input type="checkbox" checked={ds.follow_global} onchange={(e) => { ensureDev(device.key).follow_global = e.currentTarget.checked; commit(); }} />
-        {t("dev.followGlobal")}
-      </label>
-    </div>
+  {#if level === "quick"}
+    <Quick {device} ondraw={() => setLevel("draw")} />
+  {:else if level === "draw"}
+    <DrawTab {device} />
   {:else}
-    <div class="hwnote">
-      <p>{ds.hardware ? t("mode.hardwareActive", { mode: ds.hardware.mode }) : t("mode.hardwareNote")}</p>
-      <button class="primary" onclick={enableEffects}>{t("mode.useEffects")}</button>
+    <div class="mode" role="radiogroup" aria-label={t("mode.label")}>
+      <button role="radio" aria-checked={effects} class:on={effects} onclick={enableEffects}>{t("mode.effects")}</button>
+      <button role="radio" aria-checked={!effects} class:on={!effects} onclick={enableHardware}>{t("mode.hardware")}</button>
     </div>
-    <LedCanvas {layout} colors={device.colors} bind:selected onchange={onPaint} />
+
+    {#if effects}
+      <div class="split">
+        <div class="canvasCol">
+          {#if !isPaint}
+            <p class="banner">
+              {t("paint.needLayer")}
+              <button onclick={addPaintLayer}>{t("paint.addLayer")}</button>
+            </p>
+          {/if}
+          <LedCanvas {layout} colors={canvasColors} {display} transparent={isPaint} bind:selected resetKey={selectedId ?? ""} onchange={onPaint} />
+        </div>
+        <LayersPanel layers={ds.layers} oncommit={commit} bind:selectedId zones={device.zones} selection={selected} />
+      </div>
+      <div class="extra">
+        <label>{t("dev.brightness")}
+          <input type="range" min="0" max="1" step="0.01" value={ds.brightness} oninput={(e) => { ensureDev(device.key).brightness = Number(e.currentTarget.value); commit(); }} />
+          {Math.round(ds.brightness * 100)}%
+        </label>
+        <label>{t("dev.fps")}
+          <input
+            type="number" min="1" max="60" placeholder={t("dev.fpsAuto")} value={ds.fps ?? ""}
+            onchange={(e) => { ensureDev(device.key).fps = e.currentTarget.value ? Number(e.currentTarget.value) : null; commit(); }}
+          />
+        </label>
+        <label>
+          <input type="checkbox" checked={ds.follow_global} onchange={(e) => { ensureDev(device.key).follow_global = e.currentTarget.checked; commit(); }} />
+          {t("dev.followGlobal")}
+        </label>
+      </div>
+    {:else}
+      <div class="hwnote">
+        <p>{ds.hardware ? t("mode.hardwareActive", { mode: ds.hardware.mode }) : t("mode.hardwareNote")}</p>
+        <button class="primary" onclick={enableEffects}>{t("mode.useEffects")}</button>
+      </div>
+    {/if}
   {/if}
 {:else if tab === "hardware"}
   {#key device.key}<Hardware {device} beforeApply={beforeHardwareApply} onapplied={hardwareApplied} />{/key}
@@ -200,6 +201,12 @@
   .title small { display: block; }
   .tabs, .mode { display: flex; gap: 0.3rem; margin: 0.9rem 0; flex-wrap: wrap; }
   .tabs .on, .mode .on { background: var(--accent); color: var(--accent-fg); }
+  .levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin: 0 0 1.1rem; max-width: 44rem; }
+  .level { display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; text-align: left; padding: 0.55rem 0.8rem; border-radius: 10px; }
+  .level small { color: var(--muted); font-size: 0.78rem; line-height: 1.25; }
+  .level.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--control)); }
+  .level.on small { color: var(--text); opacity: 0.8; }
+  @media (max-width: 560px) { .level small { display: none; } .level { padding: 0.45rem 0.6rem; } }
   .split { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; align-items: start; }
   .canvasCol { min-width: 0; }
   .banner { background: var(--panel-2); border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0 0 0.6rem; }

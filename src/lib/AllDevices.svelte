@@ -2,7 +2,7 @@
   /** "All devices": master brightness, lights off, quick colour and the global synchronised scene. */
   import { api, fromHex, type Device, type Rgb } from "./api";
   import { t, deviceLabel } from "./i18n/index.svelte";
-  import { app, confirmDialog, toast, toastError } from "./state.svelte";
+  import { app, confirmDialog, navigate, toast, toastError } from "./state.svelte";
   import { commit, devScene, ensureDev, frames, newLayer, sceneStore } from "./scene.svelte";
   import LayersPanel from "./LayersPanel.svelte";
   import Strip from "./Strip.svelte";
@@ -149,7 +149,7 @@
   <ul class="cards">
     {#each app.devices as d (d.key)}
       <li>
-        <button class="card" onclick={() => (app.view = { kind: "device", key: d.key })}>
+        <button class="card" onclick={() => navigate({ kind: "device", key: d.key })}>
           <b>{d.name}</b>
           <small class="muted">{deviceLabel(d.device_type)} · {d.colors.length} LEDs · {devScene(d.key).mode === "effects" ? t("mode.effects") : t("mode.hardware")}</small>
           <Strip colors={frames.map[d.key] ?? d.colors} />
