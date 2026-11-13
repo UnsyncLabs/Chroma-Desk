@@ -65,7 +65,8 @@ chroma-desk trigger "Alert"                                   # the whole keyboa
 chroma-desk trigger "Alert" --keys W,A,S,D --duration 2s      # only WASD, 2 seconds
 chroma-desk trigger "Heartbeat" --device razer --repeat 3     # 3 passes of the animation, only devices matching "razer"
 chroma-desk trigger "Alert" --color '#00aaff' --priority 5    # recoloured, drawn over lower priorities
-chroma-desk trigger --stop                                    # stop every active overlay
+chroma-desk trigger --stop                                    # stop every active overlay (also pauses always-on automations)
+chroma-desk trigger --resume                                  # let paused always-on automations run again
 ```
 
 Options: `--device <key or part of the name>`, `--keys <W,A,S,D | "Left Shift" | idx:41>`, `--duration <3s | 500ms | 1.5 | 2m>`, `--repeat <N passes>`, `--color <#rrggbb | @slot>`, `--priority <-1000..1000>`. The animation is a name or id from the library (built-in presets included, e.g. `Alert`, `Heartbeat`). Exit code 0 on success, 1 if the app is not running or refused the request, 2 for a bad command line.
@@ -374,7 +375,8 @@ chroma-desk trigger "Alerta"                                  # todo el teclado,
 chroma-desk trigger "Alerta" --keys W,A,S,D --duration 2s     # solo WASD, 2 segundos
 chroma-desk trigger "Latido" --device razer --repeat 3        # 3 pasadas, solo dispositivos que coincidan con «razer»
 chroma-desk trigger "Alerta" --color '#00aaff' --priority 5   # recoloreada, encima de prioridades menores
-chroma-desk trigger --stop                                    # detiene todas las superposiciones
+chroma-desk trigger --stop                                    # detiene todas las superposiciones (pausa tambien las siempre activas)
+chroma-desk trigger --resume                                  # reanuda las automatizaciones siempre activas en pausa
 ```
 
 Opciones: `--device <clave o parte del nombre>`, `--keys <W,A,S,D | "Left Shift" | idx:41>`, `--duration <3s | 500ms | 1.5 | 2m>`, `--repeat <N pasadas>`, `--color <#rrggbb | @slot>`, `--priority <-1000..1000>`. La animación es un nombre o id de la biblioteca (incluidos los presets, p. ej. `Alert`, `Heartbeat`). Código de salida 0 si todo va bien, 1 si la app no está en marcha o rechazó la petición, 2 si la línea de comandos es incorrecta.
