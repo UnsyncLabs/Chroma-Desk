@@ -38,5 +38,5 @@ npm run tauri build -- --no-bundle                           # release binary (v
 - Zero-LED ARGB header zones are saved as size 0 in config/profiles.
 - Fire effect (optional) not implemented. Light theme variables exist but there is no theme switch.
 - `PKGBUILD` was only syntax-checked (`bash -n`); it builds from the checkout (`packaging/arch`). The release build itself was verified.
-- Vendored `openrgb2` still emits a `missing_docs` warning count of 0 after our doc fix, but any future patches must keep docs.
+- Vendored `openrgb2`: one doc comment added to satisfy `missing_docs`; keep docs on any further patches.
 - The OpenRGB server of the user was found not running mid-session (it died when the dev instance was stopped); it was restarted as `openrgb --server --startminimized` (no GUI window) before the hardware tests.
