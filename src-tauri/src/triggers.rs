@@ -175,7 +175,19 @@ pub fn start_with(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant,
     if !n.enabled {
         return Err(ApiError::new("notification_disabled", name));
     }
-    let base = merged(&n, spec);
+    start_notification(engine, dir, name, &n, spec, now, secs)
+}
+
+/// Fires `n` as it is (an automation being edited, not yet saved): what the editor's Test button does.
+pub fn test_notification(engine: &Engine, dir: &Path, name: &str, n: &NamedTrigger, now: Instant) -> Res<TriggerResult> {
+    let mut map = BTreeMap::new();
+    map.insert(name.to_string(), n.clone());
+    crate::profiles::validate_triggers(&map)?;
+    start_notification(engine, dir, name, n, &TriggerSpec { animation: name.into(), ..Default::default() }, now, None)
+}
+
+fn start_notification(engine: &Engine, dir: &Path, name: &str, n: &NamedTrigger, spec: &TriggerSpec, now: Instant, secs: Option<f64>) -> Res<TriggerResult> {
+    let base = merged(n, spec);
     let targets: Vec<Option<String>> = if spec.device.is_some() {
         vec![spec.device.clone()]
     } else if !n.devices.is_empty() {
@@ -214,7 +226,11 @@ pub struct DesktopNote {
 }
 
 pub fn desktop_matches(m: &DesktopMatch, note: &DesktopNote) -> bool {
-    let has = |hay: &str, needle: &str| needle.trim().is_empty() || hay.to_lowercase().contains(&needle.trim().to_lowercase());
+    // Several alternatives may be given separated by commas ("element, fractal, nheko").
+    let has = |hay: &str, needle: &str| {
+        let alts: Vec<String> = needle.split(',').map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()).collect();
+        alts.is_empty() || alts.iter().any(|a| hay.to_lowercase().contains(a))
+    };
     let urgency_ok = match m.urgency.as_deref() {
         None => true,
         Some("low") => note.urgency == 0,
@@ -700,6 +716,16 @@ mod tests {
         assert_eq!(handle_line(&e, &d, r#"{"cmd":"event","event":"bogus"}"#, now)["ok"], false);
     }
 
+    #[test]
+    fn desktop_app_filter_accepts_a_comma_separated_list() {
+        let m = DesktopMatch { app: "Element, fractal ,nheko".into(), urgency: None, contains: String::new() };
+        let note = |app: &str| DesktopNote { app: app.into(), urgency: 1, summary: "x".into() };
+        assert!(desktop_matches(&m, &note("Element Desktop")));
+        assert!(desktop_matches(&m, &note("org.gnome.Fractal")));
+        assert!(!desktop_matches(&m, &note("Slack")));
+        assert!(desktop_matches(&DesktopMatch { app: " , ".into(), ..m }, &note("anything")));
+    }
+
     fn inline_seq(secs: u32) -> Animation {
         use crate::animations::{AnimKind, Step};
         Animation {
@@ -793,5 +819,19 @@ mod tests {
             m.insert("bad".to_string(), bad);
             assert!(crate::profiles::validate_triggers(&m).is_err());
         }
+    }
+
+    #[test]
+    fn test_notification_fires_an_unsaved_automation_and_rejects_invalid_ones() {
+        let e = engine(SceneMode::Effects);
+        let dir = lib();
+        let mut n = NamedTrigger::new("");
+        n.sequence = Some(Box::new(inline_seq(2)));
+        n.enabled = false;
+        let r = test_notification(&e, &dir, "draft", &n, Instant::now()).unwrap();
+        assert_eq!((r.devices, r.duration), (1, 2.0), "works for a disabled, never saved automation");
+        n.sequence = None;
+        assert_eq!(test_notification(&e, &dir, "draft", &n, Instant::now()).unwrap_err().code, "profile_invalid");
+        assert_eq!(test_notification(&e, &dir, "bad name!", &NamedTrigger::new("Alerta"), Instant::now()).unwrap_err().code, "profile_invalid");
     }
 }

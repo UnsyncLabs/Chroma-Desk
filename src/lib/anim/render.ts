@@ -7,6 +7,7 @@ import type { Animation, Color, ParamValue, Rgb, Stop } from "../api";
 import { resolveColor } from "../palette.svelte";
 import { nameIndex, resolveRef } from "./ref";
 import { sampleStops, sortStops } from "./palette";
+import { live } from "./live";
 
 /** Colour channels 0..255 plus coverage (0 = transparent). */
 export type Px = [number, number, number, number];
@@ -16,7 +17,19 @@ type Resolved =
   | { type: "effect"; effect: string; params: Record<string, ParamValue> }
   | { type: "frames"; frames: { leds: [number, Rgb][]; ms: number }[]; loop: string; crossfade: number }
   | { type: "path"; path: number[]; palette: Stop[]; speed: number; length: number; gap: number; reverse: boolean; tail: number }
-  | { type: "palette"; cells: [number, number][]; palette: Stop[]; speed: number; reverse: boolean };
+  | { type: "palette"; cells: [number, number][]; palette: Stop[]; speed: number; reverse: boolean }
+  | { type: "sequence"; steps: RStep[]; loop: boolean };
+
+/** A sequence step with its LED references resolved to indices. */
+interface RStep {
+  effect: string;
+  params: Record<string, ParamValue>;
+  ms: number;
+  /** Route (meter / blink / orbit) or lit LEDs; null = whole device. */
+  leds: number[] | null;
+  /** Library animation step, resolved. */
+  anim: Resolved | null;
+}
 
 /** Resolves LED references against a device's LED names (unknown ones are dropped). */
 export function resolveAnim(a: Animation, names: string[]): Resolved {
@@ -42,6 +55,19 @@ export function resolveAnim(a: Animation, names: string[]): Resolved {
       };
     case "path":
       return { type: "path", path: k.path.map(ref).filter((i): i is number => i !== null), palette: sortStops(k.palette), speed: k.speed, length: k.length, gap: k.gap, reverse: k.reverse, tail: k.tail_fade };
+    case "sequence":
+      return {
+        type: "sequence",
+        loop: k.loop,
+        steps: k.steps.map((st) => {
+          const leds = st.keys.map(ref).filter((i): i is number => i !== null);
+          // Keys were chosen but none exists on this device: show nothing, not everything.
+          const none = st.keys.length > 0 && leds.length === 0;
+          const anim = st.effect === "animation" && st.anim && st.anim.kind.type !== "sequence" ? resolveAnim(st.anim, names) : null;
+          const effect = none || (st.effect === "animation" && !anim) ? "hold" : st.effect;
+          return { effect, params: st.params, ms: Math.min(3_600_000, Math.max(10, st.duration_ms)), leds: st.keys.length ? leds : null, anim };
+        }),
+      };
     case "palette":
       return {
         type: "palette",
@@ -132,6 +158,101 @@ function palette(r: Extract<Resolved, { type: "palette" }>, t: number, n: number
   const shift = (r.reverse ? -1 : 1) * t * r.speed;
   for (const [i, pos] of r.cells) if (i < n) out[i] = px(sampleStops(r.palette, pos + shift, true));
   return out;
+}
+
+// ---------- meter, blink, orbit, sequence (mirror effects.rs) ----------
+
+const GRADIENT: Rgb[] = [[0, 220, 90], [255, 200, 0], [255, 40, 40]];
+const scaleRgb = (c: Rgb, k: number): Rgb => [c[0] * k, c[1] * k, c[2] * k];
+
+function gradientAt(x: number): Rgb {
+  const f = clamp(x, 0, 1) * (GRADIENT.length - 1);
+  const i = Math.min(GRADIENT.length - 2, Math.floor(f));
+  const k = f - i;
+  return GRADIENT[i].map((v, j) => v + (GRADIENT[i + 1][j] - v) * k) as Rgb;
+}
+
+/** A bar over `path`, filled to `(value - min) / (max - min)`; the last LED is dimmed to show the fraction. */
+function meter(p: Record<string, ParamValue>, path: number[], t: number, n: number): Px[] {
+  const out = clear(n);
+  const m = path.length;
+  if (!m) return out;
+  const raw = typeof p.value === "number" ? p.value : typeof p.metric === "string" && p.metric ? live(p.metric) : null;
+  const [lo, hi] = [num(p, "min", 0), num(p, "max", 100)];
+  let frac = raw === null ? 0 : clamp((raw - lo) / Math.max(hi - lo, 1e-3), 0, 1);
+  const sweep = num(p, "sweep_ms", 1200);
+  if (p.style !== "live" && sweep > 0) {
+    const x = clamp((t * 1000) / sweep, 0, 1);
+    frac *= 1 - (1 - x) ** 3;
+  }
+  const fill = frac * m;
+  const base: Rgb = p.color ? resolveColor(p.color as Color) : [0, 220, 90];
+  // Transparent by default: the scene shows through and the last key blends with it by its fraction.
+  const bg = p.background === "off" ? 0 : p.background === "dim" ? 0.12 : null;
+  path.forEach((led, k) => {
+    const cover = clamp(fill - k, 0, 1);
+    const c = p.gradient ? gradientAt((k + 0.5) / m) : base;
+    if (cover > 0) out[led] = bg === null ? px(c, cover) : px(scaleRgb(c, Math.max(cover, bg)));
+    else if (bg !== null) out[led] = px(scaleRgb(c, bg));
+  });
+  return out;
+}
+
+function blink(p: Record<string, ParamValue>, path: number[] | null, t: number, n: number): Px[] {
+  const out = clear(n);
+  const on = Math.max(1, num(p, "on_ms", 150));
+  const off = Math.max(0, num(p, "off_ms", 150));
+  const tm = t * 1000;
+  const cycle = on + off;
+  const k = Math.floor(tm / cycle);
+  if (tm < 0 || k >= Math.max(1, num(p, "count", 5)) || tm - k * cycle >= on) return out;
+  const c: Rgb = p.color ? resolveColor(p.color as Color) : [255, 0, 0];
+  for (const led of path ?? Array.from({ length: n }, (_, i) => i)) if (led < n) out[led] = px(c);
+  return out;
+}
+
+function orbit(p: Record<string, ParamValue>, path: number[] | null, t: number, n: number): Px[] {
+  const out = clear(n);
+  const list = path ?? Array.from({ length: n }, (_, i) => i);
+  const m = list.length;
+  const lap = Math.max(10, num(p, "lap_ms", 800));
+  const tm = t * 1000;
+  if (!m || tm < 0 || tm >= Math.max(1, num(p, "laps", 1)) * lap) return out;
+  const head = (tm / lap) * m;
+  const tail = Math.max(clamp(num(p, "trail", 0.5), 0, 1) * m, 1);
+  const c: Rgb = p.color ? resolveColor(p.color as Color) : [255, 255, 255];
+  list.forEach((led, k) => {
+    const behind = mod(head - k, m);
+    if (behind < tail && led < n) out[led] = px(c, 1 - behind / tail);
+  });
+  return out;
+}
+
+function sequence(r: Extract<Resolved, { type: "sequence" }>, t: number, positions: Pos[], n: number): Px[] {
+  const total = r.steps.reduce((s, st) => s + st.ms, 0);
+  if (!r.steps.length || t < 0) return clear(n);
+  let tm = t * 1000;
+  if (r.loop) tm = mod(tm, total);
+  else if (tm >= total) return clear(n);
+  for (const st of r.steps) {
+    if (tm >= st.ms) {
+      tm -= st.ms;
+      continue;
+    }
+    const local = tm / 1000;
+    let out: Px[];
+    if (st.effect === "meter") out = meter(st.params, st.leds ?? [], local, n);
+    else if (st.effect === "blink") out = blink(st.params, st.leds, local, n);
+    else if (st.effect === "orbit") out = orbit(st.params, st.leds, local, n);
+    else if (st.effect === "hold" || st.effect === "sequence") return clear(n);
+    else out = st.anim ? renderResolved(st.anim, local, positions, n) : renderEffect(st.effect, st.params, local, positions, n);
+    if (st.leds && !["meter", "blink", "orbit"].includes(st.effect)) {
+      const keep = new Set(st.leds);
+      out = out.map((q, i) => (keep.has(i) ? q : ([0, 0, 0, 0] as Px)));
+    }
+    return out;
+  }
+  return clear(n);
 }
 
 // ---------- effect presets (approximations) ----------
@@ -249,6 +370,8 @@ export function renderResolved(r: Resolved, t: number, positions: Pos[], n: numb
       return path(r, t, n);
     case "palette":
       return palette(r, t, n);
+    case "sequence":
+      return sequence(r, t, positions, n);
   }
 }
 
@@ -273,5 +396,6 @@ export function cycleSecs(a: Animation): number {
   if (k.type === "frames") return Math.max(0.05, k.frames.reduce((s, f) => s + (f.duration_ms ?? k.frame_ms), 0) / 1000);
   if (k.type === "path") return clamp((k.length + k.gap) / Math.max(Math.abs(k.speed), 0.01), 0.2, 60);
   if (k.type === "palette") return clamp(1 / Math.max(Math.abs(k.speed), 0.01), 0.2, 60);
+  if (k.type === "sequence") return Math.max(0.05, k.steps.reduce((s, st) => s + st.duration_ms, 0) / 1000);
   return 1;
 }

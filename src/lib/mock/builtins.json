@@ -18,9 +18,9 @@
       "type": "effect",
       "effect": "rainbow",
       "params": {
+        "speed": 0.25,
         "angle": 0,
-        "scale": 1.0,
-        "speed": 0.25
+        "scale": 1.0
       }
     }
   },
@@ -73,6 +73,9 @@
       "type": "effect",
       "effect": "starlight",
       "params": {
+        "density": 0.35,
+        "duration": 1.5,
+        "random": false,
         "colors": [
           [
             255,
@@ -84,10 +87,7 @@
             200,
             255
           ]
-        ],
-        "density": 0.35,
-        "duration": 1.5,
-        "random": false
+        ]
       }
     }
   },
@@ -110,7 +110,6 @@
       "type": "effect",
       "effect": "color_wave",
       "params": {
-        "angle": 0,
         "colors": [
           [
             0,
@@ -128,8 +127,9 @@
             200
           ]
         ],
-        "scale": 1.0,
-        "speed": 0.3
+        "speed": 0.3,
+        "angle": 0,
+        "scale": 1.0
       }
     }
   },
@@ -159,9 +159,9 @@
             0
           ]
         ],
-        "gap": 0.35,
+        "speed": 0.6,
         "length": 0.25,
-        "speed": 0.6
+        "gap": 0.35
       }
     }
   },
@@ -196,8 +196,8 @@
             255
           ]
         ],
-        "duty": 0.6,
-        "rate": 4.0
+        "rate": 4.0,
+        "duty": 0.6
       }
     }
   },
@@ -1556,7 +1556,6 @@
       "type": "effect",
       "effect": "color_wave",
       "params": {
-        "angle": 0,
         "colors": [
           {
             "slot": "accent"
@@ -1568,8 +1567,9 @@
             "slot": "accent"
           }
         ],
-        "scale": 1.0,
-        "speed": 0.2
+        "speed": 0.2,
+        "angle": 0,
+        "scale": 1.0
       }
     }
   },
@@ -1598,9 +1598,9 @@
             "slot": "primary"
           }
         ],
-        "gap": 0.35,
+        "speed": 0.6,
         "length": 0.25,
-        "speed": 0.6
+        "gap": 0.35
       }
     }
   },
@@ -1629,8 +1629,8 @@
             "slot": "info"
           }
         ],
-        "duty": 0.35,
-        "rate": 3.0
+        "rate": 3.0,
+        "duty": 0.35
       }
     }
   },
@@ -1688,8 +1688,8 @@
             "slot": "alert"
           }
         ],
-        "duty": 0.5,
-        "rate": 2.0
+        "rate": 2.0,
+        "duty": 0.5
       }
     }
   },
@@ -1750,9 +1750,9 @@
             "slot": "accent"
           }
         ],
-        "density": 0.3,
-        "duration": 0.3,
         "interval": 5.0,
+        "duration": 0.3,
+        "density": 0.3,
         "size": 0.16
       }
     }

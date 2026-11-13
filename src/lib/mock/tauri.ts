@@ -10,7 +10,11 @@ import { resolveColor } from "../palette.svelte";
 import * as TM from "./themes";
 import { recolorAnim } from "../anim/recolor";
 import builtinsJson from "./builtins.json";
-import { renderAnimation, renderEffect, flatten, type Px } from "../anim/render";
+import { renderAnimation, renderEffect, flatten, cycleSecs, type Px } from "../anim/render";
+import { setLive } from "../anim/live";
+import * as SM from "./sysmon";
+import { makeScheduler } from "./automations";
+import templatesJson from "./templates.json";
 import { buildLayout } from "../layout/buildLayout";
 
 type Handler = (e: { payload: unknown }) => void;
@@ -39,6 +43,8 @@ interface MockState {
   counter: number;
   setSceneCalls: number;
   theme: TM.ThemeMock;
+  /** Claude Code's settings.json on the pretend disk (null = missing) and the backups made of it. */
+  claude: { file: Record<string, unknown> | null; backups: string[]; valid: boolean };
 }
 // Vite may instantiate this module twice (once per aliased specifier); keep one shared state.
 const G = globalThis as unknown as { __chromaMock?: MockState };
@@ -57,6 +63,7 @@ const M = (G.__chromaMock ??= {
   counter: 0,
   setSceneCalls: 0,
   theme: TM.initialTheme(),
+  claude: { file: { theme: "dark", hooks: { Stop: [{ hooks: [{ type: "command", command: "echo done" }] }] } }, backups: [], valid: true },
 });
 const listeners = M.listeners;
 const emit = (event: string, payload: unknown) => listeners.get(event)?.forEach((h) => h({ payload }));
@@ -118,6 +125,15 @@ const positionsOf = (d: Device) => {
   return layoutCache.get(d.key)!;
 };
 
+/** Whether a key name from a notification (`W`, `name:Key: W`, `Left Shift`) selects an LED called `nm`. */
+function keyHits(nm: string, k: string): boolean {
+  const l = nm.toLowerCase();
+  const key = k.toLowerCase();
+  if (key.startsWith("name:")) return l === key.slice(5);
+  if (key.startsWith("idx:")) return false;
+  return l === key || l === `key: ${key}`;
+}
+
 /** Composes a device the way the engine would (layers bottom to top, then overlays), without blend modes. */
 function renderDevice(d: Device, ds: Scene["devices"][string], t: number, now: number): number[] {
   const n = d.colors.length;
@@ -147,7 +163,7 @@ function renderDevice(d: Device, ds: Scene["devices"][string], t: number, now: n
   M.overlays = M.overlays.filter((o) => o.until > now);
   for (const o of M.overlays) {
     if (o.device && !d.name.toLowerCase().includes(o.device.toLowerCase()) && d.key !== o.device) continue;
-    const mask = o.keys.length ? new Set(names.flatMap((nm, i) => (o.keys.some((k) => nm.toLowerCase() === k.toLowerCase() || nm.toLowerCase() === `key: ${k.toLowerCase()}`) ? [i] : []))) : undefined;
+    const mask = o.keys.length ? new Set(names.flatMap((nm, i) => (o.keys.some((k) => keyHits(nm, k)) ? [i] : []))) : undefined;
     over(renderAnimation(o.anim, (now - o.start) / 1000, names, pos), mask);
   }
   buf = flatten(buf.map((c) => [c[0], c[1], c[2], 1] as Px));
@@ -192,6 +208,10 @@ const DEFS: EffectDef[] = [
   { id: "path", params: [data("path", []), data("palette", PAL), slider("speed", 0.05, 3, 0.01, 0.5), slider("length", 0.05, 1, 0.01, 0.35), slider("gap", 0, 1, 0.01, 0.3), slider("tail_fade", 0, 1, 0.01, 0.6), flag("reverse", false)] },
   { id: "palette", params: [data("cells", {}), data("palette", PAL), slider("speed", -2, 2, 0.01, 0.3), flag("reverse", false)] },
   { id: "animation", params: [data("anim_id", ""), data("snapshot", null)] },
+  { id: "meter", params: [data("path", []), data("metric", ""), slider("min", -50, 200, 1, 0), slider("max", -50, 200, 1, 100), color("color", [0, 220, 90]), data("style", "sweep"), slider("sweep_ms", 0, 10000, 50, 1200), data("background", "dim"), flag("gradient", false), data("value", null)] },
+  { id: "blink", params: [data("path", []), color("color", RED), slider("count", 1, 50, 1, 5), slider("on_ms", 20, 2000, 10, 150), slider("off_ms", 20, 2000, 10, 150)] },
+  { id: "orbit", params: [data("path", []), color("color", WHITE), slider("laps", 1, 20, 1, 1), slider("lap_ms", 100, 10000, 50, 800), slider("trail", 0, 1, 0.01, 0.5)] },
+  { id: "sequence", params: [data("steps", []), flag("loop", false)] },
   { id: "glitch", params: [colors("colors", [[0, 240, 255], [255, 42, 109]]), slider("interval", 1, 30, 0.5, 6), slider("duration", 0.05, 1, 0.01, 0.25), slider("density", 0.05, 0.9, 0.01, 0.3), slider("size", 0.04, 0.5, 0.01, 0.16)] },
   { id: "ripple", params: [slider("rate", 0.1, 5, 0.05, 0.8), slider("speed", 0.2, 3, 0.01, 0.9), slider("width", 0.02, 0.5, 0.01, 0.12), flag("random", true), colors("colors", [BLUE])] },
 ];
@@ -224,13 +244,14 @@ function lookup(key: string): Animation {
 }
 
 function trigger(spec: Record<string, unknown>) {
-  let anim = lookup(String(spec.animation ?? ""));
-  const keys = ((spec.keys as string[]) ?? []).map((k) => k.toLowerCase());
+  let anim = spec.inline ? clone(spec.inline as Animation) : lookup(String(spec.animation ?? ""));
+  if (spec.loop && anim.kind.type === "sequence") anim.kind.loop = true;
+  const keys = (spec.keys as string[]) ?? [];
   const devs = devices.filter(
     (d) =>
       M.scene.devices[d.key]?.mode === "effects" &&
       (!spec.device || d.name.toLowerCase().includes(String(spec.device).toLowerCase()) || d.key === spec.device) &&
-      (!keys.length || d.led_names.some((n) => keys.includes(n.toLowerCase()) || keys.includes(n.toLowerCase().replace("key: ", "")))),
+      (!keys.length || d.led_names.some((n) => keys.some((k) => keyHits(n, k)))),
   );
   if (!devs.length) fail("trigger_no_device");
   const col = typeof spec.color === "string" ? spec.color : null;
@@ -238,11 +259,11 @@ function trigger(spec: Record<string, unknown>) {
     const rgb = col.startsWith("@") ? resolveColor({ slot: col.slice(1) }) : ([1, 3, 5].map((i) => parseInt(col.slice(i, i + 2), 16)) as [number, number, number]);
     anim = recolorAnim(anim, rgb);
   }
-  const secs = typeof spec.duration === "number" ? spec.duration : typeof spec.duration === "string" ? parseFloat(spec.duration) || 3 : 3;
+  const secs = typeof spec.duration === "number" ? spec.duration : typeof spec.duration === "string" ? parseFloat(spec.duration) || 3 : anim.kind.type === "sequence" ? cycleSecs(anim) : 3;
   const id = ++M.counter;
   if (spec.replace && spec.name) M.overlays = M.overlays.filter((o) => (o as { name?: string }).name !== spec.name);
   M.overlays.push({ id, anim, device: (spec.device as string) ?? null, keys: (spec.keys as string[]) ?? [], start: Date.now(), until: Date.now() + secs * 1000, name: spec.name } as never);
-  M.triggers.push({ ...spec, at: Date.now() });
+  M.triggers.push({ ...spec, inline: undefined, at: Date.now() });
   return { overlay: id, devices: devs.length, duration: secs };
 }
 
@@ -258,12 +279,68 @@ TM.bind({
   fail,
   trigger,
 });
+// ---------- system monitors, automations scheduler ----------
+
+setLive((m) => SM.fakeValue(m), 10);
+const overlayOf = (name: string) => M.overlays.some((o) => (o as { name?: string }).name === name && o.until > Date.now());
+const sched = makeScheduler({
+  notifications: () => TM.notifications(),
+  start: (name, secs) => void TM.fireNamed(name, secs === null ? {} : { duration: secs, loop: true }),
+  active: overlayOf,
+  stop: (name) => (M.overlays = M.overlays.filter((o) => (o as { name?: string }).name !== name)),
+});
+// Vite may load this module twice; only the first instance schedules.
+const GS = globalThis as unknown as { __chromaSched?: boolean };
+if (!GS.__chromaSched) {
+  GS.__chromaSched = true;
+  setInterval(() => sched.tick(), 250);
+}
+
+// ---------- Claude Code settings.json (pretend) ----------
+
+const CLAUDE_COMMAND = "chroma-desk event ai:attention --from claude";
+const CLAUDE_SNIPPET = { hooks: { Notification: [{ hooks: [{ type: "command", command: CLAUDE_COMMAND }] }] } };
+type Hooks = { Notification?: { hooks?: { command?: string }[] }[] };
+const isOurs = (c?: string) => !!c?.trim().startsWith("chroma-desk event ai:attention");
+const claudeInstalled = () => {
+  const groups = ((M.claude.file?.hooks as Hooks | undefined)?.Notification ?? []) as { hooks?: { command?: string }[] }[];
+  return groups.some((g) => (g.hooks ?? []).some((h) => isOurs(h.command)));
+};
+const claudeStatus = (backup: string | null = null) => ({ path: "~/.claude/settings.json", exists: M.claude.file !== null, valid: M.claude.valid, installed: claudeInstalled(), command: CLAUDE_COMMAND, snippet: JSON.stringify(CLAUDE_SNIPPET, null, 2), backup });
+function claudeInstall() {
+  if (!M.claude.valid) fail("claude_settings_invalid", "bad json");
+  if (claudeInstalled()) return claudeStatus();
+  const before = M.claude.file;
+  const doc = clone(before ?? {}) as Record<string, unknown>;
+  const hooks = ((doc.hooks as Record<string, unknown[]> | undefined) ??= {});
+  (hooks.Notification ??= []).push(clone(CLAUDE_SNIPPET.hooks.Notification[0]));
+  let backup: string | null = null;
+  if (before) M.claude.backups.push((backup = `~/.claude/settings.json.chroma-desk-backup${M.claude.backups.length ? `-${M.claude.backups.length + 1}` : ""}`) && JSON.stringify(before));
+  M.claude.file = doc;
+  return claudeStatus(backup);
+}
+function claudeRemove() {
+  if (!claudeInstalled()) return claudeStatus();
+  const doc = clone(M.claude.file) as Record<string, unknown>;
+  M.claude.backups.push(JSON.stringify(M.claude.file));
+  const hooks = doc.hooks as Record<string, { hooks?: { command?: string }[] }[]>;
+  hooks.Notification = hooks.Notification.map((g) => ({ ...g, hooks: (g.hooks ?? []).filter((h) => !isOurs(h.command)) })).filter((g) => g.hooks.length);
+  if (!hooks.Notification.length) delete hooks.Notification;
+  if (!Object.keys(hooks).length) delete doc.hooks;
+  M.claude.file = doc;
+  return claudeStatus("~/.claude/settings.json.chroma-desk-backup");
+}
+
 // Test controls: `globalThis.__chromaMock.fns` (switch the Omarchy theme, send a game palette, fire sources).
 (M as unknown as { fns: unknown }).fns = {
   setOmarchyTheme: TM.setOmarchyTheme,
   setPalette: TM.setPalette,
   fireDesktop: TM.fireDesktop,
   fireEvent: TM.fireEvent,
+  fireAi: (a: { from?: string; kind?: string } = {}) => TM.fireAi(a.from ?? "", a.kind ?? ""),
+  setMetric: (a: { metric: string; value: number | null }) => SM.setMetric(a.metric, a.value),
+  schedulerTick: () => sched.tick(),
+  breakClaudeFile: () => (M.claude.valid = false),
   omarchyThemes: TM.OMARCHY_THEMES,
 };
 
@@ -311,6 +388,18 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "omarchy_event_hooks": return TM.eventHooks();
     case "omarchy_event_hook_install": M.theme.eventHooks[String(args.kind)] = true; M.theme.hookCalls.push(`install ${args.kind}`); return TM.eventHooks();
     case "omarchy_event_hook_remove": M.theme.eventHooks[String(args.kind)] = false; M.theme.hookCalls.push(`remove ${args.kind}`); return TM.eventHooks();
+    case "test_automation": {
+      const n = args.automation as import("../api").NamedTrigger;
+      if (!n.sequence && !n.anim) fail("profile_invalid", "bad trigger");
+      M.theme.testCalls.push(String(args.name));
+      return TM.fireWith(String(args.name), n);
+    }
+    case "sysmon_status": return SM.status(M.theme.settings.sysmon_gpu ?? "auto");
+    case "sysmon_read": return SM.read(args.metrics as string[]);
+    case "automation_templates": return clone(templatesJson);
+    case "claude_status": return claudeStatus();
+    case "claude_install": return claudeInstall();
+    case "claude_remove": return claudeRemove();
     case "desktop_status": return M.theme.settings.desktop_notifications ? "listening" : "off";
     case "profiles_path": return "~/.config/chroma-desk/profiles";
     case "get_autostart": return false;

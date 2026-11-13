@@ -42,6 +42,8 @@ export function refsOf(a: Animation): string[] {
       return [...new Set(k.path)];
     case "palette":
       return Object.keys(k.cells);
+    case "sequence":
+      return [...new Set(k.steps.flatMap((st) => st.keys))];
   }
 }
 

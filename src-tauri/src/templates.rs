@@ -68,7 +68,7 @@ const WASD_RING: [&str; 4] = ["W", "D", "S", "A"];
 const ARROW_RING: [&str; 4] = ["Up Arrow", "Right Arrow", "Down Arrow", "Left Arrow"];
 
 fn meter(metric: &str, color: Value, min: f64, max: f64, ks: &[&str]) -> Step {
-    step("meter", json!({"metric": metric, "color": color, "min": min, "max": max, "style": "sweep", "sweep_ms": 1200, "background": "dim"}), keys(ks), 3200)
+    step("meter", json!({"metric": metric, "color": color, "min": min, "max": max, "style": "sweep", "sweep_ms": 1200, "background": "none"}), keys(ks), 3200)
 }
 
 fn chat(id: &'static str, color: [u8; 3], app: &str) -> Template {
@@ -115,6 +115,8 @@ pub fn templates() -> Vec<Template> {
         Template { id: "cpu_monitor", category: "monitor", notification: cpu_n },
         chat("discord", [0x7c, 0x5c, 0xff], "discord"),
         chat("telegram", [0x2a, 0xab, 0xee], "telegram"),
+        chat("slack", [0xe0, 0x1e, 0x5a], "slack"),
+        chat("matrix", [0x0d, 0xbd, 0x8b], "element,fractal,nheko,cinny"),
         Template { id: "ai_needs_you", category: "notification", notification: ai },
     ]
 }
@@ -144,7 +146,9 @@ mod tests {
     /// The template's sequence with every meter pinned to `value` (so no sensor is involved).
     fn pinned(id: &str, values: &[f64]) -> Animation {
         let mut a = *get(id).sequence.unwrap();
-        a.id = format!("tpl-{id}");
+        // The resolution cache is keyed by id: every pinned copy needs its own.
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        a.id = format!("tpl-{id}-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         let AnimKind::Sequence { steps, .. } = &mut a.kind else { panic!() };
         for (s, v) in steps.iter_mut().zip(values) {
             s.params.0.insert("value".into(), json!(v));
@@ -163,7 +167,7 @@ mod tests {
     #[test]
     fn all_templates_are_valid_automations_with_valid_names() {
         let list = templates();
-        assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), ["gpu_monitor", "cpu_monitor", "discord", "telegram", "ai_needs_you"]);
+        assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), ["gpu_monitor", "cpu_monitor", "discord", "telegram", "slack", "matrix", "ai_needs_you"]);
         let map = list.iter().map(|t| (t.id.to_string(), t.notification.clone())).collect();
         crate::profiles::validate_triggers(&map).unwrap();
         for t in &list {
@@ -182,11 +186,11 @@ mod tests {
         assert_eq!([out[esc].r as u8, out[esc].g as u8, out[esc].b as u8], ok);
         assert_eq!(out[named(&n, "F5")].g, ok[1] as f32, "key 6 is full");
         let half = &out[named(&n, "F6")];
-        assert!((half.g - ok[1] as f32 * 0.5).abs() < 1.0, "key 7 is half lit: {half:?}");
-        assert!(out[named(&n, "F7")].g < ok[1] as f32 * 0.2, "keys past the value only show the dim background");
+        assert!((half.a - 0.5).abs() < 0.01 && half.g == ok[1] as f32, "key 7 blends with the scene by half: {half:?}");
+        assert_eq!(out[named(&n, "F7")].a, 0.0, "keys past the value are transparent");
         // The sweep grows: early on only a part of the bar is lit.
         let early = at(&a, &n, 0.3);
-        assert!(early[named(&n, "F4")].g < ok[1] as f32 * 0.2);
+        assert_eq!(early[named(&n, "F4")].a, 0.0);
         // Second step: white, full bar.
         let white = at(&a, &n, 3.2 + 2.0);
         assert!(F_ROW.iter().all(|k| (white[named(&n, k)].r - 255.0).abs() < 1.0));
@@ -207,16 +211,41 @@ mod tests {
         assert_eq!(first[named(&n, "`")].g, warn[1] as f32);
         let second = at(&a, &n, 3.2 + 2.0);
         assert_eq!(second[named(&n, "6")].r, alert[0] as f32);
-        assert!(second[named(&n, "-")].r < alert[0] as f32 * 0.2, "past 7 keys: dim");
+        assert_eq!(second[named(&n, "-")].a, 0.0, "past 7 keys: transparent");
         assert_eq!(first[named(&n, "F1")].a, 0.0, "F-row untouched");
         let t = get("cpu_monitor");
         assert!(t.sources.always && t.keys.len() == 14);
     }
 
+    /// A monitor sits ON TOP of the running scene: the filled part shows the bar, the rest keeps the scene.
+    #[test]
+    fn cpu_monitor_at_40_percent_leaves_the_scene_visible_on_the_unfilled_keys() {
+        use crate::engine::compositor::{Blend, blend_onto};
+        let n = keyboard();
+        let a = pinned("cpu_monitor", &[40.0, 0.0]);
+        let bar = at(&a, &n, 2.0);
+        let scene = [10.0_f32, 20.0, 30.0];
+        let mut buf: Vec<Px> = vec![Px { r: scene[0], g: scene[1], b: scene[2], a: 1.0 }; n.len()];
+        blend_onto(&mut buf, &bar, None, 1.0, Blend::Normal);
+        let warn = crate::themes::default_palette().get("warn");
+        // 40 % of 14 keys = 5.6: keys 1-5 full orange, key 6 is 60 % orange over the scene, the rest is the scene.
+        for k in NUMBER_ROW.iter().take(5) {
+            let p = buf[named(&n, k)];
+            assert_eq!([p.r as u8, p.g as u8, p.b as u8], warn, "{k}");
+        }
+        let part = buf[named(&n, NUMBER_ROW[5])];
+        assert!((part.r - (scene[0] + (warn[0] as f32 - scene[0]) * 0.6)).abs() < 0.5, "{part:?}");
+        for k in &NUMBER_ROW[6..] {
+            let p = buf[named(&n, k)];
+            assert_eq!((p.r, p.g, p.b), (scene[0], scene[1], scene[2]), "{k} shows the scene, not black");
+        }
+        assert_eq!((buf[named(&n, "F1")].r, buf[named(&n, "W")].g), (scene[0], scene[1]), "other keys untouched");
+    }
+
     #[test]
     fn chat_templates_blink_five_times_orbit_both_clusters_and_switch_off() {
         let n = keyboard();
-        for (id, color, app) in [("discord", [0x7c, 0x5c, 0xff], "discord"), ("telegram", [0x2a, 0xab, 0xee], "telegram")] {
+        for (id, color, app) in [("discord", [0x7c, 0x5c, 0xff], "discord"), ("telegram", [0x2a, 0xab, 0xee], "telegram"), ("slack", [0xe0, 0x1e, 0x5a], "slack"), ("matrix", [0x0d, 0xbd, 0x8b], "element,fractal,nheko,cinny")] {
             let t = get(id);
             assert_eq!(t.sources.desktop.as_ref().unwrap().app, app);
             assert_eq!(t.keys.len(), 8);
@@ -237,7 +266,7 @@ mod tests {
             // The head is the brightest LED (a fading tail follows it).
             let brightest = |t: f32| {
                 let out = at(&a, &n, t);
-                let (i, _) = out.iter().enumerate().max_by(|x, y| (x.1.r + x.1.g + x.1.b).total_cmp(&(y.1.r + y.1.g + y.1.b))).unwrap();
+                let (i, _) = out.iter().enumerate().max_by(|x, y| x.1.a.total_cmp(&y.1.a)).unwrap();
                 vec![i]
             };
             let head = |ms: f32| brightest((1500.0 + ms) / 1000.0);

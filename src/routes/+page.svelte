@@ -10,7 +10,7 @@
   import { listenPalette, loadPalette } from "$lib/palette.svelte";
   import { toastError } from "$lib/state.svelte";
   import Profiles from "$lib/Profiles.svelte";
-  import Notifications from "$lib/Notifications.svelte";
+  import Automations from "$lib/Automations.svelte";
   import AllDevices from "$lib/AllDevices.svelte";
   import DeviceView from "$lib/DeviceView.svelte";
   import Settings from "$lib/Settings.svelte";
@@ -165,7 +165,7 @@
     {:else if app.view.kind === "profiles"}
       <Profiles />
     {:else if app.view.kind === "notifications"}
-      <Notifications />
+      <Automations />
     {:else if !app.devices.length}
       <div class="empty">
         <h2>{t("empty.noDevices")}</h2>

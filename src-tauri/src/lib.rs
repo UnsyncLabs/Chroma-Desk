@@ -2,6 +2,7 @@ pub mod animations;
 pub mod automations;
 pub mod apply;
 pub mod builtin;
+pub mod claude;
 pub mod cli;
 pub mod commands;
 pub mod config;
@@ -154,6 +155,7 @@ pub fn run() {
             commands::anim_export,
             commands::anim_apply,
             commands::trigger,
+            commands::test_automation,
             commands::stop_triggers,
             commands::trigger_socket_path,
             commands::profile_get,
@@ -164,6 +166,9 @@ pub fn run() {
             commands::palette_reload,
             commands::desktop_status,
             commands::automation_templates,
+            commands::claude_status,
+            commands::claude_install,
+            commands::claude_remove,
             commands::sysmon_status,
             commands::sysmon_read,
             commands::omarchy_event_hooks,

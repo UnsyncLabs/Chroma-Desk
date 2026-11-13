@@ -21,6 +21,7 @@ export interface ThemeMock {
   desktopStatus: string;
   lastThemeName: string;
   hookCalls: string[];
+  testCalls: string[];
   paletteEpoch: number;
 }
 
@@ -58,6 +59,7 @@ export const initialTheme = (): ThemeMock => ({
   desktopStatus: "off",
   lastThemeName: "tokyo-night",
   hookCalls: [],
+  testCalls: [],
   paletteEpoch: 0,
 });
 
@@ -306,7 +308,12 @@ export function fireNamed(name: string, o: Record<string, unknown> = {}) {
   const n = notifications()[name];
   if (!n) return null;
   if (n.enabled === false) C.fail("notification_disabled", name);
-  const spec: Record<string, unknown> = { animation: n.anim, keys: o.keys ?? n.keys ?? [], color: o.color ?? n.color, duration: o.duration ?? n.duration, repeat: n.repeat, speed: n.speed, priority: n.priority ?? 0, replace: n.replace, name };
+  return fireWith(name, n, o);
+}
+
+/** Fires a notification as given (also an unsaved one: the editor's Test button). */
+export function fireWith(name: string, n: NamedTrigger, o: Record<string, unknown> = {}) {
+  const spec: Record<string, unknown> = { animation: n.anim, inline: n.sequence ?? undefined, loop: o.loop, keys: o.keys ?? n.keys ?? [], color: o.color ?? n.color, duration: o.duration ?? n.duration, repeat: n.repeat, speed: n.speed, priority: n.priority ?? 0, replace: n.replace, name };
   const targets: (string | null)[] = n.devices && n.devices.length ? n.devices : [n.device ?? null];
   let devices = 0;
   let err: unknown = null;
@@ -338,10 +345,31 @@ export function fireEvent(event: string) {
   return fired;
 }
 
+/** `chroma-desk event ai:attention [--from x] [--kind y]`. */
+export function fireAi(from = "", kind = "") {
+  let fired = 0;
+  const same = (rule: string, got: string) => !rule.trim() || rule.trim().toLowerCase() === got.trim().toLowerCase();
+  for (const [name, n] of Object.entries(notifications())) {
+    const m = n.sources?.ai;
+    if (n.enabled === false || !m || !same(m.from, from) || !same(m.kind, kind)) continue;
+    try {
+      fireNamed(name);
+      fired++;
+    } catch {
+      /* nothing to show it on */
+    }
+  }
+  return fired;
+}
+
 export function fireDesktop(note: { app: string; urgency?: number; summary: string }) {
   if (!C.S.settings.desktop_notifications) return 0;
   let fired = 0;
-  const has = (hay: string, needle: string) => !needle.trim() || hay.toLowerCase().includes(needle.trim().toLowerCase());
+  // Several app names may be separated by commas.
+  const has = (hay: string, needle: string) => {
+    const alts = needle.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean);
+    return !alts.length || alts.some((a) => hay.toLowerCase().includes(a));
+  };
   for (const [name, n] of Object.entries(notifications())) {
     const m = n.sources?.desktop;
     if (n.enabled === false || !m) continue;

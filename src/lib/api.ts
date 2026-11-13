@@ -152,6 +152,8 @@ export interface Settings {
   theme_rules: ThemeRule[];
   global_notifications: Record<string, NamedTrigger>;
   desktop_notifications: boolean;
+  /** GPU the gpu.* monitors read: "auto" or an id such as "nvidia:0". */
+  sysmon_gpu?: string;
 }
 
 export type ThemeSourceId = "manual" | "omarchy" | "kde" | "pywal" | "gtk" | "external";
@@ -171,13 +173,39 @@ export interface DesktopMatch {
   /** Text the summary must contain; empty = anything. */
   contains: string;
 }
+export interface AiMatch {
+  /** Tool name (claude, codex...); empty = any. */
+  from: string;
+  /** permission, idle...; empty = any. */
+  kind: string;
+}
+export interface EverySpec {
+  every_secs: number;
+  for_secs: number;
+}
+export interface ThresholdSpec {
+  metric: string;
+  op: "gt" | "lt";
+  value: number;
+  for_secs: number;
+  hysteresis: number;
+  cooldown_secs: number;
+}
 export interface NotifSources {
   desktop?: DesktopMatch | null;
   omarchy?: string[];
+  ai?: AiMatch | null;
+  /** Always on: loops over the scene while enabled. */
+  always?: boolean;
+  every?: EverySpec | null;
+  threshold?: ThresholdSpec | null;
 }
 /** A notification: what to show, where, in which colour, and what fires it. */
 export interface NamedTrigger {
+  /** Library animation id or name (empty when `sequence` is used). */
   anim: string;
+  /** A sequence stored in the automation itself; wins over `anim`. */
+  sequence?: Animation | null;
   keys?: string[];
   /** `@slot` or `#rrggbb`. */
   color?: string | null;
@@ -286,7 +314,17 @@ export type AnimKind =
   | { type: "effect"; effect: string; params: Record<string, ParamValue> }
   | { type: "frames"; frames: Frame[]; frame_ms: number; loop: LoopMode; crossfade: number }
   | { type: "path"; path: string[]; palette: Stop[]; speed: number; length: number; gap: number; reverse: boolean; tail_fade: number }
-  | { type: "palette"; cells: Record<string, number>; palette: Stop[]; speed: number; reverse: boolean };
+  | { type: "palette"; cells: Record<string, number>; palette: Stop[]; speed: number; reverse: boolean }
+  | { type: "sequence"; steps: SeqStep[]; loop: boolean };
+/** One step of a sequence: `meter`, `blink`, `orbit`, `hold`, `animation` or any effect id. */
+export interface SeqStep {
+  effect: string;
+  params: Record<string, ParamValue>;
+  /** Ordered LED references: the route of meter/blink/orbit, the lit LEDs of the other effects. */
+  keys: string[];
+  duration_ms: number;
+  anim?: Animation | null;
+}
 export interface Animation {
   schema_version: number;
   id: string;
@@ -318,6 +356,44 @@ export interface TriggerResult {
   overlay: number;
   devices: number;
   duration: number;
+}
+
+export interface GpuInfo {
+  id: string;
+  name: string;
+  vendor: string;
+  dedicated: boolean;
+  vram_total: number | null;
+}
+export interface SysmonStatus {
+  gpu_backend: "nvml" | "nvidia-smi" | "sysfs" | "none";
+  gpus: GpuInfo[];
+  selected: string | null;
+  choice: string;
+  cpu_temp_sensor: string | null;
+  metrics: { id: string; available: boolean }[];
+}
+export interface LiveValue {
+  metric: string;
+  value: number | null;
+  /** Bytes (memory metrics). */
+  used: number | null;
+  total: number | null;
+  unit: string;
+}
+export interface AutomationTemplate {
+  id: string;
+  category: "monitor" | "notification";
+  notification: NamedTrigger;
+}
+export interface ClaudeStatus {
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  installed: boolean;
+  command: string;
+  snippet: string;
+  backup: string | null;
 }
 
 export type EngineStatus = "ok" | "reconnecting" | "server_down";
@@ -387,6 +463,13 @@ export const api = {
   omarchyEventHookInstall: (kind: string) => invoke<EventHookStatus[]>("omarchy_event_hook_install", { kind }),
   omarchyEventHookRemove: (kind: string) => invoke<EventHookStatus[]>("omarchy_event_hook_remove", { kind }),
   desktopStatus: () => invoke<string>("desktop_status"),
+  testAutomation: (name: string, automation: NamedTrigger) => invoke<TriggerResult>("test_automation", { name, automation }),
+  sysmonStatus: () => invoke<SysmonStatus>("sysmon_status"),
+  sysmonRead: (metrics: string[]) => invoke<LiveValue[]>("sysmon_read", { metrics }),
+  automationTemplates: () => invoke<AutomationTemplate[]>("automation_templates"),
+  claudeStatus: () => invoke<ClaudeStatus>("claude_status"),
+  claudeInstall: () => invoke<ClaudeStatus>("claude_install"),
+  claudeRemove: () => invoke<ClaudeStatus>("claude_remove"),
 };
 
 /** Subscribes to a backend event; resolves to the unsubscribe function. */

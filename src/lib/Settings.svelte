@@ -1,7 +1,9 @@
 <script lang="ts">
   /** Settings screen. */
   import { getVersion } from "@tauri-apps/api/app";
-  import { api, hex, type HookStatus, type ServerStatus, type ThemeStatus } from "./api";
+  import { api, hex, type HookStatus, type ServerStatus, type SysmonStatus, type ThemeStatus } from "./api";
+  import ClaudeSetup from "./ClaudeSetup.svelte";
+  import { describeLive, metricLabel, sysmon, watchMetrics } from "./sysmon.svelte";
   import { SLOTS, palette } from "./palette.svelte";
   import { t, deviceLabel, getLocale, setLocale, LANGUAGES } from "./i18n/index.svelte";
   import { app, copyText, loadDevices, tour, toast, toastError } from "./state.svelte";
@@ -34,6 +36,22 @@
       toastError(e);
     }
   }
+
+  let mon: SysmonStatus | null = $state(null);
+  async function loadMon() {
+    mon = await api.sysmonStatus().catch(() => null);
+  }
+  async function chooseGpu(id: string) {
+    profiles.settings.sysmon_gpu = id;
+    await saveSettings();
+    await loadMon();
+  }
+  $effect(() => {
+    loadMon();
+    // The readings below are live while the page is open.
+    return watchMetrics(["cpu.usage", "cpu.temp", "gpu.usage", "gpu.vram", "gpu.temp", "ram.usage"]);
+  });
+  const gb = (b: number | null) => (b ? `${(b / 1073741824).toFixed(b >= 10 * 1073741824 ? 0 : 1)} GB` : "");
 
   const types = $derived([...new Set(app.devices.map((d) => d.device_type))]);
 
@@ -258,6 +276,35 @@
   </div>
 </section>
 
+<section data-sysmon>
+  <h3>{t("mon.title")}</h3>
+  <p class="muted small">{t("mon.lead")}</p>
+  {#if mon}
+    <label class="inline">{t("mon.gpu")}
+      <select value={profiles.settings.sysmon_gpu || "auto"} onchange={(e) => chooseGpu(e.currentTarget.value)} data-sysmon-gpu aria-label={t("mon.gpu")}>
+        <option value="auto">{t("mon.auto")}</option>
+        {#each mon.gpus as g (g.id)}<option value={g.id}>{g.name}{g.vram_total ? ` (${gb(g.vram_total)})` : ""}</option>{/each}
+      </select>
+    </label>
+    <p class="small" data-sysmon-backend>
+      {t("mon.backend")}: <b>{mon.gpu_backend === "none" ? t("mon.none") : mon.gpu_backend}</b>
+      {#if mon.selected}· {t("mon.using")}: <b>{mon.gpus.find((g) => g.id === mon?.selected)?.name}</b>{/if}
+      · {t("mon.cpuSensor")}: <b>{mon.cpu_temp_sensor ?? t("mon.none")}</b>
+    </p>
+    <ul class="metrics" data-sysmon-metrics>
+      {#each mon.metrics as m (m.id)}
+        <li class:off={!m.available}><span>{metricLabel(m.id)}</span><b data-metric-live={m.id}>{m.available ? describeLive(m.id, sysmon.values[m.id]) : t("mon.unavailable")}</b></li>
+      {/each}
+    </ul>
+    <p class="muted small">{t("mon.cost")}</p>
+  {/if}
+</section>
+
+<section data-ai>
+  <h3>{t("claude.title")}</h3>
+  <ClaudeSetup />
+</section>
+
 <section>
   <h3>{t("set.folder")}</h3>
   <code>{profiles.path}</code>
@@ -288,4 +335,8 @@
   .pal { display: flex; flex-wrap: wrap; gap: 0.25rem; }
   .sw { width: 1.9rem; height: 1.9rem; border-radius: 6px; border: 1px solid var(--border); }
   .rule { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.3rem 0; }
+  .metrics { list-style: none; margin: 0.4rem 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.3rem 1rem; }
+  .metrics li { display: flex; justify-content: space-between; gap: 0.6rem; background: var(--panel-2); border-radius: 8px; padding: 0.3rem 0.6rem; font-size: 0.88rem; }
+  .metrics li.off { opacity: 0.5; }
+  .metrics b { font-variant-numeric: tabular-nums; }
 </style>

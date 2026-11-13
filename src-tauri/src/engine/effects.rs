@@ -216,7 +216,7 @@ pub fn effect_defs() -> &'static [EffectDef] {
                     color("color", [0.0, 220.0, 90.0]),
                     data("style", json!("sweep")),
                     slider("sweep_ms", 0.0, 10000.0, 50.0, 1200.0),
-                    data("background", json!("dim")),
+                    data("background", json!("none")),
                     flag("gradient", false),
                     // Explicit reading in the metric's unit (tests, previews); absent = the live sensor.
                     data("value", Value::Null),
@@ -671,7 +671,8 @@ const GRADIENT: [Rgbf; 3] = [[0.0, 220.0, 90.0], [255.0, 200.0, 0.0], [255.0, 40
 /// A bar over the `path` LEDs filled to `(value - min) / (max - min)`, where the value is the
 /// explicit `value` parameter or the live sensor named by `metric`. `style` `sweep` grows the bar
 /// from empty over `sweep_ms`, `live` shows it at once. The last, partly filled LED is dimmed in
-/// proportion, so the bar reads exactly. `background`: `dim` (default), `off` (black) or `none`.
+/// proportion, so the bar reads exactly. `background`: `none` (default, transparent: the scene
+/// shows through), `dim` or `off` (black track).
 fn meter(p: &Params, t: f32, out: &mut [Px]) {
     out.fill(Px::CLEAR);
     let list = valid_path(p, out.len());
@@ -691,16 +692,19 @@ fn meter(p: &Params, t: f32, out: &mut [Px]) {
     }
     let fill = frac * m as f32;
     let base = p.color("color");
+    // Default: transparent, so the scene underneath keeps running and the last, partly filled
+    // key blends with it by its fraction. `dim` / `off` paint an opaque track instead.
     let bg = match p.text("background") {
         "off" => Some(0.0),
-        "none" => None,
-        _ => Some(0.12),
+        "dim" => Some(0.12),
+        _ => None,
     };
     for (k, &led) in list.iter().enumerate() {
         let cover = (fill - k as f32).clamp(0.0, 1.0);
         let color = if p.flag("gradient") { sample_clamped(&GRADIENT, (k as f32 + 0.5) / m as f32) } else { base };
         out[led] = match (cover > 0.0, bg) {
-            (true, _) => Px::rgb(scale(color, cover.max(bg.unwrap_or(0.0))), 1.0),
+            (true, Some(b)) => Px::rgb(scale(color, cover.max(b)), 1.0),
+            (true, None) => Px::rgb(color, cover),
             (false, Some(b)) => Px::rgb(scale(color, b), 1.0),
             (false, None) => Px::CLEAR,
         };
@@ -739,7 +743,7 @@ fn orbit(p: &Params, t: f32, out: &mut [Px]) {
     for (k, &led) in list.iter().enumerate() {
         let behind = (head - k as f32).rem_euclid(m as f32);
         if behind < tail {
-            out[led] = Px::rgb(scale(c, 1.0 - behind / tail), 1.0);
+            out[led] = Px::rgb(c, 1.0 - behind / tail);
         }
     }
 }
@@ -900,10 +904,9 @@ mod tests {
         let end = p(1.0);
         assert!(mid < 4, "still growing at 0.2 s");
         assert_eq!(lit(&end), vec![0, 1, 2, 3]);
-        assert!((end[3].r - 255.0 / 3.0).abs() < 1.0, "a third of the last LED");
+        assert!((end[3].a - 1.0 / 3.0).abs() < 0.01 && end[3].r == 255.0, "the last LED blends with the scene by its third");
         assert_eq!(p(5.0), end);
         // Unlit LEDs of a `none` background stay transparent.
-        assert_eq!(end[3].a, 1.0);
         let full = run("meter", json!({"path": [0, 1], "value": 10.0, "min": 0, "max": 100, "style": "live", "background": "none"}), 0.0, 3);
         assert_eq!(full[1].a, 0.0);
         assert_eq!(full[2].a, 0.0);
@@ -912,6 +915,8 @@ mod tests {
     #[test]
     fn meter_without_a_reading_shows_an_empty_bar_and_gradient_follows_position() {
         let out = run("meter", json!({"path": [0, 1, 2], "metric": "", "background": "dim", "color": [100, 100, 100]}), 9.0, 3);
+        let clear = run("meter", json!({"path": [0, 1, 2], "metric": ""}), 9.0, 3);
+        assert!(clear.iter().all(|p| p.a == 0.0), "default background is transparent");
         assert!(out.iter().all(|p| p.r == 12.0 && p.a == 1.0));
         let g = run("meter", json!({"path": [0, 1, 2, 3, 4], "value": 100.0, "style": "live", "gradient": true}), 0.0, 5);
         assert!(g[0].g > g[0].r && g[4].r > g[4].g, "green at the start, red at the end");
@@ -941,8 +946,8 @@ mod tests {
         assert_eq!(head(0.85), vec![6]);
         assert_eq!(head(1.1), vec![3], "second lap");
         assert!(head(2.0).is_empty(), "off after the last lap");
-        let tail = run("orbit", json!({"path": [0, 1, 2, 3], "laps": 1, "lap_ms": 1000, "trail": 1.0}), 0.6, 4);
-        assert!(tail[2].r > tail[1].r && tail[1].r > tail[0].r, "fades behind the head: {tail:?}");
+let tail = run("orbit", json!({"path": [0, 1, 2, 3], "laps": 1, "lap_ms": 1000, "trail": 1.0}), 0.6, 4);
+        assert!(tail[2].a > tail[1].a && tail[1].a > tail[0].a, "fades (towards the scene) behind the head: {tail:?}");
     }
 
     #[test]

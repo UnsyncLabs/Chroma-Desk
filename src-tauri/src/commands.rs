@@ -213,6 +213,28 @@ pub fn automation_templates() -> Vec<crate::templates::Template> {
     crate::templates::templates()
 }
 
+fn claude_path() -> Res<std::path::PathBuf> {
+    crate::claude::default_path().ok_or_else(|| ApiError::new("claude_settings_invalid", "HOME is not set"))
+}
+
+/// Whether Claude Code's settings.json has the chroma-desk Notification hook.
+#[tauri::command]
+pub fn claude_status() -> Res<crate::claude::ClaudeStatus> {
+    Ok(crate::claude::status(&claude_path()?))
+}
+
+/// Adds the hook (merging, with a backup).
+#[tauri::command]
+pub fn claude_install() -> Res<crate::claude::ClaudeStatus> {
+    crate::claude::install(&claude_path()?)
+}
+
+/// Removes the hook again.
+#[tauri::command]
+pub fn claude_remove() -> Res<crate::claude::ClaudeStatus> {
+    crate::claude::remove(&claude_path()?)
+}
+
 /// What the system monitors can read on this machine (Settings).
 #[tauri::command]
 pub async fn sysmon_status() -> Res<crate::sysmon::Status> {
@@ -501,6 +523,12 @@ pub fn anim_apply(app: tauri::AppHandle, state: State<'_, AppState>, device_key:
 #[tauri::command]
 pub fn trigger(state: State<'_, AppState>, spec: TriggerSpec) -> Res<TriggerResult> {
     triggers::start(&state.engine, &animations::animations_dir(), &spec, std::time::Instant::now())
+}
+
+/// Fires an automation as edited (not necessarily saved), for the editor's Test button.
+#[tauri::command]
+pub fn test_automation(state: State<'_, AppState>, name: String, automation: profiles::NamedTrigger) -> Res<TriggerResult> {
+    triggers::test_notification(&state.engine, &animations::animations_dir(), name.trim(), &automation, std::time::Instant::now())
 }
 
 #[tauri::command]

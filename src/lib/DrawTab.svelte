@@ -16,16 +16,16 @@
 
   // The library may have asked to edit something: take it once.
   const wanted = untrack(() => app.pendingEdit);
-  const first = wanted && wanted !== "new" && wanted.kind.type !== "effect" ? wanted : null;
+  const first = wanted && wanted !== "new" && wanted.kind.type !== "effect" && wanted.kind.type !== "sequence" ? wanted : null;
   let initial: Animation | null = $state(first);
-  let kind: Kind = $state(first && first.kind.type !== "effect" ? first.kind.type : wanted === "new" ? "frames" : "paint");
+  let kind: Kind = $state(first && first.kind.type !== "effect" && first.kind.type !== "sequence" ? first.kind.type : wanted === "new" ? "frames" : "paint");
   /** Bumped to restart an editor from scratch. */
   let session = $state(0);
   $effect(() => {
     if (app.pendingEdit) {
       const w = app.pendingEdit;
       app.pendingEdit = null;
-      if (w !== "new" && w.kind.type !== "effect") {
+      if (w !== "new" && w.kind.type !== "effect" && w.kind.type !== "sequence") {
         initial = w;
         kind = w.kind.type;
       } else {

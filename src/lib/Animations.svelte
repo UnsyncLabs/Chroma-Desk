@@ -205,7 +205,7 @@
             <div class="actions">
               <button class="primary" onclick={() => applyHere(a)}>{t("anim.apply")}</button>
               <button onclick={() => testAnimation(a, device.key)} title={t("anim.testHint")}>{t("anim.test")}</button>
-              {#if a.kind.type !== "effect"}
+              {#if a.kind.type !== "effect" && a.kind.type !== "sequence"}
                 <button onclick={() => edit(a)}>{a.builtin ? t("anim.customize") : t("anim.edit")}</button>
               {/if}
               <details class="menu">

@@ -1,5 +1,6 @@
-/** Notifications: named triggers of the active profile plus the global ones, and what the UI does with them. */
-import { api, type NamedTrigger, type Profile, type ProfileTheme } from "./api";
+/** Automations (notifications and monitors): named triggers of the active profile plus the global ones, and what the UI does with them. */
+import { api, type AutomationTemplate, type NamedTrigger, type Profile, type ProfileTheme } from "./api";
+import { metricLabel, unitOf } from "./sysmon.svelte";
 import { activeProfile, profiles, refreshActiveProfile, saveSettings } from "./profiles.svelte";
 import { t } from "./i18n/index.svelte";
 
@@ -68,23 +69,72 @@ export async function setEnabled(item: NotifItem, on: boolean) {
   await saveNotification({ ...item, n: { ...item.n, enabled: on } });
 }
 
+// ---------- categories and the "When" chip ----------
+
+export type Category = "monitor" | "timer" | "notification";
+
+/** Monitors run all the time or on a measurement, timers on a clock, everything else reacts to an event. */
+export function categoryOf(n: NamedTrigger): Category {
+  if (n.sources?.always || n.sources?.threshold) return "monitor";
+  if (n.sources?.every) return "timer";
+  return "notification";
+}
+
+export function fmtEvery(secs: number): string {
+  if (secs >= 3600 && secs % 3600 === 0) return t("auto.unit.hours", { n: secs / 3600 });
+  if (secs >= 60 && secs % 60 === 0) return t("auto.unit.minutes", { n: secs / 60 });
+  return t("auto.unit.seconds", { n: secs });
+}
+
+/** Short summaries of what fires an automation: "Always", "Every 5 min", "CPU temperature > 80 °C", "Discord"... */
+export function whenChips(n: NamedTrigger): string[] {
+  const s = n.sources ?? {};
+  const out: string[] = [];
+  if (s.always) out.push(t("auto.when.always"));
+  if (s.every) out.push(t("auto.when.everyChip", { every: fmtEvery(s.every.every_secs), for: fmtEvery(s.every.for_secs) }));
+  if (s.threshold) out.push(`${metricLabel(s.threshold.metric)} ${s.threshold.op === "lt" ? "<" : ">"} ${s.threshold.value} ${unitOf(s.threshold.metric)}${s.threshold.for_secs ? ` · ${fmtEvery(s.threshold.for_secs)}` : ""}`);
+  if (s.desktop) out.push(s.desktop.app ? t("auto.when.desktopApp", { app: s.desktop.app }) : t("auto.when.desktop"));
+  for (const e of s.omarchy ?? []) out.push(t(`notif.ev.${e.replace("omarchy:", "")}`));
+  if (s.ai) out.push(s.ai.from ? t("auto.when.aiFrom", { from: s.ai.from }) : t("auto.when.ai"));
+  if (!out.length) out.push(t("auto.when.command"));
+  return out;
+}
+
 // ---------- templates ----------
 
 export interface Template {
   id: string;
-  name: string;
-  /** i18n key of the title and description. */
+  category: "monitor" | "notification";
   n: NamedTrigger;
 }
 
-export const TEMPLATES: Template[] = [
-  { id: "flash_all", name: "flash_all", n: { anim: "builtin:flash", color: "@info", duration: 1.5 } },
-  { id: "alert_wasd", name: "alert_wasd", n: { anim: "builtin:blink", color: "@alert", keys: ["W", "A", "S", "D"], repeat: 5, speed: 1.5 } },
-  { id: "success_pulse", name: "success", n: { anim: "builtin:pulse", color: "@ok", duration: 1.5 } },
-  { id: "low_battery", name: "low_battery", n: { anim: "builtin:blink", color: "@warn", duration: 6, speed: 0.6, sources: { omarchy: ["omarchy:battery-low"] } } },
-  { id: "desktop", name: "new_message", n: { anim: "builtin:flash", color: "@accent", duration: 1.2, sources: { desktop: { app: "", urgency: null, contains: "" } } } },
-  { id: "low_health", name: "low_health", n: { anim: "builtin:blink", color: "@alert", keys: ["W", "A", "S", "D"], duration: 4, replace: true, priority: 5 } },
+/** Simple one-click notifications built from library animations. */
+const SIMPLE: Template[] = [
+  { id: "flash_all", category: "notification", n: { anim: "builtin:flash", color: "@info", duration: 1.5 } },
+  { id: "alert_wasd", category: "notification", n: { anim: "builtin:blink", color: "@alert", keys: ["W", "A", "S", "D"], repeat: 5, speed: 1.5 } },
+  { id: "success_pulse", category: "notification", n: { anim: "builtin:pulse", color: "@ok", duration: 1.5 } },
+  { id: "low_battery", category: "notification", n: { anim: "builtin:blink", color: "@warn", duration: 6, speed: 0.6, sources: { omarchy: ["omarchy:battery-low"] } } },
+  { id: "desktop", category: "notification", n: { anim: "builtin:flash", color: "@accent", duration: 1.2, sources: { desktop: { app: "", urgency: null, contains: "" } } } },
+  { id: "low_health", category: "notification", n: { anim: "builtin:blink", color: "@alert", keys: ["W", "A", "S", "D"], duration: 4, replace: true, priority: 5 } },
 ];
+
+/** Name suggested for a copy of a template. */
+export const templateName = (id: string) => ({ flash_all: "flash_all", success_pulse: "success", desktop: "new_message" })[id] ?? id;
+
+export const tplStore = $state({ built: [] as AutomationTemplate[], loaded: false });
+
+export async function loadTemplates() {
+  try {
+    tplStore.built = await api.automationTemplates();
+  } catch {
+    tplStore.built = [];
+  }
+  tplStore.loaded = true;
+}
+
+/** Every template: the built-in monitors and chat notifications first, then the simple ones. */
+export const allTemplates = (): Template[] => [...tplStore.built.map((b) => ({ id: b.id, category: b.category, n: b.notification })), ...SIMPLE];
+export const TEMPLATES = SIMPLE;
 
 // ---------- copy-ready snippets ----------
 

@@ -23,15 +23,15 @@
             {
               "effect": "meter",
               "params": {
-                "background": "dim",
+                "metric": "gpu.vram",
                 "color": {
                   "slot": "ok"
                 },
-                "max": 100.0,
-                "metric": "gpu.vram",
                 "min": 0.0,
+                "max": 100.0,
                 "style": "sweep",
-                "sweep_ms": 1200
+                "sweep_ms": 1200,
+                "background": "none"
               },
               "keys": [
                 "name:Key: Escape",
@@ -53,17 +53,17 @@
             {
               "effect": "meter",
               "params": {
-                "background": "dim",
+                "metric": "gpu.usage",
                 "color": [
                   255,
                   255,
                   255
                 ],
-                "max": 100.0,
-                "metric": "gpu.usage",
                 "min": 0.0,
+                "max": 100.0,
                 "style": "sweep",
-                "sweep_ms": 1200
+                "sweep_ms": 1200,
+                "background": "none"
               },
               "keys": [
                 "name:Key: Escape",
@@ -130,15 +130,15 @@
             {
               "effect": "meter",
               "params": {
-                "background": "dim",
+                "metric": "cpu.usage",
                 "color": {
                   "slot": "warn"
                 },
-                "max": 100.0,
-                "metric": "cpu.usage",
                 "min": 0.0,
+                "max": 100.0,
                 "style": "sweep",
-                "sweep_ms": 1200
+                "sweep_ms": 1200,
+                "background": "none"
               },
               "keys": [
                 "name:Key: `",
@@ -161,15 +161,15 @@
             {
               "effect": "meter",
               "params": {
-                "background": "dim",
+                "metric": "cpu.temp",
                 "color": {
                   "slot": "alert"
                 },
-                "max": 95.0,
-                "metric": "cpu.temp",
                 "min": 30.0,
+                "max": 95.0,
                 "style": "sweep",
-                "sweep_ms": 1200
+                "sweep_ms": 1200,
+                "background": "none"
               },
               "keys": [
                 "name:Key: `",
@@ -244,8 +244,8 @@
                   255
                 ],
                 "count": 5,
-                "off_ms": 150,
-                "on_ms": 150
+                "on_ms": 150,
+                "off_ms": 150
               },
               "keys": [
                 "name:Key: W",
@@ -267,8 +267,8 @@
                   92,
                   255
                 ],
-                "lap_ms": 800,
                 "laps": 1,
+                "lap_ms": 800,
                 "trail": 0.5
               },
               "keys": [
@@ -287,8 +287,8 @@
                   92,
                   255
                 ],
-                "lap_ms": 800,
                 "laps": 1,
+                "lap_ms": 800,
                 "trail": 0.5
               },
               "keys": [
@@ -357,8 +357,8 @@
                   238
                 ],
                 "count": 5,
-                "off_ms": 150,
-                "on_ms": 150
+                "on_ms": 150,
+                "off_ms": 150
               },
               "keys": [
                 "name:Key: W",
@@ -380,8 +380,8 @@
                   171,
                   238
                 ],
-                "lap_ms": 800,
                 "laps": 1,
+                "lap_ms": 800,
                 "trail": 0.5
               },
               "keys": [
@@ -400,8 +400,8 @@
                   171,
                   238
                 ],
-                "lap_ms": 800,
                 "laps": 1,
+                "lap_ms": 800,
                 "trail": 0.5
               },
               "keys": [
@@ -435,6 +435,232 @@
       "sources": {
         "desktop": {
           "app": "telegram",
+          "contains": ""
+        }
+      }
+    }
+  },
+  {
+    "id": "slack",
+    "category": "notification",
+    "notification": {
+      "anim": "",
+      "sequence": {
+        "schema_version": 1,
+        "id": "",
+        "name": "slack",
+        "description": null,
+        "tags": [],
+        "created": 0,
+        "updated": 1,
+        "target": {
+          "kind": "keyboard",
+          "hint": null
+        },
+        "builtin": false,
+        "kind": {
+          "type": "sequence",
+          "steps": [
+            {
+              "effect": "blink",
+              "params": {
+                "color": [
+                  224,
+                  30,
+                  90
+                ],
+                "count": 5,
+                "on_ms": 150,
+                "off_ms": 150
+              },
+              "keys": [
+                "name:Key: W",
+                "name:Key: D",
+                "name:Key: S",
+                "name:Key: A",
+                "name:Key: Up Arrow",
+                "name:Key: Right Arrow",
+                "name:Key: Down Arrow",
+                "name:Key: Left Arrow"
+              ],
+              "duration_ms": 1500
+            },
+            {
+              "effect": "orbit",
+              "params": {
+                "color": [
+                  224,
+                  30,
+                  90
+                ],
+                "laps": 1,
+                "lap_ms": 800,
+                "trail": 0.5
+              },
+              "keys": [
+                "name:Key: W",
+                "name:Key: D",
+                "name:Key: S",
+                "name:Key: A"
+              ],
+              "duration_ms": 800
+            },
+            {
+              "effect": "orbit",
+              "params": {
+                "color": [
+                  224,
+                  30,
+                  90
+                ],
+                "laps": 1,
+                "lap_ms": 800,
+                "trail": 0.5
+              },
+              "keys": [
+                "name:Key: Up Arrow",
+                "name:Key: Right Arrow",
+                "name:Key: Down Arrow",
+                "name:Key: Left Arrow"
+              ],
+              "duration_ms": 800
+            },
+            {
+              "effect": "hold",
+              "params": {},
+              "keys": [],
+              "duration_ms": 200
+            }
+          ],
+          "loop": false
+        }
+      },
+      "keys": [
+        "name:Key: A",
+        "name:Key: D",
+        "name:Key: Down Arrow",
+        "name:Key: Left Arrow",
+        "name:Key: Right Arrow",
+        "name:Key: S",
+        "name:Key: Up Arrow",
+        "name:Key: W"
+      ],
+      "sources": {
+        "desktop": {
+          "app": "slack",
+          "contains": ""
+        }
+      }
+    }
+  },
+  {
+    "id": "matrix",
+    "category": "notification",
+    "notification": {
+      "anim": "",
+      "sequence": {
+        "schema_version": 1,
+        "id": "",
+        "name": "matrix",
+        "description": null,
+        "tags": [],
+        "created": 0,
+        "updated": 1,
+        "target": {
+          "kind": "keyboard",
+          "hint": null
+        },
+        "builtin": false,
+        "kind": {
+          "type": "sequence",
+          "steps": [
+            {
+              "effect": "blink",
+              "params": {
+                "color": [
+                  13,
+                  189,
+                  139
+                ],
+                "count": 5,
+                "on_ms": 150,
+                "off_ms": 150
+              },
+              "keys": [
+                "name:Key: W",
+                "name:Key: D",
+                "name:Key: S",
+                "name:Key: A",
+                "name:Key: Up Arrow",
+                "name:Key: Right Arrow",
+                "name:Key: Down Arrow",
+                "name:Key: Left Arrow"
+              ],
+              "duration_ms": 1500
+            },
+            {
+              "effect": "orbit",
+              "params": {
+                "color": [
+                  13,
+                  189,
+                  139
+                ],
+                "laps": 1,
+                "lap_ms": 800,
+                "trail": 0.5
+              },
+              "keys": [
+                "name:Key: W",
+                "name:Key: D",
+                "name:Key: S",
+                "name:Key: A"
+              ],
+              "duration_ms": 800
+            },
+            {
+              "effect": "orbit",
+              "params": {
+                "color": [
+                  13,
+                  189,
+                  139
+                ],
+                "laps": 1,
+                "lap_ms": 800,
+                "trail": 0.5
+              },
+              "keys": [
+                "name:Key: Up Arrow",
+                "name:Key: Right Arrow",
+                "name:Key: Down Arrow",
+                "name:Key: Left Arrow"
+              ],
+              "duration_ms": 800
+            },
+            {
+              "effect": "hold",
+              "params": {},
+              "keys": [],
+              "duration_ms": 200
+            }
+          ],
+          "loop": false
+        }
+      },
+      "keys": [
+        "name:Key: A",
+        "name:Key: D",
+        "name:Key: Down Arrow",
+        "name:Key: Left Arrow",
+        "name:Key: Right Arrow",
+        "name:Key: S",
+        "name:Key: Up Arrow",
+        "name:Key: W"
+      ],
+      "sources": {
+        "desktop": {
+          "app": "element,fractal,nheko,cinny",
           "contains": ""
         }
       }

@@ -140,3 +140,45 @@ describe("editor drafts", () => {
     expect(kindToCells(kind, kbB)).toEqual({ cells: { 1: 0.25, 0: 1 }, lost: 0 });
   });
 });
+
+describe("sequences (same behaviour as effects.rs)", () => {
+  const n4 = ["Key: W", "Key: A", "Key: S", "Key: D", "Key: Q"];
+  const seq = (steps: Extract<Animation["kind"], { type: "sequence" }>["steps"], loop = false): Animation => ({ ...base, kind: { type: "sequence", steps, loop } });
+  const lit = (a: Animation, t: number) => renderAnimation(a, t, n4, pos(5)).flatMap((p, i) => (p[3] > 0 && p[0] + p[1] + p[2] > 0 ? [i] : []));
+  const k = (...x: string[]) => x.map((v) => `name:Key: ${v}`);
+
+  it("blinks an exact number of times, then orbits in key order, then ends", () => {
+    const a = seq([
+      { effect: "blink", params: { color: [0, 0, 255], count: 2, on_ms: 100, off_ms: 100 }, keys: k("W", "A", "S", "D"), duration_ms: 400 },
+      { effect: "orbit", params: { color: [255, 255, 255], laps: 1, lap_ms: 400, trail: 0.25 }, keys: k("W", "D", "S", "A"), duration_ms: 400 },
+    ]);
+    expect(lit(a, 0.05)).toEqual([0, 1, 2, 3]);
+    expect(lit(a, 0.15)).toEqual([]);
+    expect(lit(a, 0.25)).toEqual([0, 1, 2, 3]);
+    expect([0.45, 0.55, 0.65, 0.75].map((t) => lit(a, t))).toEqual([[0], [3], [2], [1]]);
+    expect(lit(a, 0.9)).toEqual([]);
+  });
+
+  it("meter fills in the picked key order with a dimmed partial key and the min/max scale", () => {
+    const a = seq([{ effect: "meter", params: { value: 62.5, min: 30, max: 95, color: [255, 0, 0], style: "live", background: "off" }, keys: k("D", "S", "A", "W"), duration_ms: 1000 }]);
+    const out = renderAnimation(a, 0.5, n4, pos(5));
+    // 50 % of 4 keys: D and S full, A and W dark; Q untouched.
+    expect([out[3][0], out[2][0], out[1][0], out[0][0]]).toEqual([255, 255, 0, 0]);
+    expect(out[4][3]).toBe(0);
+    const part = seq([{ effect: "meter", params: { value: 37.5, color: [200, 0, 0], style: "live", background: "off" }, keys: k("W", "A", "S", "D"), duration_ms: 1000 }]);
+    expect(renderAnimation(part, 0, n4, pos(5))[1][0]).toBeCloseTo(100);
+    // Default background is transparent and the partial key blends by its fraction.
+    const over = seq([{ effect: "meter", params: { value: 37.5, color: [200, 0, 0], style: "live" }, keys: k("W", "A", "S", "D"), duration_ms: 1000 }]);
+    const o = renderAnimation(over, 0, n4, pos(5));
+    expect([o[0][3], o[1][3], o[2][3], o[3][3]]).toEqual([1, 0.5, 0, 0]);
+    expect(o[1][0]).toBe(200);
+  });
+
+  it("keys missing on the device show nothing, and the sequence loops when asked", () => {
+    const a = seq([{ effect: "blink", params: { color: [255, 0, 0] }, keys: k("F5"), duration_ms: 500 }], true);
+    expect(lit(a, 0.01)).toEqual([]);
+    const b = seq([{ effect: "solid", params: { color: [9, 9, 9] }, keys: k("Q"), duration_ms: 500 }], true);
+    expect(lit(b, 1.2)).toEqual([4]);
+    expect(lit({ ...b, kind: { type: "sequence", steps: (b.kind as never as { steps: [] }).steps, loop: false } }, 1.2)).toEqual([]);
+  });
+});

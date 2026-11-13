@@ -11,6 +11,7 @@ export function recolorAnim(a: Animation, c: Rgb): Animation {
   const k = out.kind;
   if (k.type === "frames") k.frames.forEach((f) => Object.keys(f.leds).forEach((r) => (f.leds[r] = shade(f.leds[r]))));
   else if (k.type === "path" || k.type === "palette") k.palette.forEach((s) => (s.color = shade(s.color)));
+  else if (k.type === "sequence") k.steps.forEach((st) => "color" in st.params && (st.params.color = c));
   else {
     const p = k.params as Record<string, unknown>;
     if ("color" in p) p.color = c;
