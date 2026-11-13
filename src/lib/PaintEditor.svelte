@@ -34,7 +34,8 @@
     const names = Array.from({ length: n }, (_, i) => device.led_names[i] ?? "");
     const ref = refMaker(names);
     const leds: Record<string, Rgb> = {};
-    canvasColors.forEach((c, i) => {
+    // Only what was painted: without a paint layer the canvas shows the live effect, which is not a drawing.
+    (layer ? toPaint(layer, n) : []).forEach((c, i) => {
       if (c) leds[ref(i)] = [...c] as Rgb;
     });
     if (!Object.keys(leds).length) {

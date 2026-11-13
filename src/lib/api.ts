@@ -43,6 +43,8 @@ export interface Mode {
 
 export interface Device {
   id: number;
+  /** A duplicate OpenRGB reports for the same physical device (hidden unless Settings asks). */
+  phantom?: boolean;
   /** Stable identity (name#serial or name@ordinal). */
   key: string;
   name: string;
@@ -137,6 +139,7 @@ export interface Settings {
   default_profile: string | null;
   current_profile: string | null;
   fps_by_type: Record<string, number>;
+  show_phantom_devices: boolean;
 }
 
 export interface ProfileInfo {

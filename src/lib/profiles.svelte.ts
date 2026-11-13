@@ -7,7 +7,7 @@ import { toastError } from "./state.svelte";
 export const profiles = $state({
   list: { profiles: [], corrupt: [] } as ProfileList,
   path: "",
-  settings: { language: null, start_hidden: false, default_profile: null, current_profile: null, fps_by_type: {} } as Settings,
+  settings: { language: null, start_hidden: false, default_profile: null, current_profile: null, fps_by_type: {}, show_phantom_devices: false } as Settings,
 });
 
 export async function loadProfiles() {

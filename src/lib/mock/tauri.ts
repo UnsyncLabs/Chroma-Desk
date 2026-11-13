@@ -235,7 +235,7 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "effect_defs": return DEFS;
     case "effect_defaults": return Object.fromEntries(DEFS.map((d) => [d.id, Object.fromEntries(d.params.map((p) => [p.key, p.default]))]));
     case "get_blackout": return false;
-    case "get_settings": return { language: "en", start_hidden: false, fps_by_type: {}, default_profile: null, current_profile: null };
+    case "get_settings": return { language: "en", start_hidden: false, fps_by_type: {}, show_phantom_devices: false, default_profile: null, current_profile: null };
     case "list_profiles": return { profiles: [{ name: "Gaming", file: "gaming.json", openrgb: false }, { name: "OpenRGB: yado1", file: "o.json", openrgb: true }], corrupt: ["broken.json"] };
     case "profiles_path": return "~/.config/chroma-desk/profiles";
     case "get_autostart": return false;

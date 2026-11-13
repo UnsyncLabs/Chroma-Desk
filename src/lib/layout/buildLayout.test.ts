@@ -44,10 +44,26 @@ describe("keyboard layout", () => {
     expect(by("Key: Enter").w).toBe(2.25);
     expect(by("Key: Backspace").w).toBe(2);
   });
-  it("puts extras in a row above the keys", () => {
-    const dial = by("Media: Volume Dial");
-    expect(dial.y).toBeLessThan(by("Key: Escape").y);
-    expect(by("Xbox Game Bar").y).toBeLessThan(by("Key: Escape").y);
+  it("puts the media buttons above the navigation cluster: Xbox, Play/Pause, round volume dial", () => {
+    const [x, p, v] = [by("Xbox Game Bar"), by("Key: Media Play/Pause"), by("Media: Volume Dial")];
+    const esc = by("Key: Escape");
+    expect(Math.max(x.y, p.y, v.y) + 1).toBeLessThanOrEqual(esc.y);
+    expect(x.x).toBeLessThan(p.x);
+    expect(p.x).toBeLessThan(v.x);
+    expect(v.shape).toBe("circle");
+    const navLeft = by("Key: Insert").x;
+    const navRight = by("Key: Page Up").x + by("Key: Page Up").w;
+    expect(x.x).toBeGreaterThanOrEqual(navLeft - 0.5);
+    expect(v.x + v.w).toBeLessThanOrEqual(navRight + 1e-6);
+    expect(v.x + v.w).toBeGreaterThan(navRight - 1.3);
+  });
+  it("falls back to a top-left extras row without a navigation cluster", () => {
+    const d2 = huntsman();
+    d2.led_names = d2.led_names.map((n) => (/Insert|Home|Page Up/.test(n) ? "" : n));
+    const l2 = buildLayout(d2);
+    const x = l2.items.find((i) => i.name === "Xbox Game Bar")!;
+    expect(x.x).toBeLessThan(3.5);
+    expect(x.y).toBeLessThan(l2.items.find((i) => i.name === "Key: Escape")!.y);
   });
   it("hides unnamed LEDs outside the matrix but keeps positions for all", () => {
     expect(l.hidden.length).toBe(114 - 87 - 3);

@@ -65,6 +65,17 @@ function zoneOf(d: Device, led: number): Zone | undefined {
 
 // ---------- keyboard ----------
 
+/** Order of the media/extra buttons above the navigation cluster (null = not one of them). */
+function mediaRank(name: string): number | null {
+  if (/xbox/i.test(name)) return 0;
+  if (/prev/i.test(name)) return 1;
+  if (/play/i.test(name)) return 2;
+  if (/next|skip/i.test(name)) return 3;
+  if (/mute/i.test(name)) return 4;
+  if (/volume|dial|wheel|knob/i.test(name)) return 9;
+  return null;
+}
+
 function keyboardLayout(d: Device): Layout | null {
   const n = d.led_names.length;
   const iso = d.led_names.includes("Key: \\ (ISO)") || d.led_names.includes("Key: Enter (ISO)");
@@ -109,25 +120,37 @@ function keyboardLayout(d: Device): Layout | null {
   }
 
   const height = Math.max(...items.map((it) => it.y + it.h));
-  // Extras row above the keys, wrapped to the width of the keyboard.
+  // Media/extra buttons (Xbox Game Bar, play/pause, volume dial) sit above the navigation cluster
+  // (right-aligned to it) when the board has one; anything else goes in a row at the top left.
+  const nav = [...placed.entries()].filter(([i]) => /^Key: (Insert|Home|Page Up)$/.test(ledName(d, i)));
+  const navRight = nav.length ? Math.max(...nav.map(([, r]) => r.x + r.w)) : 0;
+  const media = nav.length ? extras.filter((led) => mediaRank(ledName(d, led)) !== null).sort((a, b) => mediaRank(ledName(d, a))! - mediaRank(ledName(d, b))! || a - b) : [];
+  const rest = extras.filter((led) => !media.includes(led));
+  const mediaW = media.length ? media.length * 1.1 : 0;
+  const leftRoom = media.length ? Math.max(0, Math.floor((navRight - mediaW - 0.5) / 1.1)) : 0;
   const perRow = Math.max(6, Math.floor(right / 1.1));
-  const extraRows = Math.ceil(extras.length / perRow);
-  const dy = extras.length ? extraRows * 1.1 + 0.4 : 0;
+  const slots: { x: number; y: number }[] = [];
+  for (let k = 0, row = 0, col = 0; k < rest.length; k++) {
+    const cap = row === 0 && media.length ? leftRoom : perRow;
+    if (col >= cap && cap > 0) {
+      row++;
+      col = 0;
+    } else if (cap === 0) {
+      row++;
+      col = 0;
+    }
+    slots.push({ x: col * 1.1, y: row * 1.1 });
+    col++;
+  }
+  const extraRows = Math.max(media.length ? 1 : 0, slots.length ? Math.max(...slots.map((q) => q.y)) / 1.1 + 1 : 0);
+  const dy = extraRows ? extraRows * 1.1 + 0.4 : 0;
   for (const it of items) it.y += dy;
-  extras.forEach((led, k) => {
+  const put = (led: number, x: number, y: number, shape: "rect" | "circle") => {
     const name = ledName(d, led);
-    items.push({
-      led,
-      x: (k % perRow) * 1.1,
-      y: Math.floor(k / perRow) * 1.1,
-      w: 1,
-      h: 1,
-      shape: "rect",
-      label: shortLabel(name),
-      name,
-      zone: zoneOf(d, led)?.id ?? 0,
-    });
-  });
+    items.push({ led, x, y, w: 1, h: 1, shape, label: shortLabel(name), name, zone: zoneOf(d, led)?.id ?? 0 });
+  };
+  rest.forEach((led, k) => put(led, slots[k].x, slots[k].y, "rect"));
+  media.forEach((led, k) => put(led, navRight - mediaW + 0.1 + k * 1.1, 0, /Dial|Wheel|Knob/i.test(ledName(d, led)) ? "circle" : "rect"));
 
   // Matrix LEDs with no known position: compact band on the right.
   let width = right;

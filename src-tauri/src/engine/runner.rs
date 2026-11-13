@@ -24,6 +24,8 @@ const MAX_BACKOFF: Duration = Duration::from_secs(10);
 const FAILURES_BEFORE_RECONNECT: u32 = 3;
 /// A device whose send failed is left alone this long (no 60 Hz retry storm, no log spam).
 const DEVICE_RETRY: Duration = Duration::from_secs(1);
+/// How often the controller list is compared with the server's (hot-plug).
+const DEVICE_POLL: Duration = Duration::from_secs(3);
 
 #[derive(Serialize, Clone)]
 struct FramePayload {
@@ -61,6 +63,7 @@ struct Runner {
     status: Option<&'static str>,
     /// Devices that failed recently, and when they may be tried again.
     blocked: HashMap<String, Instant>,
+    next_poll: Option<Instant>,
 }
 
 /// Frames to send and to preview for this tick.
@@ -206,6 +209,24 @@ pub async fn run(emit: Emit, state: AppState) {
                 }
             }
             continue;
+        }
+
+        // Hot-plug: OpenRGB renumbers its controllers when a device appears or goes away, which
+        // would make every cached index point at the wrong controller.
+        if r.next_poll.is_none_or(|at| now >= at) {
+            let first = r.next_poll.is_none();
+            r.next_poll = Some(now + DEVICE_POLL);
+            if !first && matches!(state.poll_device_list().await, Ok(true)) {
+                if state.apply_saved_zone_sizes().await.unwrap_or(false) {
+                    let _ = state.refresh(false).await;
+                }
+                let _ = state.devices().await;
+                r.direct.clear();
+                r.sent.clear();
+                r.blocked.clear();
+                r.previewed.clear();
+                emit("devices-changed", serde_json::Value::Null);
+            }
         }
 
         let plan = r.plan(&state.engine, now);

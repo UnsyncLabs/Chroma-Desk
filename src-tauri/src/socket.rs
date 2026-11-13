@@ -190,6 +190,36 @@ mod tests {
         let _ = animations::animations_dir; // keep the import used in all cfgs
     }
 
+    #[tokio::test]
+    async fn concurrent_and_stalled_clients_do_not_block_others() {
+        let (path, _e) = start().await;
+        // A client that connects, sends half a line and then just sits there.
+        let mut stalled = UnixStream::connect(&path).await.unwrap();
+        stalled.write_all(b"{\"cmd\":\"pi").await.unwrap();
+        // Many clients at once (more than the connection limit is fine: extra ones are dropped).
+        let tasks: Vec<_> = (0..24)
+            .map(|_| {
+                let p = path.clone();
+                tokio::spawn(async move {
+                    let Ok(mut s) = UnixStream::connect(&p).await else { return String::new() };
+                    let _ = s.write_all(b"{\"cmd\":\"ping\"}\n").await; // may be refused over the limit
+                    let mut line = String::new();
+                    let _ = tokio::time::timeout(Duration::from_secs(3), BufReader::new(s).read_line(&mut line)).await;
+                    line
+                })
+            })
+            .collect();
+        let mut ok = 0;
+        for t in tasks {
+            if t.await.unwrap().trim() == r#"{"ok":true}"# {
+                ok += 1;
+            }
+        }
+        assert!(ok >= MAX_CONNECTIONS - 1, "only {ok} of 24 answered");
+        drop(stalled);
+        assert_eq!(ask(&path, b"{\"cmd\":\"ping\"}\n").await.trim(), r#"{"ok":true}"#, "server still answers");
+    }
+
     #[test]
     fn blocking_client_roundtrip() {
         let rt = tokio::runtime::Runtime::new().unwrap();

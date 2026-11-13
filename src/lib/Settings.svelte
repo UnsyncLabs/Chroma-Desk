@@ -112,6 +112,15 @@
 </section>
 
 <section>
+  <h3>{t("set.devices")}</h3>
+  <label class="check">
+    <input type="checkbox" checked={profiles.settings.show_phantom_devices} onchange={async (e) => { profiles.settings.show_phantom_devices = e.currentTarget.checked; await saveSettings(); await loadDevices(api.listDevices); }} />
+    {t("set.showPhantoms")}
+  </label>
+  <p class="muted small">{t("set.showPhantomsHint")}</p>
+</section>
+
+<section>
   <h3>{t("all.master")}</h3>
   <label class="check">
     <input type="range" min="0" max="1" step="0.01" value={sceneStore.scene.master_brightness} oninput={(e) => { sceneStore.scene.master_brightness = Number(e.currentTarget.value); commit(); }} />

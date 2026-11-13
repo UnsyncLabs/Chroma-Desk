@@ -24,6 +24,9 @@ pub struct Settings {
     /// fps caps by device type.
     #[serde(default)]
     pub fps_by_type: HashMap<String, u32>,
+    /// Show phantom duplicate devices OpenRGB reports (hidden by default).
+    #[serde(default)]
+    pub show_phantom_devices: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

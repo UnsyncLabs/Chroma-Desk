@@ -18,6 +18,7 @@
     </span>
     <button class="primary" onclick={() => session.apply()} disabled={empty}>{t("draw.apply")}</button>
   </div>
+  {#if empty}<p class="muted hint">{t("draw.emptyHint")}</p>{/if}
   <h4>{t("save.title")}</h4>
   <SaveBar onsave={(name, tags, asNew) => session.save(name, tags, asNew)} {defaultName} {defaultTags} canOverwrite={!!session.savedId} busy={session.busy || empty} overwriteName={session.savedName} />
 </div>
@@ -28,5 +29,6 @@
   .live { display: flex; gap: 0.4rem; align-items: center; }
   .state { color: var(--muted); font-size: 0.85rem; margin-right: auto; }
   .state.dirty { color: var(--danger); }
+  .hint { margin: 0 0 0.5rem; font-size: 0.88rem; }
   h4 { margin: 0 0 0.5rem; }
 </style>

@@ -86,6 +86,8 @@ pub struct DeviceDto {
     pub zones: Vec<ZoneDto>,
     pub led_names: Vec<String>,
     pub colors: Vec<Rgb>,
+    /// A phantom duplicate OpenRGB reports for the same physical device (see `phantom_flags`).
+    pub phantom: bool,
 }
 
 /// Comprueba si el servidor de OpenRGB escucha en el puerto del SDK.
@@ -215,6 +217,7 @@ pub fn device_dto(c: &Controller) -> DeviceDto {
         zones,
         led_names: c.led_iter().map(|l| l.name().to_string()).collect(),
         colors: c.colors().iter().map(|c| (*c).into()).collect(),
+        phantom: false,
     }
 }
 
@@ -285,4 +288,42 @@ pub async fn apply_mode(c: &Controller, req: &ModeRequest) -> Res<()> {
         c.save_mode().await.map_err(ApiError::sdk)?;
     }
     Ok(())
+}
+
+/// Flags phantom duplicates: OpenRGB's Logitech Lightspeed detector reports a wired mouse a second
+/// time as a "receiver" device. A device is a phantom when it has no serial, its location is
+/// `<location of another device with the same name> (Receiver)...` and such a device exists.
+pub fn phantom_flags<'a>(devices: impl IntoIterator<Item = (&'a str, &'a str, &'a str)>) -> Vec<bool> {
+    let list: Vec<_> = devices.into_iter().collect();
+    list.iter()
+        .enumerate()
+        .map(|(i, (name, location, serial))| {
+            let Some((base, _)) = location.split_once(" (Receiver)") else { return false };
+            serial.trim().is_empty()
+                && list.iter().enumerate().any(|(j, (n2, l2, _))| j != i && n2 == name && l2.trim() == base.trim())
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod phantom_tests {
+    use super::*;
+
+    #[test]
+    fn lightspeed_phantom_is_detected() {
+        let f = phantom_flags([
+            ("ENE DRAM", "I2C: /dev/i2c-5, address 0x71", ""),
+            ("G502 HERO Gaming Mouse", "HID: /dev/hidraw3", "34394708"),
+            ("G502 HERO Gaming Mouse", "HID: /dev/hidraw3 (Receiver) \nWireless Index: 255", ""),
+            ("G502 HERO Gaming Mouse", "HID: /dev/hidraw7 (Receiver) \nWireless Index: 255", ""),
+        ]);
+        // The 4th has no wired twin at hidraw7: it is a real (wireless) device and stays.
+        assert_eq!(f, vec![false, false, true, false]);
+    }
+
+    #[test]
+    fn serial_or_different_name_is_never_a_phantom() {
+        let f = phantom_flags([("A", "HID: /dev/hidraw1", "1"), ("A", "HID: /dev/hidraw1 (Receiver) \nWireless Index: 1", "S2"), ("B", "HID: /dev/hidraw1 (Receiver)", "")]);
+        assert_eq!(f, vec![false, false, false]);
+    }
 }

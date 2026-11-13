@@ -168,15 +168,90 @@ impl AppState {
     }
 
     /// Device list with stable keys; also refreshes the engine's view of the devices.
+    /// Phantom duplicates are left out (of the list and of the engine) unless the setting asks for them.
     pub async fn devices(&self) -> Res<Vec<DeviceDto>> {
+        let show_phantoms = self.config.lock().unwrap().settings.show_phantom_devices;
         let guard = self.conn.lock().await;
         let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
         let mut dtos: Vec<DeviceDto> = conn.group.iter().map(sdk::device_dto).collect();
+        // Keys are computed over *all* devices so hiding one never renames the others.
         let keys = identity::device_keys(dtos.iter().map(|d| (d.name.as_str(), d.serial.as_str())));
-        for (d, k) in dtos.iter_mut().zip(keys) {
+        let phantom = sdk::phantom_flags(dtos.iter().map(|d| (d.name.as_str(), d.location.as_str(), d.serial.as_str())));
+        for ((d, k), p) in dtos.iter_mut().zip(keys).zip(phantom) {
             d.key = k;
+            d.phantom = p;
+        }
+        if !show_phantoms {
+            dtos.retain(|d| !d.phantom);
         }
         *self.engine.devs.lock().unwrap() = dtos.iter().map(DevInfo::from_dto).collect();
         Ok(dtos)
+    }
+
+    /// Fingerprint of the controller list: changes when a device appears, disappears or the
+    /// server reorders them.
+    pub fn signature(group: &ControllerGroup) -> Vec<(usize, String, String, String, usize)> {
+        group.iter().map(|c| (c.id(), c.name().to_string(), c.serial().to_string(), c.location().to_string(), c.colors().len())).collect()
+    }
+
+    /// Re-reads the controller list from the server; true when it differs from the cached one
+    /// (hot-plug). On change the cached group is replaced, so indices are current again; the
+    /// caller must then refresh the engine's device list.
+    pub async fn poll_device_list(&self) -> Res<bool> {
+        let mut guard = self.conn.lock().await;
+        let conn = guard.as_mut().ok_or_else(ApiError::no_connection)?;
+        let fresh = conn.client.get_all_controllers().await.map_err(ApiError::sdk)?;
+        if Self::signature(&fresh) == Self::signature(&conn.group) {
+            return Ok(false);
+        }
+        conn.group = fresh;
+        Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::DevInfo;
+    use crate::identity;
+    use crate::sdk::DeviceDto;
+
+    fn dto(id: usize, name: &str, serial: &str) -> DeviceDto {
+        DeviceDto {
+            id,
+            key: String::new(),
+            name: name.into(),
+            vendor: String::new(),
+            description: String::new(),
+            version: String::new(),
+            serial: serial.into(),
+            location: String::new(),
+            device_type: "Keyboard".into(),
+            active_mode: 0,
+            modes: vec![],
+            zones: vec![],
+            led_names: vec![],
+            colors: vec![],
+            phantom: false,
+        }
+    }
+
+    /// key -> controller index as the engine sees it.
+    fn map(list: &[DeviceDto]) -> std::collections::HashMap<String, usize> {
+        let keys = identity::device_keys(list.iter().map(|d| (d.name.as_str(), d.serial.as_str())));
+        list.iter().zip(keys).map(|(d, k)| (k, DevInfo::from_dto(d).index)).collect()
+    }
+
+    #[test]
+    fn keys_follow_their_device_when_the_server_reorders() {
+        let before = [dto(0, "ENE DRAM", ""), dto(1, "Razer Huntsman V3 Pro TKL", "S1"), dto(2, "G502", "M1")];
+        // A keyboard is plugged in: the server now lists it before the Huntsman.
+        let after = [dto(0, "ENE DRAM", ""), dto(1, "Razer Ornata Chroma", "SI2050"), dto(2, "Razer Huntsman V3 Pro TKL", "S1"), dto(3, "G502", "M1")];
+        let (a, b) = (map(&before), map(&after));
+        assert_eq!(a["Razer Huntsman V3 Pro TKL#S1"], 1);
+        assert_eq!(b["Razer Huntsman V3 Pro TKL#S1"], 2, "same key, new index");
+        assert_eq!(b["G502#M1"], 3);
+        assert_eq!(b["Razer Ornata Chroma#SI2050"], 1);
+        // Serial-less devices keep their ordinal key.
+        assert_eq!(b["ENE DRAM@0"], 0);
     }
 }
