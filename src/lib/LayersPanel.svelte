@@ -34,7 +34,7 @@
   const selected = $derived(layers.find((l) => l.id === selectedId) ?? null);
   const def = $derived(sceneStore.defs.find((d) => d.id === selected?.effect));
   /** Effects driven by animation data are created from the Draw tab and the library, not here. */
-  const DATA_EFFECTS = ["frames", "path", "palette"];
+  const DATA_EFFECTS = ["frames", "path", "palette", "meter", "blink", "orbit", "sequence"];
   const effects = $derived(sceneStore.defs.filter((d) => (allowPaint || d.id !== "paint") && !DATA_EFFECTS.includes(d.id) && (d.id !== "animation" || allowPaint)));
   const label = (l: Layer) => {
     if (l.name) return l.name;

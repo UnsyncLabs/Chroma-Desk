@@ -14,6 +14,7 @@ pub mod sdk;
 pub mod server;
 pub mod socket;
 pub mod state;
+pub mod sysmon;
 pub mod themes;
 pub mod tray;
 pub mod triggers;
@@ -160,6 +161,8 @@ pub fn run() {
             commands::theme_status,
             commands::palette_reload,
             commands::desktop_status,
+            commands::sysmon_status,
+            commands::sysmon_read,
             commands::omarchy_event_hooks,
             commands::omarchy_event_hook_install,
             commands::omarchy_event_hook_remove,

@@ -205,6 +205,35 @@ pub fn effect_defs() -> &'static [EffectDef] {
                     flag("reverse", false),
                 ],
             },
+            // Live bar over an ordered LED path (system monitors).
+            EffectDef {
+                id: "meter",
+                params: vec![
+                    data("path", json!([])),
+                    data("metric", json!("")),
+                    slider("min", -50.0, 200.0, 1.0, 0.0),
+                    slider("max", -50.0, 200.0, 1.0, 100.0),
+                    color("color", [0.0, 220.0, 90.0]),
+                    data("style", json!("sweep")),
+                    slider("sweep_ms", 0.0, 10000.0, 50.0, 1200.0),
+                    data("background", json!("dim")),
+                    flag("gradient", false),
+                    // Explicit reading in the metric's unit (tests, previews); absent = the live sensor.
+                    data("value", Value::Null),
+                ],
+            },
+            // Blinks the path LEDs an exact number of times.
+            EffectDef {
+                id: "blink",
+                params: vec![data("path", json!([])), color("color", RED), slider("count", 1.0, 50.0, 1.0, 5.0), slider("on_ms", 20.0, 2000.0, 10.0, 150.0), slider("off_ms", 20.0, 2000.0, 10.0, 150.0)],
+            },
+            // A light travelling round a closed path with a fading tail.
+            EffectDef {
+                id: "orbit",
+                params: vec![data("path", json!([])), color("color", WHITE), slider("laps", 1.0, 20.0, 1.0, 1.0), slider("lap_ms", 100.0, 10000.0, 50.0, 800.0), slider("trail", 0.0, 1.0, 0.01, 0.5)],
+            },
+            // Steps played one after another: `[{ effect, params, duration_ms, mask? }]`.
+            EffectDef { id: "sequence", params: vec![data("steps", json!([])), flag("loop", false)] },
             // Plays a library animation (snapshot in the params); rendered by `animations::render_layer`.
             EffectDef { id: "animation", params: vec![data("anim_id", json!("")), data("snapshot", Value::Null)] },
             EffectDef {
@@ -388,6 +417,10 @@ pub fn render(effect: &str, params: &Params, t: f32, positions: &[Pos], seed: u3
         "frames" => frames(&p, t, out),
         "path" => path(&p, t, out),
         "palette" => palette(&p, t, out),
+        "meter" => meter(&p, t, out),
+        "blink" => blink(&p, t, out),
+        "orbit" => orbit(&p, t, out),
+        "sequence" => sequence(&p, t, positions, seed, out),
         _ => out.fill(Px::CLEAR),
     }
 }
@@ -623,6 +656,133 @@ fn palette(p: &Params, t: f32, out: &mut [Px]) {
     }
 }
 
+/// LED indices of the `path` parameter, in order; an empty path means every LED of `n`.
+fn path_leds(p: &Params, n: usize) -> Vec<usize> {
+    if p.0.get("path").and_then(Value::as_array).is_none_or(Vec::is_empty) { (0..n).collect() } else { valid_path(p, n) }
+}
+
+/// The `path` indices that exist on a device of `n` LEDs.
+fn valid_path(p: &Params, n: usize) -> Vec<usize> {
+    p.0.get("path").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).map(|i| i as usize).filter(|&i| i < n).collect()).unwrap_or_default()
+}
+
+const GRADIENT: [Rgbf; 3] = [[0.0, 220.0, 90.0], [255.0, 200.0, 0.0], [255.0, 40.0, 40.0]];
+
+/// A bar over the `path` LEDs filled to `(value - min) / (max - min)`, where the value is the
+/// explicit `value` parameter or the live sensor named by `metric`. `style` `sweep` grows the bar
+/// from empty over `sweep_ms`, `live` shows it at once. The last, partly filled LED is dimmed in
+/// proportion, so the bar reads exactly. `background`: `dim` (default), `off` (black) or `none`.
+fn meter(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let list = valid_path(p, out.len());
+    let m = list.len();
+    if m == 0 {
+        return;
+    }
+    let raw = p.0.get("value").and_then(Value::as_f64).map(|v| v as f32).or_else(|| crate::sysmon::live(p.text("metric")));
+    let (lo, hi) = (p.num("min"), p.num("max"));
+    let mut frac = raw.map_or(0.0, |v| ((v - lo) / (hi - lo).max(1e-3)).clamp(0.0, 1.0));
+    if p.text("style") != "live" {
+        let sweep = p.num("sweep_ms");
+        if sweep > 0.0 {
+            let x = (t * 1000.0 / sweep).clamp(0.0, 1.0);
+            frac *= 1.0 - (1.0 - x).powi(3);
+        }
+    }
+    let fill = frac * m as f32;
+    let base = p.color("color");
+    let bg = match p.text("background") {
+        "off" => Some(0.0),
+        "none" => None,
+        _ => Some(0.12),
+    };
+    for (k, &led) in list.iter().enumerate() {
+        let cover = (fill - k as f32).clamp(0.0, 1.0);
+        let color = if p.flag("gradient") { sample_clamped(&GRADIENT, (k as f32 + 0.5) / m as f32) } else { base };
+        out[led] = match (cover > 0.0, bg) {
+            (true, _) => Px::rgb(scale(color, cover.max(bg.unwrap_or(0.0))), 1.0),
+            (false, Some(b)) => Px::rgb(scale(color, b), 1.0),
+            (false, None) => Px::CLEAR,
+        };
+    }
+}
+
+/// The path LEDs light up for `on_ms`, go dark for `off_ms`, `count` times; then nothing.
+fn blink(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let (on, off) = (p.num("on_ms").max(1.0), p.num("off_ms").max(0.0));
+    let tm = t * 1000.0;
+    let cycle = on + off;
+    let k = (tm / cycle).floor();
+    if tm < 0.0 || k >= p.num("count").max(1.0) || tm - k * cycle >= on {
+        return;
+    }
+    let c = p.color("color");
+    for led in path_leds(p, out.len()) {
+        out[led] = Px::rgb(c, 1.0);
+    }
+}
+
+/// A bright head runs round the path (`laps` times, `lap_ms` each) with a tail of `trail` of the loop.
+fn orbit(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let list = path_leds(p, out.len());
+    let m = list.len();
+    let lap = p.num("lap_ms").max(10.0);
+    let tm = t * 1000.0;
+    if m == 0 || tm < 0.0 || tm >= p.num("laps").max(1.0) * lap {
+        return;
+    }
+    let head = tm / lap * m as f32;
+    let tail = (p.num("trail").clamp(0.0, 1.0) * m as f32).max(1.0);
+    let c = p.color("color");
+    for (k, &led) in list.iter().enumerate() {
+        let behind = (head - k as f32).rem_euclid(m as f32);
+        if behind < tail {
+            out[led] = Px::rgb(scale(c, 1.0 - behind / tail), 1.0);
+        }
+    }
+}
+
+/// Plays `steps` in order (looping when `loop`); each step is an effect with its own duration
+/// and time (starting at 0), optionally limited to the LEDs of `mask`.
+fn sequence(p: &Params, t: f32, positions: &[Pos], seed: u32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let Some(steps) = p.0.get("steps").and_then(Value::as_array) else { return };
+    let dur = |s: &Value| s.get("duration_ms").and_then(Value::as_f64).unwrap_or(1000.0).clamp(10.0, 3_600_000.0) as f32;
+    let total: f32 = steps.iter().map(dur).sum();
+    if steps.is_empty() || t < 0.0 {
+        return;
+    }
+    let mut tm = t * 1000.0;
+    if p.flag("loop") {
+        tm = tm.rem_euclid(total);
+    } else if tm >= total {
+        return;
+    }
+    for s in steps {
+        let d = dur(s);
+        if tm >= d {
+            tm -= d;
+            continue;
+        }
+        let effect = s.get("effect").and_then(Value::as_str).unwrap_or("");
+        if effect != "sequence" && effect != "animation" {
+            let sp = Params(s.get("params").and_then(Value::as_object).cloned().unwrap_or_default());
+            render(effect, &sp, tm / 1000.0, positions, seed, out);
+            if let Some(mask) = s.get("mask").and_then(Value::as_array) {
+                let keep: Vec<usize> = mask.iter().filter_map(Value::as_u64).map(|i| i as usize).collect();
+                for (i, o) in out.iter_mut().enumerate() {
+                    if !keep.contains(&i) {
+                        *o = Px::CLEAR;
+                    }
+                }
+            }
+        }
+        return;
+    }
+}
+
 /// Rings expanding from random LEDs.
 fn ripple(p: &Params, t: f32, positions: &[Pos], seed: u32, out: &mut [Px]) {
     let pal = p.colors("colors");
@@ -713,6 +873,92 @@ mod tests {
         render("starlight", &Params::default(), 3.3, &pos, 1, &mut a);
         render("starlight", &Params::default(), 3.3, &pos, 2, &mut b);
         assert_ne!(a, b);
+    }
+
+    fn lit(out: &[Px]) -> Vec<usize> {
+        out.iter().enumerate().filter(|(_, p)| p.a > 0.0 && (p.r + p.g + p.b) > 40.0).map(|(i, _)| i).collect()
+    }
+
+    #[test]
+    fn meter_fills_in_path_order_with_a_partial_last_led() {
+        // 10 LEDs, path in reverse order; 35 % -> 3.5 LEDs: path[0..3] full, path[3] half.
+        let path: Vec<usize> = (0..10).rev().collect();
+        let out = run("meter", json!({"path": path, "value": 35.0, "color": [200, 100, 0], "style": "live", "background": "off"}), 0.0, 10);
+        assert_eq!((out[9].r, out[9].g), (200.0, 100.0));
+        assert_eq!(out[7].r, 200.0);
+        assert!((out[6].r - 100.0).abs() < 0.01, "partial LED {}", out[6].r);
+        assert_eq!(out[5], Px { r: 0.0, g: 0.0, b: 0.0, a: 1.0 });
+        assert_eq!(lit(&out), vec![6, 7, 8, 9]);
+    }
+
+    #[test]
+    fn meter_sweep_grows_then_holds_and_scales_by_min_max() {
+        let p = |t: f32| run("meter", json!({"path": [0, 1, 2, 3], "value": 80.0, "min": 30, "max": 90, "sweep_ms": 1000, "background": "none", "color": [255, 0, 0]}), t, 4);
+        // (80-30)/60 = 0.8333 -> 3.33 LEDs at the end of the sweep.
+        assert!(lit(&p(0.0)).is_empty());
+        let mid = lit(&p(0.2)).len();
+        let end = p(1.0);
+        assert!(mid < 4, "still growing at 0.2 s");
+        assert_eq!(lit(&end), vec![0, 1, 2, 3]);
+        assert!((end[3].r - 255.0 / 3.0).abs() < 1.0, "a third of the last LED");
+        assert_eq!(p(5.0), end);
+        // Unlit LEDs of a `none` background stay transparent.
+        assert_eq!(end[3].a, 1.0);
+        let full = run("meter", json!({"path": [0, 1], "value": 10.0, "min": 0, "max": 100, "style": "live", "background": "none"}), 0.0, 3);
+        assert_eq!(full[1].a, 0.0);
+        assert_eq!(full[2].a, 0.0);
+    }
+
+    #[test]
+    fn meter_without_a_reading_shows_an_empty_bar_and_gradient_follows_position() {
+        let out = run("meter", json!({"path": [0, 1, 2], "metric": "", "background": "dim", "color": [100, 100, 100]}), 9.0, 3);
+        assert!(out.iter().all(|p| p.r == 12.0 && p.a == 1.0));
+        let g = run("meter", json!({"path": [0, 1, 2, 3, 4], "value": 100.0, "style": "live", "gradient": true}), 0.0, 5);
+        assert!(g[0].g > g[0].r && g[4].r > g[4].g, "green at the start, red at the end");
+        // Paths pointing past the device are ignored.
+        assert!(lit(&run("meter", json!({"path": [7, 8], "value": 100.0, "style": "live"}), 0.0, 3)).is_empty());
+    }
+
+    #[test]
+    fn blink_flashes_exactly_count_times() {
+        let p = json!({"path": [1, 2], "color": [0, 0, 255], "count": 3, "on_ms": 100, "off_ms": 100});
+        let on = |t: f32| !lit(&run("blink", p.clone(), t, 4)).is_empty();
+        let pattern: Vec<bool> = (0..8).map(|k| on(k as f32 * 0.1 + 0.05)).collect();
+        assert_eq!(pattern, vec![true, false, true, false, true, false, false, false]);
+        assert_eq!(lit(&run("blink", p, 0.05, 4)), vec![1, 2]);
+        // No path = the whole device.
+        assert_eq!(lit(&run("blink", json!({"color": [0, 0, 255]}), 0.01, 3)), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn orbit_runs_round_the_path_laps_times_and_ends() {
+        let p = json!({"path": [3, 4, 5, 6], "color": [255, 255, 255], "laps": 2, "lap_ms": 1000, "trail": 0.25});
+        // trail 0.25 of 4 LEDs = 1 LED: only the head is lit.
+        let head = |t: f32| lit(&run("orbit", p.clone(), t, 8));
+        assert_eq!(head(0.1), vec![3]);
+        assert_eq!(head(0.35), vec![4]);
+        assert_eq!(head(0.6), vec![5]);
+        assert_eq!(head(0.85), vec![6]);
+        assert_eq!(head(1.1), vec![3], "second lap");
+        assert!(head(2.0).is_empty(), "off after the last lap");
+        let tail = run("orbit", json!({"path": [0, 1, 2, 3], "laps": 1, "lap_ms": 1000, "trail": 1.0}), 0.6, 4);
+        assert!(tail[2].r > tail[1].r && tail[1].r > tail[0].r, "fades behind the head: {tail:?}");
+    }
+
+    #[test]
+    fn sequence_plays_steps_in_order_loops_and_masks() {
+        let steps = json!([
+            {"effect": "solid", "params": {"color": [255, 0, 0]}, "duration_ms": 1000, "mask": [0]},
+            {"effect": "solid", "params": {"color": [0, 255, 0]}, "duration_ms": 500}
+        ]);
+        let at = |t: f32, looped: bool| run("sequence", json!({"steps": steps, "loop": looped}), t, 2);
+        let a = at(0.5, false);
+        assert_eq!((a[0].r, a[1].a), (255.0, 0.0), "step 1 only on LED 0");
+        let b = at(1.2, false);
+        assert_eq!((b[0].g, b[1].g), (255.0, 255.0));
+        assert!(at(1.6, false).iter().all(|p| p.a == 0.0), "ends");
+        assert_eq!(at(1.6, true)[0].r, 255.0, "loops back to step 1");
+        assert_eq!(at(3.2, true), at(0.2, true));
     }
 
     #[test]

@@ -39,6 +39,9 @@ pub struct Settings {
     /// Listen to desktop notifications (session D-Bus) to fire notifications. Off until the user opts in.
     #[serde(default)]
     pub desktop_notifications: bool,
+    /// GPU the `gpu.*` system monitors read: `auto` (the dedicated one) or an id such as `nvidia:0`.
+    #[serde(default)]
+    pub sysmon_gpu: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

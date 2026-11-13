@@ -147,6 +147,7 @@ pub async fn startup(state: AppState, emit: Emit, requested: Option<String>) -> 
         state.engine.themes.set_name_watch(!cfg.settings.theme_rules.is_empty());
         *state.engine.global_triggers.lock().unwrap() = cfg.settings.global_notifications.clone();
         state.engine.desktop_enabled.store(cfg.settings.desktop_notifications, Ordering::Relaxed);
+        crate::sysmon::set_gpu(&cfg.settings.sysmon_gpu);
     }
     let mut applied = None;
     match state.connect_all().await {

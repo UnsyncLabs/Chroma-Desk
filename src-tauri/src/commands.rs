@@ -207,6 +207,19 @@ pub fn palette_reload(state: State<'_, AppState>) -> bool {
     state.engine.themes.reload()
 }
 
+/// What the system monitors can read on this machine (Settings).
+#[tauri::command]
+pub async fn sysmon_status() -> Res<crate::sysmon::Status> {
+    // Probing loads NVML and may run `nvidia-smi`: keep it off the async threads.
+    tokio::task::spawn_blocking(crate::sysmon::status).await.map_err(|e| ApiError::new("internal", e))
+}
+
+/// Current values of metrics (`cpu.usage`, `gpu.vram`...) for the editor; keeps the sampler awake.
+#[tauri::command]
+pub fn sysmon_read(metrics: Vec<String>) -> Vec<crate::sysmon::LiveValue> {
+    crate::sysmon::read_many(&metrics)
+}
+
 #[tauri::command]
 pub fn desktop_status(state: State<'_, AppState>) -> String {
     state.engine.desktop_status.lock().unwrap().clone()
@@ -351,6 +364,7 @@ pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
     state.engine.themes.set_name_watch(!settings.theme_rules.is_empty());
     *state.engine.global_triggers.lock().unwrap() = settings.global_notifications.clone();
     state.engine.desktop_enabled.store(settings.desktop_notifications, std::sync::atomic::Ordering::Relaxed);
+    crate::sysmon::set_gpu(&settings.sysmon_gpu);
     let mut cfg = state.config.lock().unwrap();
     // The UI's copy of `current_profile` can be stale (the tray applies profiles too); only the
     // apply/save paths own that field.
