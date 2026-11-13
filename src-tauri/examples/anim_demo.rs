@@ -29,7 +29,7 @@ fn solid_blue() -> Layer {
 async fn colors(state: &AppState, keys: &[&str]) -> Vec<(String, [u8; 3])> {
     state.refresh(false).await.expect("refresh");
     let devs = state.devices().await.expect("devices");
-    let kb = devs.iter().find(|d| d.device_type == "Keyboard").expect("a keyboard");
+    let kb = devs.iter().find(|d| d.device_type == "Keyboard" && d.led_names.iter().any(|n| n == "Key: W")).expect("a keyboard with a W key");
     keys.iter()
         .map(|k| {
             let i = kb.led_names.iter().position(|n| n == &format!("Key: {k}")).unwrap_or_else(|| panic!("no key {k}"));
@@ -143,7 +143,14 @@ async fn main() {
         Some("readback") => {
             let state = AppState::new(Config::default());
             state.refresh(false).await.expect("connect");
-            show("keyboard", &colors(&state, &["W", "A", "S", "D", "Q", "E"]).await);
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            let keys: Vec<&str> = if args.is_empty() { vec!["W", "A", "S", "D", "Q", "E"] } else { args.iter().map(String::as_str).collect() };
+            show("keyboard", &colors(&state, &keys).await);
+            // One line per device: its first LEDs, to see that every device follows the scene.
+            for d in state.devices().await.expect("devices") {
+                let first: Vec<String> = d.colors.iter().take(4).map(|c| format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2)).collect();
+                println!("{:<40} {}", d.name, first.join(" "));
+            }
         }
         Some("cleanup") => {
             profiles::delete(&profiles::profiles_dir(), "zz-anim-test").unwrap();
