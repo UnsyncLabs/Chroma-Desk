@@ -1,6 +1,8 @@
 //! Tauri commands exposed to the frontend.
 
+use crate::animations::{self, AnimList, Animation};
 use crate::apply;
+use crate::triggers::{self, TriggerResult, TriggerSpec};
 use crate::server::{self, ServerStatus};
 use crate::tray::{self, TrayLabels};
 use crate::config::{Settings, zone_key};
@@ -292,4 +294,78 @@ pub fn quit_app(app: tauri::AppHandle) {
 #[tauri::command]
 pub fn default_fps(types: Vec<String>) -> HashMap<String, u32> {
     types.into_iter().map(|t| (crate::engine::default_fps(&t), t)).map(|(f, t)| (t, f)).collect()
+}
+
+// ---------- animation library and triggers ----------
+
+#[tauri::command]
+pub fn anim_list() -> AnimList {
+    animations::list_all(&animations::animations_dir())
+}
+
+#[tauri::command]
+pub fn anim_get(id: String) -> Res<Animation> {
+    animations::get(&animations::animations_dir(), &id)
+}
+
+#[tauri::command]
+pub fn anim_save(anim: Animation) -> Res<Animation> {
+    animations::save(&animations::animations_dir(), &anim)
+}
+
+#[tauri::command]
+pub fn anim_delete(id: String) -> Res<()> {
+    animations::delete(&animations::animations_dir(), &id)
+}
+
+#[tauri::command]
+pub fn anim_duplicate(id: String, name: String) -> Res<Animation> {
+    animations::duplicate(&animations::animations_dir(), &id, &name)
+}
+
+#[tauri::command]
+pub fn anim_import(path: String) -> Res<Animation> {
+    animations::import(&animations::animations_dir(), std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub fn anim_export(id: String, path: String) -> Res<()> {
+    animations::export(&animations::animations_dir(), &id, std::path::Path::new(&path))
+}
+
+/// Puts animation `id` on one device (`device_key`) or on all of them (`"all"`), replacing their
+/// layers and switching them to Effects mode. Returns the new scene (also sent as `scene-changed`).
+#[tauri::command]
+pub fn anim_apply(app: tauri::AppHandle, state: State<'_, AppState>, device_key: String, id: String) -> Res<Scene> {
+    let anim = animations::get(&animations::animations_dir(), &id)?;
+    let keys: Vec<String> = if device_key == "all" { state.engine.devs.lock().unwrap().iter().map(|d| d.key.clone()).collect() } else { vec![device_key] };
+    let scene = {
+        let mut scene = state.engine.scene.lock().unwrap();
+        for key in keys {
+            let ds = scene.devices.entry(key).or_default();
+            ds.mode = crate::engine::SceneMode::Effects;
+            ds.layers = vec![animations::layer_for(&anim)];
+        }
+        scene.clone()
+    };
+    use tauri::Emitter;
+    let _ = app.emit("scene-changed", &scene);
+    Ok(scene)
+}
+
+/// Starts a temporary overlay animation (the same thing the CLI and the socket do).
+#[tauri::command]
+pub fn trigger(state: State<'_, AppState>, spec: TriggerSpec) -> Res<TriggerResult> {
+    triggers::start(&state.engine, &animations::animations_dir(), &spec, std::time::Instant::now())
+}
+
+#[tauri::command]
+pub fn stop_triggers(state: State<'_, AppState>) -> usize {
+    triggers::stop_all(&state.engine)
+}
+
+/// Where scripts reach the app (`null` without `XDG_RUNTIME_DIR`).
+#[tauri::command]
+pub fn trigger_socket_path() -> Option<String> {
+    crate::socket::socket_path().map(|p| p.to_string_lossy().into_owned())
 }

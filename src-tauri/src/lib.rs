@@ -1,3 +1,4 @@
+pub mod animations;
 pub mod apply;
 pub mod cli;
 pub mod commands;
@@ -9,8 +10,10 @@ pub mod identity;
 pub mod profiles;
 pub mod sdk;
 pub mod server;
+pub mod socket;
 pub mod state;
 pub mod tray;
+pub mod triggers;
 
 use config::Config;
 use state::AppState;
@@ -19,6 +22,10 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cli = cli::Cli::parse(std::env::args().skip(1));
+    // `chroma-desk trigger ...` only talks to the running instance: no window, no Tauri.
+    if let Some(t) = &cli.trigger {
+        std::process::exit(cli::run_trigger(t));
+    }
     let state = AppState::new(Config::load());
     let runner_state = state.clone();
     let start_hidden = state.config.lock().unwrap().settings.start_hidden;
@@ -57,6 +64,15 @@ pub fn run() {
                 tray::show_main(&handle);
             }
             tauri::async_runtime::spawn(engine::runner::run(emit.clone(), runner_state.clone()));
+            if let Some(path) = socket::socket_path() {
+                let engine = runner_state.engine.clone();
+                tauri::async_runtime::spawn(async move {
+                    match socket::bind(&path).await {
+                        Ok(listener) => socket::serve(listener, engine, animations::animations_dir()).await,
+                        Err(e) => eprintln!("trigger socket not available ({}): {e}", path.display()),
+                    }
+                });
+            }
             let requested = cli.apply_profile.clone();
             let exit_if_static = requested.is_some();
             let st = runner_state.clone();
@@ -109,6 +125,17 @@ pub fn run() {
             commands::show_window,
             commands::quit_app,
             commands::default_fps,
+            commands::anim_list,
+            commands::anim_get,
+            commands::anim_save,
+            commands::anim_delete,
+            commands::anim_duplicate,
+            commands::anim_import,
+            commands::anim_export,
+            commands::anim_apply,
+            commands::trigger,
+            commands::stop_triggers,
+            commands::trigger_socket_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -51,13 +51,17 @@ pub struct Layer {
 /// What the compositor needs to know about a device.
 pub struct Geometry<'a> {
     pub led_count: usize,
+    /// Identity key of the device (animation resolution cache).
+    pub device_key: &'a str,
+    /// OpenRGB LED names (resolve portable `LedRef`s).
+    pub led_names: &'a [String],
     /// `(zone id, first LED, LED count)`.
     pub zones: &'a [(usize, usize, usize)],
     pub positions: &'a [Pos],
 }
 
 impl Mask {
-    fn coverage(&self, geo: &Geometry) -> Option<Vec<bool>> {
+    pub fn coverage(&self, geo: &Geometry) -> Option<Vec<bool>> {
         match self {
             Mask::All => None,
             Mask::Zone { id } => {
@@ -91,6 +95,23 @@ fn blend_channel(mode: Blend, base: f32, src: f32) -> f32 {
     }
 }
 
+/// Blends `src` (one scratch layer) onto `buf` through an optional LED mask.
+pub fn blend_onto(buf: &mut [Px], src: &[Px], mask: Option<&[bool]>, opacity: f32, blend: Blend) {
+    let opacity = opacity.clamp(0.0, 1.0);
+    for (i, (dst, src)) in buf.iter_mut().zip(src).enumerate() {
+        if mask.is_some_and(|m| !m.get(i).copied().unwrap_or(false)) {
+            continue;
+        }
+        let a = src.a * opacity;
+        if a <= 0.0 {
+            continue;
+        }
+        dst.r += (blend_channel(blend, dst.r, src.r) - dst.r) * a;
+        dst.g += (blend_channel(blend, dst.g, src.g) - dst.g) * a;
+        dst.b += (blend_channel(blend, dst.b, src.b) - dst.b) * a;
+    }
+}
+
 /// Draws every enabled layer (index 0 = bottom) on top of `buf`.
 pub fn composite_onto(buf: &mut [Px], layers: &[Layer], geo: &Geometry, t: f32, seed: u32) {
     let mut scratch = vec![Px::CLEAR; buf.len()];
@@ -98,21 +119,13 @@ pub fn composite_onto(buf: &mut [Px], layers: &[Layer], geo: &Geometry, t: f32, 
         if !layer.enabled || layer.opacity <= 0.0 {
             continue;
         }
-        effects::render(&layer.effect, &layer.params, t, geo.positions, seed.wrapping_add(li as u32), &mut scratch);
-        let mask = layer.mask.coverage(geo);
-        let opacity = layer.opacity.clamp(0.0, 1.0);
-        for (i, (dst, src)) in buf.iter_mut().zip(&scratch).enumerate() {
-            if mask.as_ref().is_some_and(|m| !m.get(i).copied().unwrap_or(false)) {
-                continue;
-            }
-            let a = src.a * opacity;
-            if a <= 0.0 {
-                continue;
-            }
-            dst.r += (blend_channel(layer.blend, dst.r, src.r) - dst.r) * a;
-            dst.g += (blend_channel(layer.blend, dst.g, src.g) - dst.g) * a;
-            dst.b += (blend_channel(layer.blend, dst.b, src.b) - dst.b) * a;
+        let seed = seed.wrapping_add(li as u32);
+        if layer.effect == "animation" {
+            crate::animations::render_layer(&layer.params, t, geo, seed, &mut scratch);
+        } else {
+            effects::render(&layer.effect, &layer.params, t, geo.positions, seed, &mut scratch);
         }
+        blend_onto(buf, &scratch, layer.mask.coverage(geo).as_deref(), layer.opacity, layer.blend);
     }
 }
 
@@ -148,7 +161,7 @@ mod tests {
 
     fn run(layers: &[Layer], n: usize, zones: &[(usize, usize, usize)]) -> Vec<[u8; 3]> {
         let pos = vec![[0.5, 0.5]; n];
-        let geo = Geometry { led_count: n, zones, positions: &pos };
+        let geo = Geometry { led_count: n, device_key: "t", led_names: &[], zones, positions: &pos };
         let mut buf = black(n);
         composite_onto(&mut buf, layers, &geo, 0.0, 1);
         finalize(&buf, 1.0)

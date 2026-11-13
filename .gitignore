@@ -2,3 +2,5 @@ node_modules/
 build/
 .svelte-kit/
 src-tauri/target/
+e2e/screenshots/
+e2e/*.log

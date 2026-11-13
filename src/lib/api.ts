@@ -72,7 +72,7 @@ export interface ModeRequest {
 
 export type Blend = "normal" | "add" | "multiply" | "screen";
 export type Mask = { type: "all" } | { type: "zone"; id: number } | { type: "leds"; leds: number[] };
-export type ParamValue = number | boolean | Rgb | Rgb[] | Record<string, Rgb>;
+export type ParamValue = number | boolean | string | Rgb | Rgb[] | Record<string, Rgb> | Record<string, unknown> | unknown[] | null;
 
 export interface Layer {
   id: string;
@@ -113,7 +113,7 @@ export interface Scene {
 
 export interface ParamDef {
   key: string;
-  kind: "slider" | "angle" | "color" | "colors" | "bool" | "paint";
+  kind: "slider" | "angle" | "color" | "colors" | "bool" | "paint" | "data";
   min: number;
   max: number;
   step: number;
@@ -167,6 +167,54 @@ export interface TrayLabels {
   quit: string;
 }
 
+// ---------- animations (mirrors src-tauri/src/animations.rs) ----------
+
+export interface Stop {
+  pos: number;
+  color: Rgb;
+}
+export type LoopMode = "loop" | "pingpong" | "once";
+export interface Frame {
+  /** LedRef -> colour. */
+  leds: Record<string, Rgb>;
+  duration_ms?: number | null;
+}
+export type AnimKind =
+  | { type: "effect"; effect: string; params: Record<string, ParamValue> }
+  | { type: "frames"; frames: Frame[]; frame_ms: number; loop: LoopMode; crossfade: number }
+  | { type: "path"; path: string[]; palette: Stop[]; speed: number; length: number; gap: number; reverse: boolean; tail_fade: number }
+  | { type: "palette"; cells: Record<string, number>; palette: Stop[]; speed: number; reverse: boolean };
+export interface Animation {
+  schema_version: number;
+  id: string;
+  name: string;
+  description?: string | null;
+  tags: string[];
+  created: number;
+  updated: number;
+  target: { kind: "keyboard" | "linear" | "any"; hint?: string | null };
+  builtin: boolean;
+  kind: AnimKind;
+}
+export interface AnimList {
+  animations: Animation[];
+  corrupt: string[];
+}
+export interface TriggerSpec {
+  animation: string;
+  device?: string;
+  keys?: string[];
+  duration?: number | string;
+  color?: string;
+  repeat?: number;
+  priority?: number;
+}
+export interface TriggerResult {
+  overlay: number;
+  devices: number;
+  duration: number;
+}
+
 export type EngineStatus = "ok" | "reconnecting" | "server_down";
 
 export const api = {
@@ -210,6 +258,17 @@ export const api = {
   defaultFps: (types: string[]) => invoke<Record<string, number>>("default_fps", { types }),
   getBlackout: () => invoke<boolean>("get_blackout"),
   setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
+  animList: () => invoke<AnimList>("anim_list"),
+  animGet: (id: string) => invoke<Animation>("anim_get", { id }),
+  animSave: (anim: Animation) => invoke<Animation>("anim_save", { anim }),
+  animDelete: (id: string) => invoke<void>("anim_delete", { id }),
+  animDuplicate: (id: string, name: string) => invoke<Animation>("anim_duplicate", { id, name }),
+  animImport: (path: string) => invoke<Animation>("anim_import", { path }),
+  animExport: (id: string, path: string) => invoke<void>("anim_export", { id, path }),
+  animApply: (deviceKey: string, id: string) => invoke<Scene>("anim_apply", { deviceKey, id }),
+  trigger: (spec: TriggerSpec) => invoke<TriggerResult>("trigger", { spec }),
+  stopTriggers: () => invoke<number>("stop_triggers"),
+  triggerSocketPath: () => invoke<string | null>("trigger_socket_path"),
 };
 
 /** Subscribes to a backend event; resolves to the unsubscribe function. */

@@ -2,6 +2,7 @@
 
 pub mod compositor;
 pub mod effects;
+pub mod overlay;
 pub mod runner;
 
 use crate::sdk::{DeviceDto, Rgb};
@@ -117,8 +118,11 @@ impl Default for Scene {
 pub struct DevInfo {
     pub index: usize,
     pub key: String,
+    pub name: String,
     pub device_type: String,
     pub led_count: usize,
+    /// OpenRGB LED names (empty strings for unnamed LEDs).
+    pub led_names: Vec<String>,
     /// `(zone id, first LED, LED count)`.
     pub zones: Vec<(usize, usize, usize)>,
     pub default_positions: Vec<Pos>,
@@ -129,8 +133,10 @@ impl DevInfo {
         Self {
             index: d.id,
             key: d.key.clone(),
+            name: d.name.clone(),
             device_type: d.device_type.clone(),
             led_count: d.colors.len(),
+            led_names: (0..d.colors.len()).map(|i| d.led_names.get(i).cloned().unwrap_or_default()).collect(),
             zones: d.zones.iter().map(|z| (z.id, z.offset, z.num_leds)).collect(),
             default_positions: default_positions(d),
         }
@@ -204,15 +210,32 @@ fn key_seed(key: &str) -> u32 {
     key.bytes().fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193))
 }
 
+/// Time-dependent inputs of one rendered frame.
+#[derive(Clone, Copy)]
+pub struct Tick<'a> {
+    /// Seconds since the engine started.
+    pub t: f32,
+    pub blackout: bool,
+    pub overlays: &'a [std::sync::Arc<overlay::Overlay>],
+    pub now: Instant,
+}
+
+impl Tick<'_> {
+    /// No overlays, `now` = the real clock (tests and simple callers).
+    pub fn plain(t: f32, blackout: bool) -> Self {
+        Tick { t, blackout, overlays: &[], now: Instant::now() }
+    }
+}
+
 /// Computes the colours of one device in Effects mode, or `None` if the engine does not own it.
 pub fn render_device(
     scene: &Scene,
     dev: &DevInfo,
     custom: Option<&Vec<Pos>>,
     slot: Option<(usize, usize)>,
-    t: f32,
-    blackout: bool,
+    tick: &Tick,
 ) -> Option<Vec<[u8; 3]>> {
+    let Tick { t, blackout, overlays, now } = *tick;
     let ds = scene.devices.get(&dev.key)?;
     if ds.mode != SceneMode::Effects {
         return None;
@@ -231,11 +254,12 @@ pub fn render_device(
         && let Some((i, n)) = slot
     {
         let global: Vec<Pos> = local.iter().map(|p| [(i as f32 + p[0]) / n as f32, p[1]]).collect();
-        let geo = Geometry { led_count: dev.led_count, zones: &dev.zones, positions: &global };
+        let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: &global };
         compositor::composite_onto(&mut buf, &scene.global_layers, &geo, t, 7);
     }
-    let geo = Geometry { led_count: dev.led_count, zones: &dev.zones, positions: local };
+    let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: local };
     compositor::composite_onto(&mut buf, &ds.layers, &geo, t, key_seed(&dev.key));
+    overlay::compose(&mut buf, overlays, dev, local, now);
     Some(compositor::finalize(&buf, scene.master_brightness * ds.brightness))
 }
 
@@ -249,6 +273,8 @@ pub struct Engine {
     pub visible: Mutex<HashSet<String>>,
     /// fps caps by device type (Settings).
     pub fps_by_type: Mutex<HashMap<String, u32>>,
+    /// Temporary animations drawn over the scene (triggers).
+    pub overlays: Mutex<overlay::Overlays>,
     /// Everything off until cleared (tray "Lights off").
     pub blackout: AtomicBool,
     pub start: Instant,
@@ -262,6 +288,7 @@ impl Default for Engine {
             positions: Mutex::default(),
             visible: Mutex::default(),
             fps_by_type: Mutex::default(),
+            overlays: Mutex::default(),
             blackout: AtomicBool::new(false),
             start: Instant::now(),
         }
@@ -278,8 +305,10 @@ mod tests {
         DevInfo {
             index: 0,
             key: key.into(),
+            name: key.into(),
             device_type: "Keyboard".into(),
             led_count: n,
+            led_names: vec![String::new(); n],
             zones: vec![(0, 0, n)],
             default_positions: (0..n).map(|i| [i as f32 / (n as f32 - 1.0).max(1.0), 0.5]).collect(),
         }
@@ -349,8 +378,8 @@ mod tests {
     fn hardware_devices_are_not_rendered() {
         let mut s = Scene::default();
         s.devices.insert("k".into(), DeviceScene::default());
-        assert!(render_device(&s, &dev("k", 3), None, None, 0.0, false).is_none());
-        assert!(render_device(&s, &dev("unknown", 3), None, None, 0.0, false).is_none());
+        assert!(render_device(&s, &dev("k", 3), None, None, &Tick::plain(0.0, false)).is_none());
+        assert!(render_device(&s, &dev("unknown", 3), None, None, &Tick::plain(0.0, false)).is_none());
     }
 
     #[test]
@@ -358,14 +387,14 @@ mod tests {
         let mut s = scene_with("k", vec![layer("solid", json!({"color": [200, 100, 50]}))]);
         s.master_brightness = 0.5;
         s.devices.get_mut("k").unwrap().brightness = 0.5;
-        let out = render_device(&s, &dev("k", 2), None, None, 0.0, false).unwrap();
+        let out = render_device(&s, &dev("k", 2), None, None, &Tick::plain(0.0, false)).unwrap();
         assert_eq!(out, vec![[50, 25, 13]; 2]);
     }
 
     #[test]
     fn blackout_overrides() {
         let s = scene_with("k", vec![layer("solid", json!({"color": [255, 255, 255]}))]);
-        assert_eq!(render_device(&s, &dev("k", 2), None, None, 0.0, true).unwrap(), vec![[0, 0, 0]; 2]);
+        assert_eq!(render_device(&s, &dev("k", 2), None, None, &Tick::plain(0.0, true)).unwrap(), vec![[0, 0, 0]; 2]);
     }
 
     #[test]
@@ -392,8 +421,8 @@ mod tests {
         s.global_layers = vec![layer("gradient", json!({"colors": [[0, 0, 0], [255, 255, 255]], "angle": 0, "speed": 0}))];
         let devs = [dev("a", 4), dev("b", 4)];
         let slots = sync_slots(&s, &devs);
-        let a = render_device(&s, &devs[0], None, slots.get("a").copied(), 0.0, false).unwrap();
-        let b = render_device(&s, &devs[1], None, slots.get("b").copied(), 0.0, false).unwrap();
+        let a = render_device(&s, &devs[0], None, slots.get("a").copied(), &Tick::plain(0.0, false)).unwrap();
+        let b = render_device(&s, &devs[1], None, slots.get("b").copied(), &Tick::plain(0.0, false)).unwrap();
         assert!(a.last().unwrap()[0] < b[0][0] + 80, "a ends near where b starts");
         assert!(b.last().unwrap()[0] > a[0][0]);
         assert!(a[0][0] < 60 && b[3][0] > 200);
@@ -404,12 +433,56 @@ mod tests {
         let s = scene_with("k", vec![layer("gradient", json!({"colors": [[0, 0, 0], [255, 0, 0]], "angle": 0, "speed": 0}))]);
         let d = dev("k", 2);
         let custom = vec![[1.0, 0.5], [0.0, 0.5]];
-        let out = render_device(&s, &d, Some(&custom), None, 0.0, false).unwrap();
+        let out = render_device(&s, &d, Some(&custom), None, &Tick::plain(0.0, false)).unwrap();
         assert!(out[0][0] > out[1][0]);
         // Wrong length: ignored.
         let bad = vec![[1.0, 0.5]];
-        let out2 = render_device(&s, &d, Some(&bad), None, 0.0, false).unwrap();
+        let out2 = render_device(&s, &d, Some(&bad), None, &Tick::plain(0.0, false)).unwrap();
         assert!(out2[0][0] < out2[1][0]);
+    }
+
+    #[test]
+    fn overlay_covers_the_scene_then_the_scene_returns() {
+        use crate::animations::{AnimKind, Animation, Frame, LoopMode, Target};
+        let s = scene_with("k", vec![layer("solid", json!({"color": [0, 0, 255]}))]);
+        let d = dev("k", 2);
+        let t0 = Instant::now();
+        let anim = Animation {
+            schema_version: 1,
+            id: "ov-test".into(),
+            name: "ov".into(),
+            description: None,
+            tags: vec![],
+            created: 0,
+            updated: 1,
+            target: Target::default(),
+            builtin: false,
+            kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), [255, 0, 0])].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
+        };
+        let mut ov = overlay::Overlays::default();
+        ov.add(t0, |id| overlay::Overlay { id, anim, device: None, keys: vec![], start: t0, until: t0 + Duration::from_secs(1), priority: 0 }).unwrap();
+        let during = ov.active(t0 + Duration::from_millis(500));
+        fn tick(now: Instant, overlays: &[std::sync::Arc<overlay::Overlay>]) -> Tick<'_> {
+            Tick { t: 0.0, blackout: false, overlays, now }
+        }
+        let a = render_device(&s, &d, None, None, &tick(t0 + Duration::from_millis(500), &during)).unwrap();
+        assert_eq!(a, vec![[255, 0, 0], [0, 0, 255]]);
+        let after = ov.active(t0 + Duration::from_secs(2));
+        let b = render_device(&s, &d, None, None, &tick(t0 + Duration::from_secs(2), &after)).unwrap();
+        assert_eq!(b, vec![[0, 0, 255]; 2], "scene restored after expiry");
+    }
+
+    #[test]
+    fn animation_layer_plays_in_the_scene() {
+        use crate::animations;
+        let anim = animations::builtins().into_iter().find(|a| a.id == "builtin:rainbow").unwrap();
+        let s = scene_with("k", vec![animations::layer_for(&anim)]);
+        let out = render_device(&s, &dev("k", 4), None, None, &Tick::plain(0.0, false)).unwrap();
+        assert!(out.iter().any(|c| c != &[0, 0, 0]));
+        // The profile round-trips with the snapshot inside.
+        let j = serde_json::to_string(&s).unwrap();
+        let back: Scene = serde_json::from_str(&j).unwrap();
+        assert_eq!(back, s);
     }
 
     #[test]

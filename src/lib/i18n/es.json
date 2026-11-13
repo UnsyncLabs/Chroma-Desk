@@ -262,5 +262,22 @@
   "set.serviceChanged": "Servicio actualizado.",
   "set.folder": "Carpeta de perfiles",
   "set.about": "Acerca de",
-  "set.aboutText": "Una nueva interfaz para OpenRGB."
+  "set.aboutText": "Una nueva interfaz para OpenRGB.",
+  "fx.frames": "Fotogramas",
+  "fx.path": "Camino",
+  "fx.palette": "Paleta rotatoria",
+  "fx.animation": "Animación",
+  "param.frame_ms": "Tiempo por cuadro (ms)",
+  "param.crossfade": "Fundido",
+  "param.tail_fade": "Estela",
+  "err.anim_invalid": "Animación no válida: {detail}",
+  "err.anim_name_invalid": "Nombre de animación no válido (1–64 caracteres).",
+  "err.anim_corrupt": "El archivo de la animación está dañado.",
+  "err.anim_too_new": "Esta animación fue creada por una versión más nueva de chroma-desk.",
+  "err.anim_not_found": "Animación no encontrada: {detail}",
+  "err.anim_builtin": "Las animaciones incluidas no se pueden cambiar. Duplícala primero.",
+  "err.anim_exists": "Ya existe una animación con ese nombre.",
+  "err.trigger_invalid": "Disparador no válido ({detail}).",
+  "err.trigger_no_device": "Ningún dispositivo en modo Efectos coincide con este disparador.",
+  "err.overlay_limit": "Demasiadas superposiciones activas (máx. {detail})."
 }

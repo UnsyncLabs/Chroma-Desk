@@ -262,5 +262,22 @@
   "set.serviceChanged": "Service updated.",
   "set.folder": "Profiles folder",
   "set.about": "About",
-  "set.aboutText": "A new interface for OpenRGB."
+  "set.aboutText": "A new interface for OpenRGB.",
+  "fx.frames": "Frames",
+  "fx.path": "Path",
+  "fx.palette": "Palette cycle",
+  "fx.animation": "Animation",
+  "param.frame_ms": "Frame time (ms)",
+  "param.crossfade": "Crossfade",
+  "param.tail_fade": "Tail fade",
+  "err.anim_invalid": "Invalid animation: {detail}",
+  "err.anim_name_invalid": "Invalid animation name (1–64 characters).",
+  "err.anim_corrupt": "The animation file is corrupt.",
+  "err.anim_too_new": "This animation was created by a newer version of chroma-desk.",
+  "err.anim_not_found": "Animation not found: {detail}",
+  "err.anim_builtin": "Built-in animations cannot be changed. Duplicate it first.",
+  "err.anim_exists": "An animation with that name already exists.",
+  "err.trigger_invalid": "Invalid trigger ({detail}).",
+  "err.trigger_no_device": "No device in Effects mode matches this trigger.",
+  "err.overlay_limit": "Too many active overlays (max {detail})."
 }

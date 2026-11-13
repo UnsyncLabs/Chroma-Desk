@@ -52,6 +52,20 @@ impl Params {
     fn color(&self, k: &str) -> Rgbf {
         self.0.get(k).and_then(parse_color).unwrap_or([0.0; 3])
     }
+    fn text(&self, k: &str) -> &str {
+        self.0.get(k).and_then(Value::as_str).unwrap_or("")
+    }
+    /// Colour stops `[{ "pos": 0..1, "color": [r,g,b] }]`, sorted by position.
+    fn stops(&self, k: &str) -> Vec<Stop> {
+        let mut v: Vec<Stop> = self
+            .0
+            .get(k)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|s| Some(Stop { pos: s.get("pos")?.as_f64()? as f32, color: parse_color(s.get("color")?)? })).collect())
+            .unwrap_or_default();
+        v.sort_by(|a, b| a.pos.total_cmp(&b.pos));
+        v
+    }
     fn colors(&self, k: &str) -> Vec<Rgbf> {
         self.0
             .get(k)
@@ -59,6 +73,13 @@ impl Params {
             .map(|a| a.iter().filter_map(parse_color).collect())
             .unwrap_or_default()
     }
+}
+
+/// A colour stop of a palette.
+#[derive(Debug, Clone, Copy)]
+struct Stop {
+    pos: f32,
+    color: Rgbf,
 }
 
 fn parse_color(v: &Value) -> Option<Rgbf> {
@@ -71,7 +92,7 @@ fn parse_color(v: &Value) -> Option<Rgbf> {
 #[derive(Debug, Clone, Serialize)]
 pub struct ParamDef {
     pub key: &'static str,
-    /// `slider`, `angle`, `color`, `colors` or `bool`.
+    /// `slider`, `angle`, `color`, `colors`, `bool`, `paint` or `data` (no generic editor).
     pub kind: &'static str,
     pub min: f32,
     pub max: f32,
@@ -96,6 +117,10 @@ fn color(key: &'static str, c: Rgbf) -> ParamDef {
 }
 fn colors(key: &'static str, cs: &[Rgbf]) -> ParamDef {
     ParamDef { key, kind: "colors", min: 1.0, max: 8.0, step: 0.0, default: json!(cs) }
+}
+/// A parameter edited by dedicated UI (or not at all): the generic editor skips it.
+fn data(key: &'static str, default: Value) -> ParamDef {
+    ParamDef { key, kind: "data", min: 0.0, max: 0.0, step: 0.0, default }
 }
 fn flag(key: &'static str, default: bool) -> ParamDef {
     ParamDef { key, kind: "bool", min: 0.0, max: 1.0, step: 1.0, default: json!(default) }
@@ -150,6 +175,38 @@ pub fn effect_defs() -> &'static [EffectDef] {
                     flag("reverse", false),
                 ],
             },
+            EffectDef {
+                id: "frames",
+                params: vec![
+                    data("frames", json!([])),
+                    slider("frame_ms", 20.0, 2000.0, 10.0, 200.0),
+                    data("loop", json!("loop")),
+                    slider("crossfade", 0.0, 1.0, 0.01, 0.0),
+                ],
+            },
+            EffectDef {
+                id: "path",
+                params: vec![
+                    data("path", json!([])),
+                    data("palette", json!([{ "pos": 0.0, "color": RED }, { "pos": 1.0, "color": BLUE }])),
+                    slider("speed", 0.05, 3.0, 0.01, 0.5),
+                    slider("length", 0.05, 1.0, 0.01, 0.35),
+                    slider("gap", 0.0, 1.0, 0.01, 0.3),
+                    slider("tail_fade", 0.0, 1.0, 0.01, 0.6),
+                    flag("reverse", false),
+                ],
+            },
+            EffectDef {
+                id: "palette",
+                params: vec![
+                    data("cells", json!({})),
+                    data("palette", json!([{ "pos": 0.0, "color": RED }, { "pos": 1.0, "color": BLUE }])),
+                    slider("speed", -2.0, 2.0, 0.01, 0.3),
+                    flag("reverse", false),
+                ],
+            },
+            // Plays a library animation (snapshot in the params); rendered by `animations::render_layer`.
+            EffectDef { id: "animation", params: vec![data("anim_id", json!("")), data("snapshot", Value::Null)] },
             EffectDef {
                 id: "ripple",
                 params: vec![
@@ -317,6 +374,9 @@ pub fn render(effect: &str, params: &Params, t: f32, positions: &[Pos], seed: u3
         }
         "chase" => chase(&p, t, out),
         "ripple" => ripple(&p, t, positions, seed, out),
+        "frames" => frames(&p, t, out),
+        "path" => path(&p, t, out),
+        "palette" => palette(&p, t, out),
         _ => out.fill(Px::CLEAR),
     }
 }
@@ -375,6 +435,147 @@ fn chase(p: &Params, t: f32, out: &mut [Px]) {
         if q < len && !pal.is_empty() {
             let k = (u / period).floor().rem_euclid(pal.len() as f32) as usize;
             *o = Px::rgb(pal[k], 1.0 - q / len);
+        }
+    }
+}
+
+/// Colour of a palette at `x`. Cyclic palettes wrap from the last stop back to the first.
+fn sample_stops(stops: &[Stop], x: f32, cyclic: bool) -> Rgbf {
+    let n = stops.len();
+    match n {
+        0 => return [0.0; 3],
+        1 => return stops[0].color,
+        _ => {}
+    }
+    let (first, last) = (stops[0], stops[n - 1]);
+    let x = if cyclic { x.rem_euclid(1.0) } else { x.clamp(0.0, 1.0) };
+    let wrap = |from: Stop, to: Stop, at: f32| {
+        let span = (to.pos + 1.0 - from.pos).max(1e-6);
+        mix(from.color, to.color, ((at - from.pos) / span).clamp(0.0, 1.0))
+    };
+    if x <= first.pos {
+        if !cyclic || x == first.pos {
+            return first.color;
+        }
+        return wrap(last, first, x + 1.0);
+    }
+    if x >= last.pos {
+        return if cyclic { wrap(last, first, x) } else { last.color };
+    }
+    let k = stops.windows(2).position(|w| x >= w[0].pos && x < w[1].pos).unwrap_or(n - 2);
+    let (a, b) = (stops[k], stops[k + 1]);
+    mix(a.color, b.color, (x - a.pos) / (b.pos - a.pos).max(1e-6))
+}
+
+/// Draws one frame (`{ "leds": { "<index>": [r,g,b] } }`) into `out`; unlisted LEDs are transparent.
+fn read_frame(frame: &Value, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    if let Some(map) = frame.get("leds").and_then(Value::as_object) {
+        for (k, v) in map {
+            if let (Ok(i), Some(c)) = (k.parse::<usize>(), parse_color(v))
+                && let Some(o) = out.get_mut(i)
+            {
+                *o = Px::rgb(c, 1.0);
+            }
+        }
+    }
+}
+
+/// Flipbook: frames play in order with optional crossfade. `loop` is `loop`, `pingpong` or `once`
+/// (once holds the last frame). LEDs missing from a frame are transparent.
+fn frames(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let Some(list) = p.0.get("frames").and_then(Value::as_array) else { return };
+    let n = list.len();
+    if n == 0 {
+        return;
+    }
+    let base = p.num("frame_ms").clamp(10.0, 60_000.0);
+    let durs: Vec<f32> =
+        list.iter().map(|f| f.get("duration_ms").and_then(Value::as_f64).map_or(base, |d| d as f32).clamp(10.0, 600_000.0)).collect();
+    let mode = p.text("loop");
+    let seq: Vec<usize> = if mode == "pingpong" && n > 1 { (0..n).chain((1..n - 1).rev()).collect() } else { (0..n).collect() };
+    let total: f32 = seq.iter().map(|&i| durs[i]).sum();
+    let tm = (t * 1000.0).max(0.0);
+    let once = mode == "once";
+    let (k, local) = if once && tm >= total {
+        (seq.len() - 1, durs[seq[seq.len() - 1]])
+    } else {
+        let mut rest = tm.rem_euclid(total.max(1.0));
+        let mut k = 0;
+        while k + 1 < seq.len() && rest >= durs[seq[k]] {
+            rest -= durs[seq[k]];
+            k += 1;
+        }
+        (k, rest)
+    };
+    let cur = seq[k];
+    read_frame(&list[cur], out);
+    let cf = p.num("crossfade").clamp(0.0, 1.0);
+    let next = if k + 1 < seq.len() {
+        Some(seq[k + 1])
+    } else if once {
+        None
+    } else {
+        Some(seq[0])
+    };
+    let Some(next) = next else { return };
+    if cf <= 0.0 || next == cur {
+        return;
+    }
+    let f = (((local / durs[cur]) - (1.0 - cf)) / cf).clamp(0.0, 1.0);
+    if f <= 0.0 {
+        return;
+    }
+    let mut b = vec![Px::CLEAR; out.len()];
+    read_frame(&list[next], &mut b);
+    for (a, b) in out.iter_mut().zip(&b) {
+        *a = match (a.a > 0.0, b.a > 0.0) {
+            (true, true) => Px::rgb(mix([a.r, a.g, a.b], [b.r, b.g, b.b], f), 1.0),
+            (true, false) => Px { a: 1.0 - f, ..*a },
+            (false, true) => Px { a: f, ..*b },
+            (false, false) => Px::CLEAR,
+        };
+    }
+}
+
+/// A gradient segment travelling along a drawn path (`path`: LED indices in stroke order).
+/// `length`/`gap` are fractions of the path, `tail_fade` fades the segment towards its tail.
+fn path(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let Some(list) = p.0.get("path").and_then(Value::as_array) else { return };
+    let m = list.len();
+    let stops = p.stops("palette");
+    if m == 0 || stops.is_empty() {
+        return;
+    }
+    let (len, gap, speed, tail) = (p.num("length").clamp(0.02, 1.0), p.num("gap").max(0.0), p.num("speed"), p.num("tail_fade").clamp(0.0, 1.0));
+    let period = (len + gap).max(0.02);
+    let dir = if p.flag("reverse") { -1.0 } else { 1.0 };
+    for (k, v) in list.iter().enumerate() {
+        let Some(o) = v.as_u64().and_then(|i| out.get_mut(i as usize)) else { continue };
+        let s = (k as f32 + 0.5) / m as f32;
+        let q = (s - dir * t * speed).rem_euclid(period);
+        if q < len {
+            let x = q / len;
+            *o = Px::rgb(sample_stops(&stops, x, false), 1.0 - tail * x);
+        }
+    }
+}
+
+/// Palette cycling: every cell (`cells`: `{ "<index>": position 0..1 }`) shows the palette at
+/// `position + t * speed`, wrapping around.
+fn palette(p: &Params, t: f32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let Some(cells) = p.0.get("cells").and_then(Value::as_object) else { return };
+    let stops = p.stops("palette");
+    let dir = if p.flag("reverse") { -1.0 } else { 1.0 };
+    let shift = dir * t * p.num("speed");
+    for (k, v) in cells {
+        if let (Ok(i), Some(pos)) = (k.parse::<usize>(), v.as_f64())
+            && let Some(o) = out.get_mut(i)
+        {
+            *o = Px::rgb(sample_stops(&stops, pos as f32 + shift, true), 1.0);
         }
     }
 }
@@ -564,6 +765,103 @@ mod tests {
         assert!(early.iter().any(|p| p.a > 0.2));
         assert!(early.iter().all(|p| p.a == 0.0 || (p.b - 255.0).abs() < 1.0));
         assert_ne!(early, late);
+    }
+
+    #[test]
+    fn frames_play_in_order_and_loop() {
+        let f = json!({"frames": [
+            {"leds": {"0": [255, 0, 0]}}, {"leds": {"1": [0, 255, 0]}}, {"leds": {"2": [0, 0, 255]}}
+        ], "frame_ms": 100, "loop": "loop"});
+        let at = |t: f32| run("frames", f.clone(), t, 3);
+        assert_eq!(at(0.05)[0].r, 255.0);
+        assert_eq!(at(0.05)[1].a, 0.0, "LEDs missing from a frame are transparent");
+        assert_eq!(at(0.15)[1].g, 255.0);
+        assert_eq!(at(0.25)[2].b, 255.0);
+        assert_eq!(at(0.35)[0].r, 255.0, "loops back to frame 0");
+    }
+
+    #[test]
+    fn frames_pingpong_and_once() {
+        let mk = |mode: &str| json!({"frames": [{"leds": {"0": [1, 1, 1]}}, {"leds": {"1": [1, 1, 1]}}, {"leds": {"2": [1, 1, 1]}}], "frame_ms": 100, "loop": mode});
+        let lit = |mode: &str, t: f32| run("frames", mk(mode), t, 3).iter().position(|p| p.a > 0.0).unwrap();
+        // 0 1 2 1 0 1 2 ...
+        let seq: Vec<usize> = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55].iter().map(|&t| lit("pingpong", t)).collect();
+        assert_eq!(seq, vec![0, 1, 2, 1, 0, 1]);
+        assert_eq!(lit("once", 0.05), 0);
+        assert_eq!(lit("once", 9.0), 2, "once holds the last frame");
+    }
+
+    #[test]
+    fn frames_per_frame_duration_and_crossfade() {
+        let f = json!({"frames": [
+            {"leds": {"0": [200, 0, 0]}, "duration_ms": 400}, {"leds": {"0": [0, 0, 200], "1": [0, 200, 0]}, "duration_ms": 100}
+        ], "loop": "loop", "crossfade": 1.0});
+        // Frame 0 lasts 400 ms: at 200 ms we are half-way to frame 1 (crossfade over the whole frame).
+        let mid = run("frames", f.clone(), 0.2, 2);
+        assert!((mid[0].r - 100.0).abs() < 1.0 && (mid[0].b - 100.0).abs() < 1.0, "{:?}", mid[0]);
+        assert!((mid[1].a - 0.5).abs() < 0.01, "LED only in the next frame fades in");
+        let no_fade = json!({"frames": f["frames"].clone(), "loop": "loop", "crossfade": 0.0});
+        assert_eq!(run("frames", no_fade, 0.2, 2)[0].r, 200.0);
+    }
+
+    #[test]
+    fn frames_empty_is_transparent() {
+        assert!(run("frames", json!({"frames": []}), 1.0, 4).iter().all(|p| p.a == 0.0));
+    }
+
+    #[test]
+    fn path_segment_travels_in_stroke_order() {
+        let pal = json!([{"pos": 0.0, "color": [255, 255, 255]}, {"pos": 1.0, "color": [255, 255, 255]}]);
+        let p = json!({"path": [3, 1, 0, 2], "palette": pal, "speed": 1.0, "length": 0.25, "gap": 0.75, "tail_fade": 0.0});
+        let lit = |t: f32| run("path", p.clone(), t, 5).iter().position(|px| px.a > 0.0);
+        // One LED of the 4-LED path is lit at a time; the head moves through the stroke order 3, 1, 0, 2.
+        let order: Vec<_> = [0.03f32, 0.28, 0.53, 0.78].iter().map(|&t| lit(t)).collect();
+        assert_eq!(order, vec![Some(3), Some(1), Some(0), Some(2)]);
+        assert_eq!(run("path", p, 0.1, 5)[4].a, 0.0, "LEDs outside the path stay transparent");
+    }
+
+    #[test]
+    fn path_reverse_and_tail_fade() {
+        let pal = json!([{"pos": 0.0, "color": [10, 20, 30]}]);
+        let base = json!({"path": [0, 1, 2, 3, 4, 5, 6, 7], "palette": pal, "speed": 0.0, "length": 0.5, "gap": 0.5, "tail_fade": 1.0});
+        let out = run("path", base.clone(), 0.0, 8);
+        // Head (q = 0) opaque, tail fading to transparent.
+        let alphas: Vec<f32> = out.iter().map(|p| p.a).collect();
+        assert!(alphas[0] > alphas[1] && alphas[1] > alphas[2] && alphas[3] > 0.0 && alphas[4] == 0.0, "{alphas:?}");
+        let mut fwd = base.clone();
+        fwd["speed"] = json!(1.0);
+        let mut rev = fwd.clone();
+        rev["reverse"] = json!(true);
+        assert_ne!(run("path", fwd, 0.3, 8), run("path", rev, 0.3, 8));
+    }
+
+    #[test]
+    fn palette_cycles_without_moving() {
+        let pal = json!([{"pos": 0.0, "color": [255, 0, 0]}, {"pos": 0.5, "color": [0, 255, 0]}, {"pos": 1.0, "color": [255, 0, 0]}]);
+        let p = json!({"cells": {"0": 0.0, "1": 0.5}, "palette": pal, "speed": 1.0});
+        let a = run("palette", p.clone(), 0.0, 3);
+        assert_eq!((a[0].r, a[0].g), (255.0, 0.0));
+        assert_eq!((a[1].r, a[1].g), (0.0, 255.0));
+        assert_eq!(a[2].a, 0.0, "LEDs without a cell stay transparent");
+        // Half a cycle later the colours swapped places; a full cycle brings them back.
+        let b = run("palette", p.clone(), 0.5, 3);
+        assert_eq!((b[0].r, b[0].g), (0.0, 255.0));
+        let c = run("palette", p.clone(), 1.0, 3);
+        assert!((c[0].r - 255.0).abs() < 0.01 && c[0].g.abs() < 0.01);
+        let mut rev = p.clone();
+        rev["reverse"] = json!(true);
+        assert_ne!(run("palette", rev, 0.1, 3)[0], run("palette", p, 0.1, 3)[0]);
+    }
+
+    #[test]
+    fn palette_sampling_wraps_between_last_and_first() {
+        let stops = [Stop { pos: 0.2, color: [0.0, 0.0, 0.0] }, Stop { pos: 0.8, color: [60.0, 0.0, 0.0] }];
+        assert_eq!(sample_stops(&stops, 0.0, false), [0.0; 3]);
+        assert_eq!(sample_stops(&stops, 1.0, false)[0], 60.0);
+        // Cyclic: from 0.8 (60) through 1.0/0.0 back to 0.2 (0): 1.0 is half-way.
+        assert!((sample_stops(&stops, 1.0, true)[0] - 30.0).abs() < 0.01);
+        assert!((sample_stops(&stops, 0.5, true)[0] - 30.0).abs() < 0.01);
+        assert_eq!(sample_stops(&[], 0.5, true), [0.0; 3]);
     }
 
     #[test]

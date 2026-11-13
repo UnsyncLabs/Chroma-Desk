@@ -1,7 +1,7 @@
 //! The 60 Hz engine task: composes frames, applies per-device fps caps, skips unchanged
 //! frames, feeds the UI preview and survives SDK failures by reconnecting.
 
-use super::{DevInfo, Engine, SceneMode, fps_for, is_due, render_device, sync_slots};
+use super::{DevInfo, Engine, SceneMode, fps_for, is_due, render_device, sync_slots, Tick};
 use crate::error::ApiError;
 use crate::sdk::{self, Rgb};
 use crate::state::AppState;
@@ -79,6 +79,7 @@ impl Runner {
         let by_type = engine.fps_by_type.lock().unwrap().clone();
         let blackout = engine.blackout.load(Ordering::Relaxed);
         let slots = sync_slots(&scene, &devs);
+        let overlays = engine.overlays.lock().unwrap().active(now);
 
         let mut plan = Plan { jobs: vec![], previews: vec![] };
         let mut active = HashSet::new();
@@ -99,7 +100,7 @@ impl Runner {
             if !due && !want_preview {
                 continue;
             }
-            let Some(frame) = render_device(&scene, dev, positions.get(&dev.key), slots.get(&dev.key).copied(), t, blackout) else {
+            let Some(frame) = render_device(&scene, dev, positions.get(&dev.key), slots.get(&dev.key).copied(), &Tick { t, blackout, overlays: &overlays, now }) else {
                 continue;
             };
             if want_preview && self.previewed.get(&dev.key).is_none_or(|(_, f)| *f != frame) {
@@ -245,8 +246,10 @@ mod tests {
         e.devs.lock().unwrap().push(DevInfo {
             index: 0,
             key: "k".into(),
+            name: "k".into(),
             device_type: device_type.into(),
             led_count: 4,
+            led_names: vec![String::new(); 4],
             zones: vec![(0, 0, 4)],
             default_positions: vec![[0.5, 0.5]; 4],
         });
