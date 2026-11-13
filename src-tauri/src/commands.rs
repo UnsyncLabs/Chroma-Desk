@@ -226,7 +226,10 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
     *state.engine.fps_by_type.lock().unwrap() = settings.fps_by_type.clone();
     let mut cfg = state.config.lock().unwrap();
-    cfg.settings = settings;
+    // The UI's copy of `current_profile` can be stale (the tray applies profiles too); only the
+    // apply/save paths own that field.
+    let current = cfg.settings.current_profile.clone();
+    cfg.settings = Settings { current_profile: current, ..settings };
     cfg.save()
 }
 

@@ -24,6 +24,8 @@
     e.preventDefault();
     if (!edit) return;
     try {
+      const exists = profiles.list.profiles.some((p) => p.name === name.trim());
+      if (edit.mode === "saveas" && exists && name.trim() !== current && !(await confirmDialog(t("prof.confirmOverwrite", { name: name.trim() }), t("prof.overwrite")))) return;
       if (edit.mode === "saveas") await saveProfileAs(name);
       else if (edit.mode === "rename") {
         await api.renameProfile(edit.target, name);

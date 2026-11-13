@@ -214,6 +214,8 @@
   "prof.apply": "Apply",
   "prof.applied": "Profile \"{name}\" applied.",
   "prof.confirmDiscard": "You have unsaved changes. Applying another profile will discard them.",
+  "prof.confirmOverwrite": "A profile named \"{name}\" already exists. Overwrite it?",
+  "prof.overwrite": "Overwrite",
   "prof.confirmDelete": "Delete profile \"{name}\"? This cannot be undone.",
   "prof.setDefault": "Set as default",
   "prof.unsetDefault": "Unset default",

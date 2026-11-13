@@ -214,6 +214,8 @@
   "prof.apply": "Aplicar",
   "prof.applied": "Perfil \"{name}\" aplicado.",
   "prof.confirmDiscard": "Tienes cambios sin guardar. Aplicar otro perfil los descartará.",
+  "prof.confirmOverwrite": "Ya existe un perfil llamado \"{name}\". ¿Sobrescribirlo?",
+  "prof.overwrite": "Sobrescribir",
   "prof.confirmDelete": "¿Eliminar el perfil \"{name}\"? No se puede deshacer.",
   "prof.setDefault": "Hacer predeterminado",
   "prof.unsetDefault": "Quitar predeterminado",

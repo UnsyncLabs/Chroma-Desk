@@ -54,6 +54,11 @@
     }
   });
 
+  // The eraser only exists on layers; fall back to the brush when it disappears.
+  $effect(() => {
+    if (!transparent && tool === "eraser") tool = "brush";
+  });
+
   const clone = (p: Paint): Paint => p.map((c) => (c ? ([...c] as Rgb) : null));
   const itemByLed = $derived(new Map(layout.items.map((i) => [i.led, i])));
   const pad = 0.5;

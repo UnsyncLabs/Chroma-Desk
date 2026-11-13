@@ -383,7 +383,8 @@ fn chase(p: &Params, t: f32, out: &mut [Px]) {
 fn ripple(p: &Params, t: f32, positions: &[Pos], seed: u32, out: &mut [Px]) {
     let pal = p.colors("colors");
     let random = p.flag("random") || pal.is_empty();
-    let (rate, speed, width) = (p.num("rate").max(0.01), p.num("speed").max(0.01), p.num("width").max(0.01));
+    // Clamped: profiles come from files and could otherwise ask for millions of ripples.
+    let (rate, speed, width) = (p.num("rate").clamp(0.01, 20.0), p.num("speed").clamp(0.05, 20.0), p.num("width").max(0.01));
     let life = 1.6 / speed;
     let n = out.len();
     out.fill(Px::CLEAR);

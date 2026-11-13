@@ -20,7 +20,10 @@ const PREVIEW_INTERVAL: Duration = Duration::from_millis(33);
 /// Unchanged frames are re-sent this often: some controllers fall back to their own mode when idle.
 const KEEPALIVE: Duration = Duration::from_secs(10);
 const MAX_BACKOFF: Duration = Duration::from_secs(10);
+/// Consecutive ticks in which *every* send failed before the connection is considered dead.
 const FAILURES_BEFORE_RECONNECT: u32 = 3;
+/// A device whose send failed is left alone this long (no 60 Hz retry storm, no log spam).
+const DEVICE_RETRY: Duration = Duration::from_secs(1);
 
 #[derive(Serialize, Clone)]
 struct FramePayload {
@@ -56,6 +59,8 @@ struct Runner {
     backoff: Duration,
     retry_at: Option<Instant>,
     status: Option<&'static str>,
+    /// Devices that failed recently, and when they may be tried again.
+    blocked: HashMap<String, Instant>,
 }
 
 /// Frames to send and to preview for this tick.
@@ -83,6 +88,9 @@ impl Runner {
                 continue;
             }
             active.insert(dev.key.clone());
+            if self.blocked.get(&dev.key).is_some_and(|until| now < *until) {
+                continue;
+            }
             let fps = fps_for(&dev.device_type, ds.fps, &by_type);
             let last = self.sent.get(&dev.key).map(|s| s.at);
             let due = is_due(last, now, fps) || last.is_some_and(|l| now.saturating_duration_since(l) >= KEEPALIVE);
@@ -107,13 +115,20 @@ impl Runner {
         // Devices that left Effects mode must be put in Direct again when they come back.
         self.direct.retain(|k| active.contains(k));
         self.sent.retain(|k, _| active.contains(k));
+        self.previewed.retain(|k, _| active.contains(k));
+        self.blocked.retain(|k, until| active.contains(k) && now < *until);
         plan
     }
 
-    /// Sends the jobs; returns the keys that succeeded and whether any failed.
-    async fn send(&mut self, state: &AppState, jobs: Vec<Job>, now: Instant) -> bool {
+    /// Sends the jobs; returns `(succeeded, failed)` counts.
+    async fn send(&mut self, state: &AppState, jobs: Vec<Job>, now: Instant) -> (usize, usize) {
         let guard = state.conn.lock().await;
-        let Some(conn) = guard.as_ref() else { return false };
+        let Some(conn) = guard.as_ref() else {
+            for job in &jobs {
+                self.blocked.insert(job.key.clone(), now + DEVICE_RETRY);
+            }
+            return (0, jobs.len());
+        };
         let direct = &self.direct;
         let results = join_all(jobs.into_iter().map(|job| async move {
             let res = async {
@@ -129,20 +144,25 @@ impl Runner {
         }))
         .await;
         drop(guard);
-        let mut failed = false;
+        let (mut ok, mut failed) = (0, 0);
         for (job, res) in results {
             match res {
                 Ok(()) => {
+                    ok += 1;
                     self.direct.insert(job.key.clone());
+                    self.blocked.remove(&job.key);
                     self.sent.insert(job.key, Sent { at: now, frame: job.frame });
                 }
                 Err(e) => {
+                    failed += 1;
                     eprintln!("engine: sending to {} failed: {e}", job.key);
-                    failed = true;
+                    // Mode may have been reset by whatever broke the send: re-enter Direct.
+                    self.direct.remove(&job.key);
+                    self.blocked.insert(job.key, now + DEVICE_RETRY);
                 }
             }
         }
-        !failed
+        (ok, failed)
     }
 }
 
@@ -174,6 +194,7 @@ pub async fn run(emit: Emit, state: AppState) {
                     r.failures = 0;
                     r.direct.clear();
                     r.sent.clear();
+                    r.blocked.clear();
                     set_status(&emit, &mut r, "ok");
                     emit("devices-changed", serde_json::Value::Null);
                 }
@@ -193,7 +214,10 @@ pub async fn run(emit: Emit, state: AppState) {
         if plan.jobs.is_empty() {
             continue;
         }
-        if r.send(&state, plan.jobs, now).await {
+        let (ok, failed) = r.send(&state, plan.jobs, now).await;
+        if ok > 0 || failed == 0 {
+            // At least one device took its frame: the connection is alive (a single broken
+            // device must not tear it down for everyone).
             r.failures = 0;
             set_status(&emit, &mut r, "ok");
         } else {
@@ -265,6 +289,20 @@ mod tests {
         assert!((28..=31).contains(&strip), "strip sent {strip} frames/s");
         let kb = simulate(&engine_with("Keyboard", "rainbow"), 60);
         assert!(kb >= 55, "keyboard sent {kb}");
+    }
+
+    #[test]
+    fn failed_device_is_not_retried_every_tick() {
+        let e = engine_with("Keyboard", "rainbow");
+        let mut r = Runner::default();
+        let t0 = e.start;
+        assert_eq!(r.plan(&e, t0).jobs.len(), 1);
+        // Pretend the send failed at t0.
+        r.blocked.insert("k".into(), t0 + DEVICE_RETRY);
+        for i in 1..50 {
+            assert!(r.plan(&e, t0 + TICK * i).jobs.is_empty(), "tick {i} must be skipped");
+        }
+        assert_eq!(r.plan(&e, t0 + DEVICE_RETRY + TICK).jobs.len(), 1, "retried after the backoff");
     }
 
     #[test]

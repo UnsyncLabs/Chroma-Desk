@@ -3,6 +3,7 @@ name = "chroma-desk"
 version = "0.1.0"
 description = "Interfaz para OpenRGB con editor de teclado"
 authors = ["neokuze"]
+license = "GPL-2.0-or-later"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

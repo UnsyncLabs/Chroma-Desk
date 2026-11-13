@@ -289,7 +289,7 @@ function genericLayout(d: Device, opts: LayoutOptions): Layout {
 
 /** Normalised positions for the engine: every LED, drawn or not (hidden ones sit at the centre). */
 function computePositions(d: Device, layout: Layout): [number, number][] {
-  const out: [number, number][] = Array.from({ length: d.led_names.length || d.colors.length }, () => [0.5, 0.5]);
+  const out: [number, number][] = Array.from({ length: d.colors.length || d.led_names.length }, () => [0.5, 0.5]);
   const w = Math.max(layout.width, 1e-6);
   const h = Math.max(layout.height, 1e-6);
   for (const it of layout.items) {

@@ -84,3 +84,38 @@ describe("generic layouts", () => {
     expect(l.kind).toBe("single");
   });
 });
+
+describe("real Huntsman V3 Pro TKL fixture (dumped from OpenRGB)", async () => {
+  const fixture = (await import("./fixtures/huntsman-v3-pro-tkl.json")).default as unknown as Device;
+  const l = buildLayout(fixture);
+
+  it("every LED with a name is drawn exactly once, at its own index", () => {
+    const named = fixture.led_names.map((n, i) => [n, i] as const).filter(([n]) => n !== "");
+    for (const [name, i] of named) {
+      const items = l.items.filter((it) => it.led === i);
+      expect(items.length, `${name} (#${i})`).toBe(1);
+      expect(items[0].name).toBe(name);
+    }
+    // No LED index is drawn twice.
+    const leds = l.items.map((it) => it.led);
+    expect(new Set(leds).size).toBe(leds.length);
+  });
+  it("is a TKL: right edge at 18.25u, no numpad band", () => {
+    expect(l.kind).toBe("keyboard");
+    const keys = l.items.filter((it) => it.name.startsWith("Key: ") && it.shape === "rect" && it.w >= 1 && !it.name.includes("Media"));
+    const right = Math.max(...keys.map((k) => k.x + k.w));
+    expect(right).toBeCloseTo(18.25);
+  });
+  it("physical rows line up (shift row, space row)", () => {
+    const by = (n: string) => l.items.find((i) => i.name === n)!;
+    expect(by("Key: Left Shift").y).toBeCloseTo(by("Key: Z").y);
+    expect(by("Key: Space").y).toBeCloseTo(by("Key: Left Alt").y);
+    expect(by("Key: Space").x).toBeCloseTo(3.75);
+    expect(by("Key: Right Shift").x + by("Key: Right Shift").w).toBeCloseTo(by("Key: Enter").x + by("Key: Enter").w);
+    expect(by("Key: \\ (ANSI)").x + by("Key: \\ (ANSI)").w).toBeCloseTo(15);
+  });
+  it("engine positions cover every LED with values in 0..1", () => {
+    expect(l.positions.length).toBe(fixture.colors.length);
+    for (const p of l.positions) for (const v of p) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
+  });
+});

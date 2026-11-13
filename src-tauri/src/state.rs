@@ -142,8 +142,11 @@ impl AppState {
                     && n >= z.leds_min()
                     && n <= z.leds_max()
                 {
-                    z.resize(n).await.map_err(ApiError::sdk)?;
-                    changed = true;
+                    // Best effort: one stubborn zone must not abort the whole startup.
+                    match z.resize(n).await {
+                        Ok(()) => changed = true,
+                        Err(e) => eprintln!("could not restore size {n} of {key}|{}: {e}", z.name()),
+                    }
                 }
             }
         }

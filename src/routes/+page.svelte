@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, hex, type Device, type Rgb } from "$lib/api";
+  import { api, hex, on, type Device, type Rgb } from "$lib/api";
   import { t, deviceLabel, getLocale } from "$lib/i18n/index.svelte";
   import { app, loadDevices, rescan } from "$lib/state.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
@@ -33,11 +33,16 @@
   onMount(() => {
     let off = () => {};
     start();
+    // A profile applied from the tray changes `current_profile` behind the UI's back.
+    const offScene = on<unknown>("scene-changed", () => loadProfiles());
     listenEngine(async () => {
       await loadDevices(api.listDevices);
       syncPositions(app.devices);
     }).then((f) => (off = f));
-    return () => off();
+    return () => {
+      off();
+      offScene.then((f) => f());
+    };
   });
 
   // Keep the tray menu in the UI language and in sync with the profile list.
