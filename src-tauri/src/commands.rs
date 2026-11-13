@@ -207,6 +207,12 @@ pub fn palette_reload(state: State<'_, AppState>) -> bool {
     state.engine.themes.reload()
 }
 
+/// The built-in automation templates (read-only; the UI makes a copy to edit).
+#[tauri::command]
+pub fn automation_templates() -> Vec<crate::templates::Template> {
+    crate::templates::templates()
+}
+
 /// What the system monitors can read on this machine (Settings).
 #[tauri::command]
 pub async fn sysmon_status() -> Res<crate::sysmon::Status> {
