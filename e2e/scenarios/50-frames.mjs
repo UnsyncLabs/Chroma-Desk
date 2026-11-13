@@ -50,6 +50,29 @@ export default async function (t, url) {
   await t.waitFor(async () => JSON.stringify(Object.keys((await t.previewAnim()).kind.frames[1].leds)) === '["name:Key: D"]', "reordered");
   await t.clickText(".frameBar button", "Move later"); // back: W, A, D
 
+  // Drag and drop on the timeline (synthetic HTML5 drag events: the browser cannot drag with the mouse headless).
+  await t.page.evaluate(() => {
+    const slots = [...document.querySelectorAll(".timeline .slot")];
+    const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true }));
+    fire(slots[0], "dragstart");
+    fire(slots[2], "dragover");
+    fire(slots[2], "drop");
+  });
+  await t.waitFor(async () => JSON.stringify(Object.keys((await t.previewAnim()).kind.frames[2].leds)) === '["name:Key: W"]', "frame 1 dropped last: A, D, W");
+  assert.deepEqual((await t.previewAnim()).kind.frames.map((f) => Object.keys(f.leds)[0]), ["name:Key: A", "name:Key: D", "name:Key: W"]);
+  await t.page.evaluate(() => {
+    const slots = [...document.querySelectorAll(".timeline .slot")];
+    const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true }));
+    fire(slots[2], "dragstart");
+    fire(slots[0], "drop");
+  });
+  await t.waitFor(async () => (await t.previewAnim()).kind.frames[0].leds["name:Key: W"], "back to W, A, D");
+  assert.deepEqual((await t.previewAnim()).kind.frames.map((f) => Object.keys(f.leds)[0]), ["name:Key: W", "name:Key: A", "name:Key: D"]);
+  // Reordering never loses a frame's duration (frame 3 is the one that gets 600 ms below).
+  await t.page.keyboard.press("ArrowRight");
+  await t.page.keyboard.press("ArrowRight");
+  assert.deepEqual(await slots(t), ["false", "false", "true"].map(String), "selection follows the drop");
+
   // Per-frame duration, duplicate and delete.
   await t.page.$eval(".frameBar input[type=number]", (e) => { e.value = "600"; e.dispatchEvent(new Event("change", { bubbles: true })); });
   await t.waitFor(async () => (await t.previewAnim()).kind.frames[2].duration_ms === 600, "duration stored");

@@ -1,4 +1,4 @@
-# HANDOFF (phases 4 and 5)
+# HANDOFF (phases 4 and 5 + animation system)
 
 ## Architecture
 - **Rust (`src-tauri/src`)**
@@ -40,3 +40,21 @@ npm run tauri build -- --no-bundle                           # release binary (v
 - `PKGBUILD` was only syntax-checked (`bash -n`); it builds from the checkout (`packaging/arch`). The release build itself was verified.
 - Vendored `openrgb2`: one doc comment added to satisfy `missing_docs`; keep docs on any further patches.
 - The OpenRGB server of the user was found not running mid-session (it died when the dev instance was stopped); it was restarted as `openrgb --server --startminimized` (no GUI window) before the hardware tests.
+
+## Animation system (blocks 1-5)
+- **Rust**
+  - `animations.rs`: `Animation` (kinds `effect` / `frames` / `path` / `palette`), portable `LedRef` (`name:Key: W` when the LED name is unique, else `idx:N`), resolution to the index-based effects `frames`/`path`/`palette` (in `engine/effects.rs`) cached per `(id, updated, device, LED count)`, JSON library in `~/.config/chroma-desk/animations` (atomic writes, corrupt files reported, unique names), 9 built-in presets shipped in the binary. `src/lib/mock/builtins.json` is a fixture kept in sync by a test (`UPDATE_FIXTURES=1 cargo test builtins_fixture`).
+  - Layer `animation` = `{anim_id, snapshot}`: the profile carries a copy of the animation; the UI offers "Update" when the library entry is newer.
+  - `engine/overlay.rs` + `triggers.rs` + `socket.rs`: overlays (priority, expiry, max 32, key masks), `chroma-desk trigger ...` CLI (talks to the running instance over the socket, never opens a window; deviates from the spec's single-instance forwarding because the socket is simpler and needs no Tauri runtime), 0600 Unix socket `$XDG_RUNTIME_DIR/chroma-desk.sock`, JSON lines <= 8 KiB, unknown fields rejected. Overlays only affect devices in Effects mode.
+  - Commands: `anim_list/get/save/delete/duplicate/import/export`, `anim_apply` (backend only; the UI applies animations through the scene store), `trigger`, `stop_triggers`, `trigger_socket_path`.
+  - `examples/anim_demo.rs` verifies frames/path/palette/overlay on the real keyboard by reading colours back (`engine`, `profile`, `readback`, `cleanup`). Run it with `XDG_CONFIG_HOME` pointing at a scratch dir.
+- **Frontend**: Lighting tab levels Quick / Draw (Paint, Frames, Path, Palette) / Layers; `Animations.svelte` library; `anim/render.ts` (TS renderer used by thumbnails, editor preview and the mock engine), `anim/draft.ts` (editor model <-> portable animation), `editorSession.svelte.ts` (live preview via `previewHook` in `scene.svelte.ts`, which rewrites a copy of the scene on its way to the engine; unsaved-changes guard via `leaveGuard`/`navigate`), first-run `Tour.svelte`, Triggers section in Settings.
+- **e2e**: `npm install --prefix e2e && npm run e2e` starts `MOCK=1 vite dev`, runs `e2e/scenarios/*.mjs` with real mouse/keyboard events in a fresh browser context each, writes screenshots to `e2e/screenshots/` (gitignored). The mock backend exposes `globalThis.__chromaMock` for assertions. HTML5 drag-and-drop of frames is tested with synthetic drag events only.
+
+### Verified on the real Huntsman V3 Pro TKL (colours read back from the server)
+Frames W -> A -> D looping, crossfade (W fades into A), path head advancing in stroke order, palette cells rotating in place, overlay via socket on WASD only and restored after expiry; real binary: socket mode 0600, `chroma-desk trigger` incl. errors/exit codes, README Python/socat examples; CPU ~1.1 % (debug build) with 2 overlays + a frames animation.
+
+### Open issues
+- Overlays ignore devices in hardware mode. Effect-kind presets cannot be edited in the Draw editors (use Layers).
+- Thumbnails of effect presets are approximations of the Rust effects.
+- A release `chroma-desk` started before this work may still be running with an old build; restart it to get the socket/triggers.

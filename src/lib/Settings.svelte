@@ -3,7 +3,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import { api, type ServerStatus } from "./api";
   import { t, deviceLabel, getLocale, setLocale, LANGUAGES } from "./i18n/index.svelte";
-  import { app, loadDevices, toast, toastError } from "./state.svelte";
+  import { app, copyText, loadDevices, tour, toast, toastError } from "./state.svelte";
   import { commit, sceneStore } from "./scene.svelte";
   import { profiles, saveSettings } from "./profiles.svelte";
 
@@ -11,6 +11,28 @@
   let server: ServerStatus | null = $state(null);
   let version = $state("");
   let defaults: Record<string, number> = $state({});
+  let socket: string | null = $state(null);
+
+  const CLI_EXAMPLE = 'chroma-desk trigger "Alert" --keys W,A,S,D --duration 2s';
+  const sockPath = $derived(socket ?? "$XDG_RUNTIME_DIR/chroma-desk.sock");
+  const SOCKET_EXAMPLE = $derived(`echo '{"animation":"Alert","keys":["W","A","S","D"],"duration":"2s"}' | socat - UNIX-CONNECT:${sockPath}`);
+
+  async function testAlert() {
+    try {
+      const r = await api.trigger({ animation: "Alert", keys: ["W", "A", "S", "D"], duration: 2 });
+      toast(t("anim.tested", { n: r.devices }), "ok", 2500);
+    } catch (e) {
+      toastError(e);
+    }
+  }
+  async function stopAll() {
+    try {
+      const n = await api.stopTriggers();
+      toast(t("trg.stopped", { n }), "ok", 2500);
+    } catch (e) {
+      toastError(e);
+    }
+  }
 
   const types = $derived([...new Set(app.devices.map((d) => d.device_type))]);
 
@@ -18,6 +40,7 @@
     api.getAutostart().then((v) => (autostart = v)).catch(() => {});
     api.serverStatus().then((s) => (server = s)).catch(() => {});
     getVersion().then((v) => (version = v)).catch(() => {});
+    api.triggerSocketPath().then((p) => (socket = p)).catch(() => {});
   }
 
   $effect(() => {
@@ -125,8 +148,27 @@
 </section>
 
 <section>
+  <h3>{t("trg.title")}</h3>
+  <p class="muted small">{t("trg.hint")}</p>
+  <h4>{t("trg.cli")}</h4>
+  <div class="cmd"><code>{CLI_EXAMPLE}</code><button onclick={() => copyText(CLI_EXAMPLE, t("trg.copied"))}>{t("trg.copy")}</button></div>
+  <h4>{t("trg.socket")}</h4>
+  <div class="cmd"><code>{SOCKET_EXAMPLE}</code><button onclick={() => copyText(SOCKET_EXAMPLE, t("trg.copied"))}>{t("trg.copy")}</button></div>
+  <p class="muted small">{t("trg.socketHint")}</p>
+  <div class="row">
+    <button onclick={testAlert}>{t("trg.test")}</button>
+    <button onclick={stopAll}>{t("trg.stop")}</button>
+  </div>
+</section>
+
+<section>
   <h3>{t("set.folder")}</h3>
   <code>{profiles.path}</code>
+</section>
+
+<section>
+  <h3>{t("tour.settings")}</h3>
+  <button onclick={() => (tour.open = true)}>{t("tour.replay")}</button>
 </section>
 
 <section>
@@ -142,4 +184,8 @@
   .fps label { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
   .fps input { width: 5rem; }
   .warn { color: var(--danger); }
+  h4 { margin: 0.8rem 0 0.3rem; font-size: 0.92rem; }
+  .cmd { display: flex; gap: 0.5rem; align-items: flex-start; }
+  .cmd code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.82rem; }
+  .row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
 </style>

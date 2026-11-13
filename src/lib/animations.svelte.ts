@@ -1,7 +1,7 @@
 /** Animation library store and the actions shared by the library page, Quick and the editors. */
 import { api, type Animation, type Device } from "./api";
 import { buildLayout } from "./layout/buildLayout";
-import { app, toast, toastError } from "./state.svelte";
+import { app, copyText, toast, toastError } from "./state.svelte";
 import { commit, ensureDev, newLayer } from "./scene.svelte";
 import { t } from "./i18n/index.svelte";
 
@@ -67,10 +67,5 @@ export function triggerCommand(a: Animation): string {
 
 export async function copyTriggerCommand(a: Animation) {
   const cmd = triggerCommand(a);
-  try {
-    await navigator.clipboard.writeText(cmd);
-    toast(t("anim.copied", { cmd }), "ok");
-  } catch {
-    toast(cmd, "info", 9000);
-  }
+  await copyText(cmd, t("anim.copied", { cmd }));
 }

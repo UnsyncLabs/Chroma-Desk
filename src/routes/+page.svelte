@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { api, hex, on, type Device, type Rgb } from "$lib/api";
   import { t, deviceLabel, getLocale } from "$lib/i18n/index.svelte";
-  import { app, loadDevices, navigate, rescan } from "$lib/state.svelte";
+  import { app, loadDevices, maybeStartTour, navigate, rescan } from "$lib/state.svelte";
   import { loadAnimations } from "$lib/animations.svelte";
   import Animations from "$lib/Animations.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
@@ -13,6 +13,7 @@
   import Settings from "$lib/Settings.svelte";
   import Toasts from "$lib/Toasts.svelte";
   import Confirm from "$lib/Confirm.svelte";
+  import Tour from "$lib/Tour.svelte";
 
   let guiOpen = $state(false);
 
@@ -27,6 +28,7 @@
     await loadEngine();
     syncPositions(app.devices);
     api.serverStatus().then((s) => (guiOpen = s.gui_open)).catch(() => {});
+    maybeStartTour();
     // Dev aid (screenshots): `#d=<index>` opens that device.
     const m = import.meta.env.DEV ? location.hash.match(/^#d=(\d+)/) : null;
     if (import.meta.env.DEV && location.hash === "#profiles") app.view = { kind: "profiles" };
@@ -164,6 +166,7 @@
 
 <Toasts />
 <Confirm />
+<Tour />
 
 <style>
   .app { display: grid; grid-template-columns: 17rem minmax(0, 1fr); height: 100vh; }

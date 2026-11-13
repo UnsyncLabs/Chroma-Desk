@@ -56,7 +56,9 @@ try {
   const browser = await puppeteer.launch({ executablePath: CHROMIUM, headless: true, args: ["--no-sandbox"] });
   for (const f of files) {
     const mod = await import(join(here, "scenarios", f));
-    const page = await browser.newPage();
+    // A fresh browser context per scenario: no shared localStorage, cookies or mock state.
+    const ctx = await browser.createBrowserContext();
+    const page = await ctx.newPage();
     await page.setViewport({ width: 1200, height: 800 });
     const t = new T(page, shotDir);
     const t0 = Date.now();
@@ -71,7 +73,7 @@ try {
       if (t.errors.length) console.log("  browser errors:\n  " + t.errors.join("\n  "));
       await page.screenshot({ path: join(shotDir, `FAIL-${f}.png`) }).catch(() => {});
     }
-    await page.close();
+    await ctx.close();
   }
   await browser.close();
 } finally {

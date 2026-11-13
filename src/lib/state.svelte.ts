@@ -91,3 +91,35 @@ export function confirmDialog(text: string, confirmLabel = ""): Promise<boolean>
     confirmState.open = true;
   });
 }
+
+// ---------- first-run tour ----------
+const TOUR_KEY = "chroma-desk.tour";
+export const tour = $state({ open: false });
+
+/** Opens the 3-step tour the first time the app runs (and never again once finished or skipped). */
+export function maybeStartTour() {
+  try {
+    if (localStorage.getItem(TOUR_KEY) !== "done") tour.open = true;
+  } catch {
+    /* storage unavailable: skip the tour */
+  }
+}
+
+export function finishTour() {
+  tour.open = false;
+  try {
+    localStorage.setItem(TOUR_KEY, "done");
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Copies text to the clipboard and tells the user (falls back to showing it). */
+export async function copyText(text: string, doneMessage: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(doneMessage, "ok", 2500);
+  } catch {
+    toast(text, "info", 9000);
+  }
+}

@@ -70,4 +70,15 @@ export default async function (t, url) {
   assert.notEqual(picked, "#ff00ff");
   assert.match(picked, /^#[0-9a-f]{6}$/);
   assert.notEqual(picked, "#1b1b24", "it is the animated frame colour, not the empty-cell grey");
+
+  // --- save the painting as an animation (a one-frame flipbook referring to keys by name).
+  await t.page.$eval('.save input[placeholder^="e.g."]', (e) => { e.value = "My painting"; e.dispatchEvent(new Event("input", { bubbles: true })); });
+  await t.clickText(".save button", "^Save as animation$");
+  await t.waitFor(async () => (await t.mockState("animations")).length === 1, "painting saved");
+  const saved = (await t.mockState("animations"))[0];
+  assert.equal(saved.name, "My painting");
+  assert.equal(saved.kind.type, "frames");
+  assert.equal(saved.kind.frames.length, 1);
+  assert.equal(saved.kind.frames[0].leds["name:Key: W"].join(), "255,0,255", "W was painted magenta");
+  assert.ok(Object.keys(saved.kind.frames[0].leds).every((k) => k.startsWith("name:") || k.startsWith("idx:")));
 }
