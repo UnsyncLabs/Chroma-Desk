@@ -207,9 +207,13 @@ pub async fn run(emit: Emit, state: AppState) {
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut r = Runner::default();
     let mut palette_epoch = state.engine.themes.epoch();
+    let mut automations = crate::automations::Scheduler::default();
+    let anim_dir = crate::animations::animations_dir();
     loop {
         tick.tick().await;
         let now = Instant::now();
+        // Always-on, every-N-seconds and threshold automations (does nothing when there are none).
+        automations.tick(&state.engine, &anim_dir, now);
         let epoch = state.engine.themes.epoch();
         if epoch != palette_epoch {
             palette_epoch = epoch;

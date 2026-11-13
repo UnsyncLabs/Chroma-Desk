@@ -62,9 +62,16 @@ impl Overlays {
         v
     }
 
-    /// Removes the overlays whose animation id starts with `prefix` (replace-on-refire).
-    pub fn remove_prefix(&mut self, prefix: &str) {
+    /// Removes the overlays whose animation id starts with `prefix` (replace-on-refire); returns how many.
+    pub fn remove_prefix(&mut self, prefix: &str) -> usize {
+        let before = self.list.len();
         self.list.retain(|o| !o.anim.id.starts_with(prefix));
+        before - self.list.len()
+    }
+
+    /// Whether an overlay of `prefix` is still showing at `now`.
+    pub fn any_prefix(&self, prefix: &str, now: Instant) -> bool {
+        self.list.iter().any(|o| o.until > now && o.anim.id.starts_with(prefix))
     }
 
     /// Removes everything; returns how many were active.

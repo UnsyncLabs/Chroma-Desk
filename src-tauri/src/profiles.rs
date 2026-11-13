@@ -46,6 +46,56 @@ pub struct DesktopMatch {
     pub contains: String,
 }
 
+/// An AI assistant asking for attention (`chroma-desk event ai:attention --from claude --kind permission`).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct AiMatch {
+    /// Tool name (`claude`, `codex`...); empty = any.
+    #[serde(default)]
+    pub from: String,
+    /// `permission`, `idle` or anything the tool sends; empty = any.
+    #[serde(default)]
+    pub kind: String,
+}
+
+/// Plays every `every_secs` seconds, for `for_secs` seconds each time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Every {
+    pub every_secs: f64,
+    #[serde(default = "default_for_secs")]
+    pub for_secs: f64,
+}
+
+fn default_for_secs() -> f64 {
+    5.0
+}
+
+/// Fires when `metric` is above (`gt`) or below (`lt`) `value` for `for_secs`; after firing it
+/// needs the reading to go back past `hysteresis` and `cooldown_secs` to pass before firing again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Threshold {
+    pub metric: String,
+    /// `gt` or `lt`.
+    #[serde(default = "default_op")]
+    pub op: String,
+    pub value: f32,
+    #[serde(default)]
+    pub for_secs: f32,
+    #[serde(default = "default_hysteresis")]
+    pub hysteresis: f32,
+    #[serde(default = "default_cooldown")]
+    pub cooldown_secs: f32,
+}
+
+fn default_op() -> String {
+    "gt".into()
+}
+fn default_hysteresis() -> f32 {
+    2.0
+}
+fn default_cooldown() -> f32 {
+    60.0
+}
+
 /// What can fire a notification besides the command line / socket (which always can).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Sources {
@@ -54,11 +104,21 @@ pub struct Sources {
     /// Omarchy events: `omarchy:battery-low`, `omarchy:theme-set`, `omarchy:post-update`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub omarchy: Vec<String>,
+    /// An AI assistant needs attention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai: Option<AiMatch>,
+    /// Always on: plays in a loop over the scene while the automation is enabled.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub always: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub every: Option<Every>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold: Option<Threshold>,
 }
 
 impl Sources {
     pub fn is_empty(&self) -> bool {
-        self.desktop.is_none() && self.omarchy.is_empty()
+        self.desktop.is_none() && self.omarchy.is_empty() && self.ai.is_none() && !self.always && self.every.is_none() && self.threshold.is_none()
     }
 }
 
@@ -69,8 +129,12 @@ pub const OMARCHY_EVENTS: [&str; 3] = ["omarchy:battery-low", "omarchy:theme-set
 /// looks different under another theme.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NamedTrigger {
-    /// Animation id or name.
+    /// Animation id or name (may be empty when `sequence` is given).
+    #[serde(default)]
     pub anim: String,
+    /// A sequence stored in the automation itself (monitors, chat notifications); wins over `anim`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<Box<crate::animations::Animation>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keys: Vec<String>,
     /// `@slot` or `#rrggbb`.
@@ -110,7 +174,7 @@ fn is_zero(n: &i32) -> bool {
 impl NamedTrigger {
     /// A notification with just an animation (everything else default).
     pub fn new(anim: &str) -> NamedTrigger {
-        NamedTrigger { anim: anim.into(), keys: vec![], color: None, duration: None, device: None, enabled: true, devices: vec![], repeat: None, speed: None, priority: 0, replace: false, sources: Sources::default() }
+        NamedTrigger { anim: anim.into(), sequence: None, keys: vec![], color: None, duration: None, device: None, enabled: true, devices: vec![], repeat: None, speed: None, priority: 0, replace: false, sources: Sources::default() }
     }
 }
 
@@ -192,7 +256,8 @@ pub fn validate_triggers(triggers: &BTreeMap<String, NamedTrigger>) -> Res<()> {
             if !valid_trigger_name(n) {
                 return Err(ApiError::new("profile_invalid", format!("bad trigger name {n:?}")));
             }
-            if t.anim.trim().is_empty()
+            if (t.anim.trim().is_empty() && t.sequence.is_none())
+                || t.sequence.as_ref().is_some_and(|a| crate::animations::validate(a).is_err())
                 || t.anim.chars().count() > 128
                 || t.keys.len() > 64
                 || t.color.as_deref().is_some_and(|c| Color::parse(c).is_none())
@@ -203,6 +268,19 @@ pub fn validate_triggers(triggers: &BTreeMap<String, NamedTrigger>) -> Res<()> {
                 || t.speed.is_some_and(|v| !v.is_finite() || !(0.1..=10.0).contains(&v))
                 || !(-1000..=1000).contains(&t.priority)
                 || t.sources.omarchy.iter().any(|e| !OMARCHY_EVENTS.contains(&e.as_str()))
+                || t.sources.ai.as_ref().is_some_and(|a| a.from.chars().count() > 32 || a.kind.chars().count() > 32)
+                || t.sources.every.as_ref().is_some_and(|e| !e.every_secs.is_finite() || !(1.0..=86_400.0).contains(&e.every_secs) || !e.for_secs.is_finite() || !(0.05..=3600.0).contains(&e.for_secs))
+                || t.sources.threshold.as_ref().is_some_and(|h| {
+                    crate::sysmon::Metric::parse(&h.metric).is_none()
+                        || !["gt", "lt"].contains(&h.op.as_str())
+                        || !h.value.is_finite()
+                        || !h.for_secs.is_finite()
+                        || !(0.0..=3600.0).contains(&h.for_secs)
+                        || !h.hysteresis.is_finite()
+                        || !(0.0..=100.0).contains(&h.hysteresis)
+                        || !h.cooldown_secs.is_finite()
+                        || !(0.0..=86_400.0).contains(&h.cooldown_secs)
+                })
                 || t.sources.desktop.as_ref().is_some_and(|d| d.app.chars().count() > 64 || d.contains.chars().count() > 128 || d.urgency.as_deref().is_some_and(|u| !["low", "normal", "critical"].contains(&u)))
             {
                 return Err(ApiError::new("profile_invalid", format!("bad trigger {n:?}")));

@@ -1,4 +1,5 @@
 pub mod animations;
+pub mod automations;
 pub mod apply;
 pub mod builtin;
 pub mod cli;

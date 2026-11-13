@@ -24,16 +24,47 @@ pub enum ControlCmd {
     Profile(String),
     /// `chroma-desk event omarchy:battery-low` (what the Omarchy hooks call).
     Event(String),
+    /// `chroma-desk event ai:attention [--from claude] [--kind permission]` / `ai:clear`.
+    Ai { event: String, from: String, kind: String },
 }
 
-pub const CONTROL_USAGE: &str = "usage: chroma-desk palette show|reload|clear\n       chroma-desk palette set <slot>=<#hex> [<slot>=<#hex> ...]\n       chroma-desk palette source manual|omarchy|kde|pywal|gtk|external\n       chroma-desk profile <name>\n       chroma-desk event omarchy:battery-low|omarchy:theme-set|omarchy:post-update";
+pub const CONTROL_USAGE: &str = "usage: chroma-desk palette show|reload|clear\n       chroma-desk palette set <slot>=<#hex> [<slot>=<#hex> ...]\n       chroma-desk palette source manual|omarchy|kde|pywal|gtk|external\n       chroma-desk profile <name>\n       chroma-desk event omarchy:battery-low|omarchy:theme-set|omarchy:post-update\n       chroma-desk event ai:attention [--from <tool>] [--kind permission|idle]\n       chroma-desk event ai:clear";
+
+/// `ai:attention --from claude --kind permission` (flags also as `--from=claude`).
+fn parse_ai(event: &str, rest: &[String]) -> Result<ControlCmd, String> {
+    if event != "ai:attention" && event != "ai:clear" {
+        return Err(format!("unknown event {event:?} (ai:attention or ai:clear)"));
+    }
+    let (mut from, mut kind) = (String::new(), String::new());
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        let (flag, inline) = match a.split_once('=') {
+            Some((f, v)) => (f, Some(v.to_string())),
+            None => (a.as_str(), None),
+        };
+        let slot = match flag {
+            "--from" => &mut from,
+            "--kind" => &mut kind,
+            _ => return Err(format!("unexpected argument {a:?} (use --from <tool> and --kind <kind>)")),
+        };
+        let v = inline.or_else(|| it.next().cloned()).ok_or_else(|| format!("{flag} needs a value"))?;
+        if v.trim().is_empty() || v.chars().count() > 32 {
+            return Err(format!("{flag} must be 1 to 32 characters"));
+        }
+        *slot = v.trim().to_string();
+    }
+    Ok(ControlCmd::Ai { event: event.into(), from, kind })
+}
 
 /// Parses the arguments after `palette` or `profile`.
 pub fn parse_control(kind: &str, args: Vec<String>) -> Result<ControlCmd, String> {
     if kind == "event" {
+        if let Some(e) = args.first().filter(|e| e.starts_with("ai:")) {
+            return parse_ai(e, &args[1..]);
+        }
         return match args.as_slice() {
             [e] if crate::profiles::OMARCHY_EVENTS.contains(&e.as_str()) => Ok(ControlCmd::Event(e.clone())),
-            _ => Err("event needs one of omarchy:battery-low, omarchy:theme-set, omarchy:post-update".into()),
+            _ => Err("event needs one of omarchy:battery-low, omarchy:theme-set, omarchy:post-update, ai:attention, ai:clear".into()),
         };
     }
     if kind == "profile" {
@@ -88,6 +119,16 @@ pub fn run_control(cmd: &Result<ControlCmd, String>) -> i32 {
         ControlCmd::PaletteSource(s) => serde_json::json!({ "cmd": "palette_source", "source": s }),
         ControlCmd::Profile(n) => serde_json::json!({ "cmd": "set_profile", "name": n }),
         ControlCmd::Event(e) => serde_json::json!({ "cmd": "event", "event": e }),
+        ControlCmd::Ai { event, from, kind } => {
+            let mut v = serde_json::json!({ "cmd": "event", "event": event });
+            if !from.is_empty() {
+                v["from"] = from.clone().into();
+            }
+            if !kind.is_empty() {
+                v["kind"] = kind.clone().into();
+            }
+            v
+        }
     };
     send_line(&line.to_string())
 }
@@ -316,6 +357,15 @@ mod tests {
         assert_eq!(m["alert"], [0, 255, 0]);
         assert_eq!(ctl(&["event", "omarchy:battery-low"]), Ok(ControlCmd::Event("omarchy:battery-low".into())));
         assert!(ctl(&["event", "nope"]).is_err() && ctl(&["event"]).is_err());
+        assert_eq!(ctl(&["event", "ai:attention"]), Ok(ControlCmd::Ai { event: "ai:attention".into(), from: "".into(), kind: "".into() }));
+        assert_eq!(
+            ctl(&["event", "ai:attention", "--from", "claude", "--kind=permission"]),
+            Ok(ControlCmd::Ai { event: "ai:attention".into(), from: "claude".into(), kind: "permission".into() })
+        );
+        assert!(matches!(ctl(&["event", "ai:clear"]), Ok(ControlCmd::Ai { .. })));
+        for bad in [&["event", "ai:nope"][..], &["event", "ai:attention", "--from"], &["event", "ai:attention", "--bogus", "x"], &["event", "ai:attention", "extra"], &["event", "ai:attention", "--from", ""]] {
+            assert!(ctl(bad).is_err(), "{bad:?}");
+        }
         assert_eq!(ctl(&["profile", "Cyber", "punk"]), Ok(ControlCmd::Profile("Cyber punk".into())));
         for bad in [&["palette", "set"][..], &["palette", "set", "nope=#fff"], &["palette", "set", "accent=red"], &["palette", "set", "accent"], &["palette", "source", "x"], &["palette", "wat"], &["profile"]] {
             assert!(ctl(bad).is_err(), "{bad:?}");

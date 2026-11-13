@@ -4,7 +4,7 @@ use crate::animations::{self, Animation};
 use crate::engine::overlay::{self, Overlay};
 use crate::engine::{Engine, SceneMode};
 use crate::error::{ApiError, Res};
-use crate::profiles::{DesktopMatch, NamedTrigger};
+use crate::profiles::{AiMatch, DesktopMatch, NamedTrigger};
 use crate::themes::{self, Color, ThemeSource};
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
@@ -139,6 +139,8 @@ pub fn effective_secs(spec: &TriggerSpec, anim: &Animation) -> Res<f64> {
         (Some(a), Some(b)) => a.min(b),
         (Some(a), None) => a,
         (None, Some(b)) => b,
+        // A sequence has a length of its own: play it once.
+        (None, None) if matches!(anim.kind, animations::AnimKind::Sequence { .. }) => (animations::cycle_secs(anim) as f64).clamp(0.05, MAX_SECS),
         (None, None) => DEFAULT_SECS,
     })
 }
@@ -162,9 +164,14 @@ pub fn merged(n: &NamedTrigger, spec: &TriggerSpec) -> TriggerSpec {
 /// Starts a trigger. When `spec.animation` names a notification (of the active profile or a
 /// global one) the notification decides the animation, devices, keys, colour and duration.
 pub fn start(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant) -> Res<TriggerResult> {
+    start_with(engine, dir, spec, now, None)
+}
+
+/// Like [`start`], playing for exactly `secs` seconds when given (the scheduler's `Every` and `Always`).
+pub fn start_with(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant, secs: Option<f64>) -> Res<TriggerResult> {
     spec.validate()?;
     let name = spec.animation.trim();
-    let Some(n) = engine.notification(name) else { return start_one(engine, dir, spec, now, None) };
+    let Some(n) = engine.notification(name) else { return start_one(engine, dir, spec, now, None, None, secs) };
     if !n.enabled {
         return Err(ApiError::new("notification_disabled", name));
     }
@@ -180,7 +187,7 @@ pub fn start(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant) -> R
     let mut total = TriggerResult { overlay: 0, devices: 0, duration: 0.0 };
     let mut last_err = None;
     for t in targets {
-        match start_one(engine, dir, &TriggerSpec { device: t, ..base.clone() }, now, Some(name)) {
+        match start_one(engine, dir, &TriggerSpec { device: t, ..base.clone() }, now, Some(name), n.sequence.as_deref(), secs) {
             Ok(r) => {
                 total.overlay = r.overlay;
                 total.devices += r.devices;
@@ -230,18 +237,51 @@ pub fn fire_event(engine: &Engine, dir: &Path, event: &str, now: Instant) -> usi
     fire_all(engine, dir, hits, now)
 }
 
+/// Fires every enabled notification whose AI rule matches `from` / `kind`; returns how many fired.
+pub fn fire_ai(engine: &Engine, dir: &Path, from: &str, kind: &str, now: Instant) -> usize {
+    let hits: Vec<String> = engine.notifications().into_iter().filter(|(_, n)| n.enabled && n.sources.ai.as_ref().is_some_and(|m| ai_matches(m, from, kind))).map(|(k, _)| k).collect();
+    fire_all(engine, dir, hits, now)
+}
+
+/// Whether an AI rule selects an event from `from` of `kind` (empty fields match anything).
+pub fn ai_matches(m: &AiMatch, from: &str, kind: &str) -> bool {
+    let same = |rule: &str, got: &str| rule.trim().is_empty() || rule.trim().eq_ignore_ascii_case(got.trim());
+    same(&m.from, from) && same(&m.kind, kind)
+}
+
+/// Stops what AI automations are showing (the assistant went on working); returns how many overlays ended.
+pub fn clear_ai(engine: &Engine) -> usize {
+    let names: Vec<String> = engine.notifications().into_iter().filter(|(_, n)| n.sources.ai.is_some()).map(|(k, _)| k).collect();
+    let mut overlays = engine.overlays.lock().unwrap();
+    names.iter().map(|n| overlays.remove_prefix(&format!("notif:{n}#"))).sum()
+}
+
 fn fire_all(engine: &Engine, dir: &Path, names: Vec<String>, now: Instant) -> usize {
     names.iter().filter(|n| start(engine, dir, &TriggerSpec { animation: (*n).clone(), ..Default::default() }, now).is_ok()).count()
 }
 
 /// Starts one overlay on the devices that match `spec`. `tag` is the notification name (for `replace`).
-fn start_one(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant, tag: Option<&str>) -> Res<TriggerResult> {
-    spec.validate()?;
-    let mut anim = animations::lookup(dir, &spec.animation)?;
+fn start_one(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant, tag: Option<&str>, inline: Option<&Animation>, secs: Option<f64>) -> Res<TriggerResult> {
+    if inline.is_none() {
+        spec.validate()?;
+    }
+    let mut anim = match inline {
+        Some(a) => a.clone(),
+        None => animations::lookup(dir, &spec.animation)?,
+    };
+    if secs.is_some()
+        && let animations::AnimKind::Sequence { looped, .. } = &mut anim.kind
+    {
+        // Timed runs (always on, every N seconds) repeat the sequence until their time is up.
+        *looped = true;
+    }
     if let Some(k) = spec.speed {
         anim = animations::with_speed(&anim, k);
     }
-    let secs = effective_secs(spec, &anim)?;
+    let secs = match secs {
+        Some(s) => s.clamp(0.05, MAX_SECS),
+        None => effective_secs(spec, &anim)?,
+    };
     let keys: Vec<String> = spec.keys.iter().map(|k| k.trim().to_string()).collect();
     let device = spec.device.as_deref().map(str::trim).filter(|d| !d.is_empty()).map(str::to_string);
 
@@ -329,10 +369,22 @@ pub fn handle_line(engine: &Engine, dir: &Path, line: &str, now: Instant) -> Val
     match cmd.as_str() {
         "ping" => json!({ "ok": true }),
         "stop" => json!({ "ok": true, "stopped": stop_all(engine) }),
-        "event" => match obj.get("event").and_then(Value::as_str) {
-            Some(e) if crate::profiles::OMARCHY_EVENTS.contains(&e) => json!({ "ok": true, "fired": fire_event(engine, dir, e, now) }),
-            _ => json!({ "ok": false, "error": "bad_request", "detail": "event must be omarchy:battery-low, omarchy:theme-set or omarchy:post-update" }),
-        },
+        "event" => {
+            let text = |k: &str| match obj.get(k) {
+                None => Some(String::new()),
+                Some(Value::String(s)) if s.chars().count() <= 32 => Some(s.trim().to_string()),
+                _ => None,
+            };
+            match obj.get("event").and_then(Value::as_str) {
+                Some(e) if crate::profiles::OMARCHY_EVENTS.contains(&e) => json!({ "ok": true, "fired": fire_event(engine, dir, e, now) }),
+                Some("ai:attention") => match (text("from"), text("kind")) {
+                    (Some(from), Some(kind)) => json!({ "ok": true, "fired": fire_ai(engine, dir, &from, &kind, now) }),
+                    _ => json!({ "ok": false, "error": "bad_request", "detail": "from and kind must be short strings" }),
+                },
+                Some("ai:clear") => json!({ "ok": true, "stopped": clear_ai(engine) }),
+                _ => json!({ "ok": false, "error": "bad_request", "detail": "event must be omarchy:battery-low, omarchy:theme-set, omarchy:post-update, ai:attention or ai:clear" }),
+            }
+        }
         "palette" => json!({ "ok": true, "palette": engine.themes.event() }),
         "palette_reload" => json!({ "ok": true, "changed": engine.themes.reload(), "palette": engine.themes.event() }),
         "clear_palette" => json!({ "ok": true, "changed": engine.themes.clear_external() }),
@@ -623,7 +675,7 @@ mod tests {
         let e = engine(SceneMode::Effects);
         let d = lib();
         let mut disc = NamedTrigger::new("Alerta");
-        disc.sources = Sources { desktop: Some(DesktopMatch { app: "disc".into(), urgency: None, contains: "message".into() }), omarchy: vec![] };
+        disc.sources = Sources { ai: None, always: false, every: None, threshold: None, desktop: Some(DesktopMatch { app: "disc".into(), urgency: None, contains: "message".into() }), omarchy: vec![] };
         let mut crit = NamedTrigger::new("Alerta");
         crit.sources.desktop = Some(DesktopMatch { app: String::new(), urgency: Some("critical".into()), contains: String::new() });
         let mut bat = NamedTrigger::new("Alerta");
@@ -646,5 +698,100 @@ mod tests {
         let r = handle_line(&e, &d, r#"{"cmd":"event","event":"omarchy:battery-low"}"#, now);
         assert_eq!((r["ok"].as_bool(), r["fired"].as_u64()), (Some(true), Some(1)));
         assert_eq!(handle_line(&e, &d, r#"{"cmd":"event","event":"bogus"}"#, now)["ok"], false);
+    }
+
+    fn inline_seq(secs: u32) -> Animation {
+        use crate::animations::{AnimKind, Step};
+        Animation {
+            schema_version: 1,
+            id: String::new(),
+            name: "inline".into(),
+            description: None,
+            tags: vec![],
+            created: 0,
+            updated: 0,
+            target: crate::animations::Target::default(),
+            builtin: false,
+            kind: AnimKind::Sequence { steps: vec![Step { effect: "blink".into(), params: crate::engine::effects::params(json!({"color": [0, 0, 255]})), keys: vec!["name:Key: W".into()], duration_ms: secs * 1000, anim: None }], looped: false },
+        }
+    }
+
+    #[test]
+    fn inline_sequence_notifications_play_for_their_own_length() {
+        let e = engine(SceneMode::Effects);
+        let dir = lib();
+        let mut n = NamedTrigger::new("");
+        n.sequence = Some(Box::new(inline_seq(2)));
+        e.global_triggers.lock().unwrap().insert("chat".into(), n);
+        let t0 = Instant::now();
+        let r = start(&e, &dir, &TriggerSpec { animation: "chat".into(), ..Default::default() }, t0).unwrap();
+        assert_eq!((r.devices, r.duration), (1, 2.0));
+        // An explicit duration still wins.
+        let r = start(&e, &dir, &TriggerSpec { animation: "chat".into(), duration: Some(DurationSpec::Secs(1.0)), ..Default::default() }, t0).unwrap();
+        assert_eq!(r.duration, 1.0);
+        assert_eq!(e.overlays.lock().unwrap().active(t0).len(), 2);
+    }
+
+    #[test]
+    fn ai_events_fire_matching_automations_and_clear_ends_them() {
+        let e = engine(SceneMode::Effects);
+        let dir = lib();
+        let mut any = NamedTrigger::new("Alerta");
+        any.sources.ai = Some(AiMatch::default());
+        let mut claude = NamedTrigger::new("Alerta");
+        claude.sources.ai = Some(AiMatch { from: "Claude".into(), kind: "permission".into() });
+        let mut off = NamedTrigger::new("Alerta");
+        off.enabled = false;
+        off.sources.ai = Some(AiMatch::default());
+        for (k, n) in [("any", any), ("claude", claude), ("off", off)] {
+            e.global_triggers.lock().unwrap().insert(k.into(), n);
+        }
+        let now = Instant::now();
+        assert_eq!(fire_ai(&e, &dir, "claude", "permission", now), 2);
+        assert_eq!(fire_ai(&e, &dir, "codex", "idle", now), 1, "only the open rule");
+        assert_eq!(fire_ai(&e, &dir, "claude", "", now), 1, "kind missing does not match a rule that wants permission");
+        let r = handle_line(&e, &dir, r#"{"cmd":"event","event":"ai:attention","from":"claude","kind":"permission"}"#, now);
+        assert_eq!((r["ok"].as_bool(), r["fired"].as_u64()), (Some(true), Some(2)));
+        for bad in [r#"{"cmd":"event","event":"ai:attention","from":5}"#, r#"{"cmd":"event","event":"ai:nope"}"#] {
+            assert_eq!(handle_line(&e, &dir, bad, now)["ok"], false, "{bad}");
+        }
+        let long = format!(r#"{{"cmd":"event","event":"ai:attention","from":"{}"}}"#, "x".repeat(40));
+        assert_eq!(handle_line(&e, &dir, &long, now)["ok"], false);
+        assert!(!e.overlays.lock().unwrap().is_empty());
+        let r = handle_line(&e, &dir, r#"{"cmd":"event","event":"ai:clear"}"#, now);
+        assert!(r["stopped"].as_u64().unwrap() >= 4);
+        assert_eq!(e.overlays.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn old_notification_json_loads_unchanged_and_new_triggers_round_trip() {
+        let old = r#"{"anim":"builtin:flash","color":"@info","duration":1.5,"sources":{"desktop":{"app":"discord"},"omarchy":["omarchy:battery-low"]}}"#;
+        let n: NamedTrigger = serde_json::from_str(old).unwrap();
+        assert!(n.sequence.is_none() && !n.sources.always && n.sources.ai.is_none());
+        assert_eq!(serde_json::to_string(&n).unwrap(), serde_json::to_string(&serde_json::from_str::<NamedTrigger>(old).unwrap()).unwrap());
+        assert!(!serde_json::to_string(&n).unwrap().contains("always"));
+        let new = r#"{"sequence":null,"anim":"x","sources":{"always":true,"every":{"every_secs":60},"threshold":{"metric":"cpu.temp","value":80},"ai":{}}}"#;
+        let n: NamedTrigger = serde_json::from_str(new).unwrap();
+        let th = n.sources.threshold.clone().unwrap();
+        assert_eq!((th.op.as_str(), th.hysteresis, th.cooldown_secs), ("gt", 2.0, 60.0));
+        assert_eq!(n.sources.every.clone().unwrap().for_secs, 5.0);
+        let back: NamedTrigger = serde_json::from_str(&serde_json::to_string(&n).unwrap()).unwrap();
+        assert_eq!(back, n);
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("ok".to_string(), n.clone());
+        crate::profiles::validate_triggers(&map).unwrap();
+        for tweak in [
+            |n: &mut NamedTrigger| n.sources.threshold.as_mut().unwrap().metric = "nope".into(),
+            |n: &mut NamedTrigger| n.sources.threshold.as_mut().unwrap().op = "eq".into(),
+            |n: &mut NamedTrigger| n.sources.every.as_mut().unwrap().every_secs = 0.1,
+            |n: &mut NamedTrigger| n.sources.ai.as_mut().unwrap().from = "x".repeat(40),
+            |n: &mut NamedTrigger| n.anim = String::new(),
+        ] {
+            let mut bad = n.clone();
+            tweak(&mut bad);
+            let mut m = std::collections::BTreeMap::new();
+            m.insert("bad".to_string(), bad);
+            assert!(crate::profiles::validate_triggers(&m).is_err());
+        }
     }
 }

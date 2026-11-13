@@ -26,6 +26,7 @@ pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_FRAMES: usize = 256;
 pub const MAX_LEDS: usize = 4096;
 pub const MAX_STOPS: usize = 32;
+pub const MAX_STEPS: usize = 64;
 const MAX_TAGS: usize = 16;
 
 pub type Rgb3 = [u8; 3];
@@ -105,6 +106,24 @@ fn d_tail() -> f32 {
     0.6
 }
 
+/// One step of a [`AnimKind::Sequence`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Step {
+    /// `meter`, `blink`, `orbit`, `hold` (nothing), `animation` (a library animation) or any
+    /// other effect id (`solid`, `strobe`...).
+    pub effect: String,
+    #[serde(default)]
+    pub params: Params,
+    /// Ordered `LedRef`s: the path of `meter` / `blink` / `orbit`, the LEDs the other effects are
+    /// limited to. Empty = the whole device (a meter needs keys).
+    #[serde(default)]
+    pub keys: Vec<String>,
+    pub duration_ms: u32,
+    /// `animation` steps: the animation to play (a copy, so it keeps working if the library changes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anim: Option<Box<Animation>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AnimKind {
@@ -138,6 +157,12 @@ pub enum AnimKind {
         reverse: bool,
         #[serde(default = "d_tail")]
         tail_fade: f32,
+    },
+    /// Steps played one after another (system meters, chat notifications...).
+    Sequence {
+        steps: Vec<Step>,
+        #[serde(default, rename = "loop")]
+        looped: bool,
     },
     /// A shape whose cells cycle through a palette.
     Palette {
@@ -223,6 +248,12 @@ pub fn refs_of(a: &Animation) -> Vec<&str> {
         }
         AnimKind::Path { path, .. } => path.iter().map(String::as_str).collect(),
         AnimKind::Palette { cells, .. } => cells.keys().map(String::as_str).collect(),
+        AnimKind::Sequence { steps, .. } => {
+            let mut v: Vec<&str> = steps.iter().flat_map(|s| s.keys.iter().map(String::as_str)).collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        }
     }
 }
 
@@ -287,6 +318,12 @@ pub fn resolve(anim: &Animation, names: &[String], pal: &Palette) -> Resolved {
             m.insert("tail_fade".into(), json!(tail_fade));
             ("path".to_string(), Params(m))
         }
+        AnimKind::Sequence { steps, looped } => {
+            let list: Vec<Value> = steps.iter().map(|st| resolve_step(st, &index, n, pal)).collect();
+            m.insert("steps".into(), Value::Array(list));
+            m.insert("loop".into(), json!(looped));
+            ("sequence".to_string(), Params(m))
+        }
         AnimKind::Palette { cells, palette, speed, reverse } => {
             let c: Map<String, Value> = cells.iter().filter_map(|(r, p)| Some((resolve_ref(r, &index, n)?.to_string(), json!(p)))).collect();
             m.insert("cells".into(), Value::Object(c));
@@ -300,6 +337,53 @@ pub fn resolve(anim: &Animation, names: &[String], pal: &Palette) -> Resolved {
     let mut params = params;
     pal.resolve_map(&mut params.0);
     Resolved { effect, params, matched, total }
+}
+
+/// Path-based effects: their `keys` are the route, in order.
+fn is_path_effect(e: &str) -> bool {
+    matches!(e, "meter" | "blink" | "orbit")
+}
+
+/// A step as the `sequence` effect wants it: LED references resolved to indices.
+fn resolve_step(st: &Step, index: &HashMap<&str, usize>, n: usize, pal: &Palette) -> Value {
+    let leds: Vec<usize> = st.keys.iter().filter_map(|r| resolve_ref(r, index, n)).collect();
+    let hold = json!({ "effect": "hold", "params": {}, "duration_ms": st.duration_ms });
+    // Keys were chosen but none exists on this device: show nothing rather than everything.
+    if !st.keys.is_empty() && leds.is_empty() {
+        return hold;
+    }
+    let (effect, mut params) = match (st.effect.as_str(), &st.anim) {
+        ("hold", _) => return hold,
+        ("animation", Some(a)) if !matches!(a.kind, AnimKind::Sequence { .. }) => {
+            let r = resolve(a, &index_names(index, n), pal);
+            (r.effect, r.params.0)
+        }
+        ("animation", _) => return hold,
+        (e, _) => (e.to_string(), st.params.0.clone()),
+    };
+    let mut step = Map::new();
+    if is_path_effect(&effect) {
+        params.insert("path".into(), json!(leds));
+    } else if !leds.is_empty() {
+        step.insert("mask".into(), json!(leds));
+    }
+    step.insert("effect".into(), effect.into());
+    step.insert("params".into(), Value::Object(params));
+    step.insert("duration_ms".into(), st.duration_ms.into());
+    let mut v = Value::Object(step);
+    pal.resolve_value(&mut v);
+    v
+}
+
+/// Names by index rebuilt from a name index (library animation steps resolve against the same device).
+fn index_names(index: &HashMap<&str, usize>, n: usize) -> Vec<String> {
+    let mut names = vec![String::new(); n];
+    for (name, &i) in index {
+        if let Some(slot) = names.get_mut(i) {
+            *slot = (*name).to_string();
+        }
+    }
+    names
 }
 
 type CacheKey = (String, u64, String, usize, u64);
@@ -427,6 +511,33 @@ pub fn validate(a: &Animation) -> Res<()> {
             check_stops(palette)?;
             if ![speed, length, gap, tail_fade].iter().all(|v| v.is_finite()) {
                 return Err(bad("number out of range"));
+            }
+        }
+        AnimKind::Sequence { steps, .. } => {
+            if steps.is_empty() || steps.len() > MAX_STEPS {
+                return Err(bad(format!("1..={MAX_STEPS} steps required")));
+            }
+            for st in steps {
+                if !(10..=3_600_000).contains(&st.duration_ms) || st.keys.len() > MAX_LEDS {
+                    return Err(bad("step duration or key count out of range"));
+                }
+                st.keys.iter().try_for_each(|r| check_ref(r))?;
+                if serde_json::to_vec(&st.params).map_err(bad)?.len() > 64 * 1024 {
+                    return Err(bad("step parameters too large"));
+                }
+                match (st.effect.as_str(), &st.anim) {
+                    ("hold", _) => {}
+                    ("animation", Some(a)) => {
+                        if matches!(a.kind, AnimKind::Sequence { .. }) {
+                            return Err(bad("a step cannot play another sequence"));
+                        }
+                        validate(a)?;
+                    }
+                    ("animation", None) => return Err(bad("animation step without an animation")),
+                    ("sequence", _) => return Err(bad("sequences cannot nest")),
+                    (e, _) if effects::effect_def(e).is_some() => {}
+                    (e, _) => return Err(bad(format!("unknown step effect {e:?}"))),
+                }
             }
         }
         AnimKind::Palette { cells, palette, speed, .. } => {
@@ -802,6 +913,11 @@ pub fn with_speed(a: &Animation, k: f32) -> Animation {
             frames.iter_mut().for_each(|f| f.duration_ms = f.duration_ms.map(|d| ((d as f32 / k).round() as u32).clamp(10, 600_000)));
         }
         AnimKind::Path { speed, .. } | AnimKind::Palette { speed, .. } => *speed *= k,
+        AnimKind::Sequence { steps, .. } => {
+            for st in steps {
+                st.duration_ms = ((st.duration_ms as f32 / k).round() as u32).clamp(10, 3_600_000);
+            }
+        }
         AnimKind::Effect { params, .. } => {
             for key in ["speed", "rate"] {
                 if let Some(v) = params.0.get(key).and_then(Value::as_f64) {
@@ -827,6 +943,7 @@ pub fn cycle_secs(a: &Animation) -> f32 {
         }
         AnimKind::Path { speed, length, gap, .. } => ((length + gap).max(0.02) / speed.abs().max(0.01)).clamp(0.2, 60.0),
         AnimKind::Palette { speed, .. } => (1.0 / speed.abs().max(0.01)).clamp(0.2, 60.0),
+        AnimKind::Sequence { steps, .. } => (steps.iter().map(|s| s.duration_ms as f32).sum::<f32>() / 1000.0).max(0.05),
         // One strobe pulse / one breath, else a nominal second.
         AnimKind::Effect { effect, params } => {
             let n = |k: &str| params.0.get(k).and_then(Value::as_f64).map(|v| v as f32);
@@ -850,6 +967,13 @@ pub fn recolor(a: &Animation, c: Rgb3, pal: &Palette) -> Animation {
     match &mut out.kind {
         AnimKind::Frames { frames, .. } => frames.iter_mut().flat_map(|f| f.leds.values_mut()).for_each(|v| *v = shade(v)),
         AnimKind::Path { palette, .. } | AnimKind::Palette { palette, .. } => palette.iter_mut().for_each(|s| s.color = shade(&s.color)),
+        AnimKind::Sequence { steps, .. } => {
+            for st in steps {
+                if st.params.0.contains_key("color") {
+                    st.params.0.insert("color".into(), json!(c));
+                }
+            }
+        }
         AnimKind::Effect { params, .. } => {
             if params.0.contains_key("color") {
                 params.0.insert("color".into(), json!(c));
@@ -1154,5 +1278,106 @@ mod tests {
         // Recolouring a slot-coloured animation shades by the slot's brightness.
         let AnimKind::Path { palette, .. } = recolor(&b, [200, 100, 0], &pal).kind else { panic!() };
         assert_eq!(palette[0].color, Color::Rgb([200, 100, 0]));
+    }
+
+    fn seq(steps: Vec<Step>, looped: bool) -> Animation {
+        Animation { kind: AnimKind::Sequence { steps, looped }, ..frames_anim("seq") }
+    }
+
+    fn step(effect: &str, params: Value, keys: &[&str], ms: u32) -> Step {
+        Step { effect: effect.into(), params: Params(params.as_object().cloned().unwrap_or_default()), keys: keys.iter().map(|k| format!("name:Key: {k}")).collect(), duration_ms: ms, anim: None }
+    }
+
+    fn keyboard() -> Vec<String> {
+        ["Key: W", "Key: A", "Key: S", "Key: D", "Key: Q"].iter().map(|s| s.to_string()).collect()
+    }
+
+    fn at(a: &Animation, names: &[String], t: f32) -> Vec<Px> {
+        let pos = vec![[0.5, 0.5]; names.len()];
+        let mut out = vec![Px::CLEAR; names.len()];
+        render_animation(a, t, &geo("kb", names, &pos), 1, &mut out);
+        out
+    }
+
+    #[test]
+    fn sequence_blinks_then_orbits_then_ends_on_the_named_keys() {
+        let mut a = seq(
+            vec![
+                step("blink", json!({"color": [0, 0, 255], "count": 2, "on_ms": 100, "off_ms": 100}), &["W", "A", "S", "D"], 400),
+                step("orbit", json!({"color": [255, 255, 255], "laps": 1, "lap_ms": 400, "trail": 0.25}), &["W", "D", "S", "A"], 400),
+            ],
+            false,
+        );
+        a.id = "seq1".into();
+        let n = keyboard();
+        let lit = |t: f32| at(&a, &n, t).iter().enumerate().filter(|(_, p)| p.a > 0.0 && p.r + p.g + p.b > 0.0).map(|(i, _)| i).collect::<Vec<_>>();
+        assert_eq!(lit(0.05), vec![0, 1, 2, 3], "blink on");
+        assert!(lit(0.15).is_empty(), "blink off");
+        assert_eq!(lit(0.25), vec![0, 1, 2, 3], "second blink");
+        // Orbit visits W (0), D (3), S (2), A (1) in that order.
+        assert_eq!(lit(0.45), vec![0]);
+        assert_eq!(lit(0.55), vec![3]);
+        assert_eq!(lit(0.65), vec![2]);
+        assert_eq!(lit(0.75), vec![1]);
+        assert!(lit(0.9).is_empty(), "off after the sequence");
+        assert!(at(&a, &n, 0.3)[4].a == 0.0, "Q is never touched");
+        assert_eq!(cycle_secs(&a), 0.8);
+        assert_eq!(compatibility(&a, &n), (4, 4));
+    }
+
+    #[test]
+    fn sequence_with_missing_keys_shows_nothing_and_meter_follows_key_order() {
+        let n = keyboard();
+        let mut a = seq(vec![step("blink", json!({"color": [255, 0, 0]}), &["F5", "F6"], 500)], true);
+        a.id = "seq2".into();
+        assert!(at(&a, &n, 0.01).iter().all(|p| p.a == 0.0), "unknown keys must not light the whole keyboard");
+        let mut m = seq(vec![step("meter", json!({"value": 50.0, "color": [255, 128, 0], "style": "live", "background": "off"}), &["D", "S", "A", "W"], 1000)], true);
+        m.id = "seq3".into();
+        let out = at(&m, &n, 0.5);
+        // 50 % of 4 keys: D and S lit (indices 3 and 2), A and W dark.
+        assert_eq!((out[3].r, out[2].r, out[1].r, out[0].r), (255.0, 255.0, 0.0, 0.0));
+        assert_eq!(out[4].a, 0.0);
+    }
+
+    #[test]
+    fn sequence_validation_and_json_round_trip() {
+        let ok = seq(vec![step("meter", json!({}), &["W"], 1000), step("hold", json!({}), &[], 500)], true);
+        validate(&ok).unwrap();
+        let back: Animation = serde_json::from_str(&serde_json::to_string(&ok).unwrap()).unwrap();
+        assert_eq!(back, ok);
+        assert!(serde_json::to_string(&ok).unwrap().contains("\"type\":\"sequence\""));
+        assert!(validate(&seq(vec![], false)).is_err());
+        assert!(validate(&seq(vec![step("meter", json!({}), &["W"], 5)], false)).is_err());
+        assert!(validate(&seq(vec![step("nope", json!({}), &[], 100)], false)).is_err());
+        assert!(validate(&seq(vec![step("sequence", json!({}), &[], 100)], false)).is_err());
+        let mut bad_ref = step("blink", json!({}), &[], 100);
+        bad_ref.keys = vec!["W".into()];
+        assert!(validate(&seq(vec![bad_ref], false)).is_err());
+        assert!(validate(&seq(vec![step("animation", json!({}), &[], 100)], false)).is_err());
+        let inner = seq(vec![step("hold", json!({}), &[], 100)], false);
+        let mut nested = step("animation", json!({}), &[], 100);
+        nested.anim = Some(Box::new(inner));
+        assert!(validate(&seq(vec![nested], false)).is_err());
+    }
+
+    #[test]
+    fn sequence_can_play_a_library_animation_step_and_slots_follow_the_palette() {
+        let n = keyboard();
+        let lib = builtins().into_iter().find(|b| b.id == "builtin:fill").unwrap();
+        let mut play = step("animation", json!({}), &["Q"], 1000);
+        play.anim = Some(Box::new(lib));
+        let mut a = seq(vec![play, step("solid", json!({"color": {"slot": "alert"}}), &[], 1000)], false);
+        a.id = "seq4".into();
+        validate(&a).unwrap();
+        let first = at(&a, &n, 0.5);
+        assert!(first[4].a > 0.0 && first[0].a == 0.0, "only Q plays the library animation");
+        let second = at(&a, &n, 1.5);
+        let alert = crate::themes::default_palette().get("alert");
+        assert_eq!([second[0].r as u8, second[0].g as u8, second[0].b as u8], alert, "slot colours resolve");
+        // Speed and recolour touch the steps.
+        assert_eq!(cycle_secs(&with_speed(&a, 2.0)), 1.0);
+        let r = recolor(&seq(vec![step("blink", json!({"color": [1, 2, 3]}), &["W"], 100)], false), [9, 9, 9], crate::themes::default_palette());
+        let AnimKind::Sequence { steps, .. } = &r.kind else { panic!() };
+        assert_eq!(steps[0].params.0["color"], json!([9, 9, 9]));
     }
 }
