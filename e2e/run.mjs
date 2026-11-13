@@ -67,6 +67,8 @@ try {
     } catch (e) {
       failures++;
       console.log(`FAIL ${f}: ${e.stack?.split("\n").slice(0, 6).join("\n") ?? e}`);
+      console.log("  page text: " + (await page.evaluate(() => document.body.innerText.replace(/\s+/g, " ").slice(-350)).catch(() => "")));
+      if (t.errors.length) console.log("  browser errors:\n  " + t.errors.join("\n  "));
       await page.screenshot({ path: join(shotDir, `FAIL-${f}.png`) }).catch(() => {});
     }
     await page.close();

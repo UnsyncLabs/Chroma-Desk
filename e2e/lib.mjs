@@ -87,7 +87,6 @@ export class T {
         const els = [...document.querySelectorAll(`${scope} [data-led]`)];
         const g = typeof k === "number" ? els.find((e) => e.getAttribute("data-led") === String(k)) : els.find((e) => e.querySelector("title").textContent.startsWith(k + " ("));
         if (!g) return null;
-        g.scrollIntoView({ block: "nearest" });
         const r = g.getBoundingClientRect();
         return [r.x + r.width / 2, r.y + r.height / 2];
       },
@@ -96,7 +95,14 @@ export class T {
     );
   }
 
+  /** Scrolls the canvas to the middle of the view so every LED has stable coordinates. */
+  async centerCanvas() {
+    await this.page.$eval("svg.canvas", (e) => e.scrollIntoView({ block: "center" }));
+    await sleep(60);
+  }
+
   async clickLed(nameOrIdx, opts = {}) {
+    await this.centerCanvas();
     const p = await this.ledPos(nameOrIdx);
     assert.ok(p, `LED ${nameOrIdx} not on the canvas`);
     await this.page.mouse.move(p[0], p[1]);
@@ -108,7 +114,8 @@ export class T {
   }
 
   /** Drags across LEDs in order, pressing at the first one. */
-  async dragLeds(list, { steps = 4 } = {}) {
+  async dragLeds(list, { steps = 1 } = {}) {
+    await this.centerCanvas();
     const pts = [];
     for (const k of list) {
       const p = await this.ledPos(k);
@@ -158,6 +165,50 @@ export class T {
     }, animId);
   }
 
+  /** Draw kind selector (Paint / Frames / Path / Palette). */
+  async drawKind(name) {
+    await this.clickText(".kind", `^${name}`);
+    await sleep(300);
+  }
+
+  /** The animation layer the editor sends to the engine as live preview. */
+  async previewAnim(key = "Razer Huntsman V3 Pro TKL@0") {
+    const s = await this.scene();
+    const l = s.devices[key]?.layers?.[0];
+    return l?.effect === "animation" ? l.params.snapshot : null;
+  }
+
+  /** Samples the fills of the given LEDs every `every` ms for `ms` ms. */
+  async sampleFills(leds, ms, every = 50) {
+    const out = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      out.push(await this.page.evaluate((leds) => leds.map((l) => document.querySelector(`svg.canvas [data-led="${l}"] .shape`)?.getAttribute("fill")), leds));
+      await sleep(every);
+    }
+    return out;
+  }
+
+  /** Sets the range slider of the editor row whose label matches. */
+  async setSlider(label, value) {
+    const ok = await this.page.evaluate((label, v) => {
+      const row = [...document.querySelectorAll(".sliders .row, .settings .inline")].find((r) => r.textContent.trim().startsWith(label));
+      const el = row?.querySelector("input[type=range]");
+      if (!el) return false;
+      el.value = String(v);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }, label, value);
+    assert.ok(ok, `slider ${label}`);
+  }
+
+  async setRange(sel, value) {
+    await this.page.$eval(sel, (el, v) => {
+      el.value = v;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }, String(value));
+  }
+
   async setColor(hex) {
     await this.page.$eval('.toolbar input[type="color"]', (el, v) => {
       el.value = v;
@@ -178,12 +229,27 @@ export class T {
     return this.page.evaluate((k) => JSON.parse(JSON.stringify(globalThis.__chromaMock[k] ?? null)), key);
   }
 
+  /** Screenshots at the given size: the top of the page and, when it scrolls, the bottom too. */
   async shot(name, w = 1200, h = 800) {
     const p = this.page;
     const old = p.viewport();
     await p.setViewport({ width: w, height: h });
-    await sleep(350);
+    await sleep(500);
+    const dims = await p.evaluate(() => {
+      const m = document.querySelector("main") ?? document.scrollingElement;
+      m.scrollTop = 0;
+      return { max: m.scrollHeight - m.clientHeight };
+    });
+    await sleep(150);
     await p.screenshot({ path: `${this.shotDir}/${name}-${w}x${h}.png` });
+    if (dims.max > 40) {
+      await p.evaluate(() => {
+        const m = document.querySelector("main") ?? document.scrollingElement;
+        m.scrollTop = m.scrollHeight;
+      });
+      await sleep(150);
+      await p.screenshot({ path: `${this.shotDir}/${name}-${w}x${h}-bottom.png` });
+    }
     await p.setViewport(old);
     await sleep(200);
   }

@@ -66,7 +66,7 @@
 <LedCanvas {layout} colors={canvasColors} {display} transparent={!!layer} bind:selected resetKey={layer?.id ?? ""} onchange={onPaint} />
 <div class="save">
   <h4>{t("save.title")}</h4>
-  <SaveBar onsave={saveAs} />
+  <SaveBar onsave={(name, tags) => saveAs(name, tags)} />
 </div>
 
 <style>

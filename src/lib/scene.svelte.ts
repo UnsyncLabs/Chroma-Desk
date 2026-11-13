@@ -24,7 +24,19 @@ class Frames {
 }
 export const frames = new Frames();
 
-const push = throttle((s: Scene) => api.setScene($state.snapshot(s) as Scene).catch(toastError), 40);
+/**
+ * Lets the animation editor show its unsaved draft on the hardware: the hook rewrites a *copy* of
+ * the scene on its way to the engine, so the real scene (and the dirty state) stays untouched.
+ */
+export const previewHook: { fn: ((s: Scene) => Scene) | null } = { fn: null };
+
+/** What the engine should run: the scene, with the editor's preview applied if active. */
+function outgoing(s: Scene): Scene {
+  const snap = $state.snapshot(s) as Scene;
+  return previewHook.fn ? previewHook.fn(snap) : snap;
+}
+
+const push = throttle((s: Scene) => api.setScene(outgoing(s)).catch(toastError), 40);
 
 /** Sends the scene to the engine (throttled). Call after every mutation. */
 export function commit() {
@@ -33,7 +45,7 @@ export function commit() {
 
 /** Sends the scene immediately and waits for it (before actions that must not race the engine). */
 export async function flush() {
-  await api.setScene($state.snapshot(sceneStore.scene) as Scene).catch(toastError);
+  await api.setScene(outgoing(sceneStore.scene)).catch(toastError);
 }
 
 export const isDirty = () => JSON.stringify($state.snapshot(sceneStore.scene)) !== sceneStore.baseline;
