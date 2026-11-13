@@ -46,9 +46,16 @@ function writeGlobal(mut: (m: Record<string, NamedTrigger>) => void) {
 /** Saves (creating or replacing) a notification; `old` is its previous name/scope when editing. */
 export async function saveNotification(item: NotifItem, old?: { name: string; scope: Scope }) {
   const n = plain(item.n) as NamedTrigger;
-  if (old) await removeFrom(old.scope, old.name);
+  // Write the new one first and only then drop the old one: a failure never loses the original.
   if (item.scope === "profile") await writeProfile((m) => void (m[item.name] = n));
   else await writeGlobal((m) => void (m[item.name] = n));
+  if (old && (old.name !== item.name || old.scope !== item.scope)) await removeFrom(old.scope, old.name);
+}
+
+/** A notification with this name already exists in that scope (a profile's own can shadow a global one, that is fine). */
+export function nameTaken(scope: Scope, name: string): boolean {
+  const map = scope === "profile" ? (activeProfile.value?.triggers ?? {}) : (profiles.settings.global_notifications ?? {});
+  return name in map;
 }
 
 async function removeFrom(scope: Scope, name: string) {

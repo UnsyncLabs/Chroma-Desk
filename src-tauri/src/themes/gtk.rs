@@ -68,4 +68,9 @@ impl Source for Gtk {
     fn watch_paths(&self, env: &Env) -> Vec<PathBuf> {
         vec![env.config.join("dconf")]
     }
+    /// The user's dconf database changes when the accent or scheme does; polling its fingerprint
+    /// avoids running `gsettings` every second.
+    fn poll_files(&self, env: &Env) -> Vec<PathBuf> {
+        vec![env.config.join("dconf/user")]
+    }
 }

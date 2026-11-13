@@ -7,7 +7,7 @@
   import { animName, lib } from "./animations.svelte";
   import { t } from "./i18n/index.svelte";
   import { buildLayout } from "./layout/buildLayout";
-  import { canEditProfile, plain, saveNotification, slugName, snippets, validName, type NotifItem, type Scope } from "./notifications.svelte";
+  import { canEditProfile, nameTaken, plain, saveNotification, slugName, snippets, validName, type NotifItem, type Scope } from "./notifications.svelte";
   import { activeProfile, profiles, saveSettings } from "./profiles.svelte";
   import { app, copyText, toast, toastError } from "./state.svelte";
 
@@ -43,7 +43,10 @@
   const kb: Device | null = $derived(keyboards[0] ?? null);
   const layout = $derived(kb ? buildLayout(kb) : null);
   const blank = $derived<Paint>(kb ? kb.colors.map(() => null) : []);
-  const wholeDevice = $derived(!n.keys?.length);
+  // Picking stays on while the keyboard is shown, even if every key gets deselected (an empty list means the whole device when saved).
+  // svelte-ignore state_referenced_locally
+  let picking = $state(!!initial.n.keys?.length);
+  const wholeDevice = $derived(!picking);
 
   const ledKey = (i: number) => {
     const nm = kb?.led_names[i] ?? "";
@@ -71,6 +74,7 @@
     }
   });
   function setWhole(on: boolean) {
+    picking = !on;
     if (on) {
       n.keys = [];
       lastKeys = "[]";
@@ -175,6 +179,11 @@
       toast(t("notif.needProfile"), "error");
       return;
     }
+    // Renaming onto another notification would silently replace it.
+    if (nameTaken(scope, nm) && !(old && old.name === nm && old.scope === scope)) {
+      toast(t("notif.nameTaken", { name: nm }), "error");
+      return;
+    }
     try {
       await saveNotification({ name: nm, scope, n: clean() }, old);
       toast(t("notif.saved"), "ok", 2000);
@@ -196,7 +205,7 @@
     <input type="text" bind:value={name} maxlength="32" aria-label={t("notif.name")} data-name onblur={() => (name = slugName(name) || name)} />
     <p class="muted small">{t("notif.nameHint")}</p>
     <div class="radios" role="radiogroup" aria-label={t("notif.scope")}>
-      <label><input type="radio" name="scope" checked={scope === "profile"} disabled={!canEditProfile()} onchange={() => (scope = "profile")} data-scope="profile" /> {t("notif.thisProfileOpt", { name: activeProfile.value?.name ?? "" })}</label>
+      <label><input type="radio" name="scope" checked={scope === "profile"} disabled={!canEditProfile()} onchange={() => (scope = "profile")} data-scope="profile" /> {activeProfile.value && !activeProfile.value.builtin ? t("notif.thisProfileOpt", { name: activeProfile.value.name }) : t("notif.thisProfileNone")}</label>
       <label><input type="radio" name="scope" checked={scope === "global"} onchange={() => (scope = "global")} data-scope="global" /> {t("notif.allProfilesOpt")}</label>
     </div>
     {#if !canEditProfile()}<p class="muted small">{t("notif.scopeGlobalOnly")}</p>{/if}

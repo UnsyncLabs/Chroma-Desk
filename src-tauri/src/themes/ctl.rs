@@ -237,7 +237,7 @@ impl ThemeCtl {
         };
         let Some(src) = src else { return false };
         let now = src_fingerprint(Some(src), &self.env);
-        if now == last && src.id() != ThemeSource::Gtk {
+        if now == last {
             return false;
         }
         self.recompute()

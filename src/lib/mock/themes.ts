@@ -176,7 +176,7 @@ export function applyProfile(name: string): Scene {
   let scene: Scene;
   if (p.builtin) {
     if (p.requires === "omarchy" && !S.omarchyPresent) C.fail("profile_unavailable", p.name);
-    if (!S.settings.builtin_enabled[p.name] && !p.enabled) C.fail("profile_disabled", p.name);
+    if ((S.settings.builtin_enabled[p.name] ?? p.enabled !== false) === false) C.fail("profile_disabled", p.name);
     scene = builtinScene(p.name);
   } else scene = JSON.parse(JSON.stringify(S.profiles[p.name].scene));
   C.setScene(scene);

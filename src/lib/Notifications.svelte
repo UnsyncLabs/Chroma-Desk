@@ -138,6 +138,7 @@
     <ul class="cards">
       {#each items as i (i.name)}
         {@const a = previewOf(i.n)}
+        {@const locked = i.scope === "profile" && !!activeProfile.value?.builtin}
         <li class="card" class:off={i.n.enabled === false} data-notif={i.name}>
           <div class="prev">
             {#if a && layout}<AnimThumb anim={a} {layout} {names} />{:else}<span class="muted small">{t("notif.noPreview")}</span>{/if}
@@ -152,12 +153,13 @@
               · {describeKeys(i.n.keys)}
               {#if i.n.color}· <span class="dot" style:background={hex(resolveColor(i.n.color.startsWith("@") ? { slot: i.n.color.slice(1) } : ([1, 3, 5].map((k) => parseInt((i.n.color as string).slice(k, k + 2), 16)) as [number, number, number])))}></span> {i.n.color.startsWith("@") ? i.n.color : ""}{/if}
             </p>
+            {#if locked}<p class="muted small">{t("notif.builtinLocked")}</p>{/if}
             <p class="chips">{#each sourceChips(i.n) as c (c)}<span class="chip">{c}</span>{/each}</p>
             <div class="row">
-              <label class="switch"><input type="checkbox" checked={i.n.enabled !== false} onchange={(e) => toggle(i, e.currentTarget.checked)} aria-label={t("notif.enabled")} /> {t("notif.enabled")}</label>
+              <label class="switch"><input type="checkbox" disabled={locked} checked={i.n.enabled !== false} onchange={(e) => toggle(i, e.currentTarget.checked)} aria-label={t("notif.enabled")} /> {t("notif.enabled")}</label>
               <button onclick={() => test(i)} data-test>{t("notif.test")}</button>
-              <button onclick={() => (editing = { item: plain(i), isNew: false })} data-edit>{t("notif.edit")}</button>
-              <button class="danger" onclick={() => remove(i)} aria-label={t("common.delete")}>✕</button>
+              <button onclick={() => (editing = { item: plain(i), isNew: false })} data-edit disabled={locked} title={locked ? t("notif.builtinLocked") : ""}>{t("notif.edit")}</button>
+              <button class="danger" onclick={() => remove(i)} aria-label={t("common.delete")} disabled={locked} title={locked ? t("notif.builtinLocked") : ""}>✕</button>
             </div>
           </div>
         </li>

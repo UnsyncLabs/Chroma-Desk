@@ -37,8 +37,14 @@
       tab = allowSlots && isSlot(value) ? "palette" : allowSlots && !isSlot(value) ? "palette" : "custom";
       if (!isSlot(value)) tab = "custom";
       const r = root?.getBoundingClientRect();
-      // Keep the popover inside the window (small windows too).
-      if (r) popStyle = `left:${Math.max(0, Math.min(0, window.innerWidth - r.left - 280))}px;`;
+      // Keep the popover inside the window (small windows too): shift it left near the right edge,
+      // open it upwards when there is no room below and more room above.
+      if (r) {
+        const w = Math.min(280, window.innerWidth - 32);
+        const dx = Math.min(0, window.innerWidth - 8 - (r.left + w));
+        const up = window.innerHeight - r.bottom < 340 && r.top > window.innerHeight - r.bottom;
+        popStyle = `left:${dx}px;` + (up ? "top:auto;bottom:calc(100% + 0.3rem);max-height:" + Math.max(160, r.top - 12) + "px;overflow:auto;" : "");
+      }
     }
   }
   function onWindowDown(e: PointerEvent) {
