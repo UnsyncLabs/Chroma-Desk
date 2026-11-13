@@ -15,9 +15,13 @@
     { name: "Corsair QL120", leds: 34 },
     { name: "Corsair ML120 RGB", leds: 4 },
   ];
-  let sizes: Record<number, number> = $state({});
-  let presetFans: Record<number, number> = $state({});
-  let presetIdx: Record<number, number> = $state({});
+  // Initialised synchronously: the template reads these on the first render, before any $effect runs.
+  const byZone = <T,>(v: (z: (typeof device.zones)[number]) => T) => Object.fromEntries(device.zones.map((z) => [z.id, v(z)]));
+  let sizes: Record<number, number> = $state(byZone((z) => z.num_leds));
+  let presetFans: Record<number, number> = $state(byZone(() => 3));
+  let presetIdx: Record<number, number> = $state(byZone(() => 0));
+  const preset = (zoneId: number) => FAN_PRESETS[presetIdx[zoneId] ?? 0] ?? FAN_PRESETS[0];
+  const fans = (zoneId: number) => presetFans[zoneId] ?? 3;
 
   $effect(() => {
     for (const z of device.zones) {
@@ -87,8 +91,8 @@
                 <select bind:value={presetIdx[z.id]} aria-label={t("adv.fanModel")}>
                   {#each FAN_PRESETS as p, i (p.name)}<option value={i}>{p.name} ({p.leds} LEDs)</option>{/each}
                 </select>
-                = <b>{presetFans[z.id] * FAN_PRESETS[presetIdx[z.id]].leds}</b>
-                <button onclick={() => resize(z.id, presetFans[z.id] * FAN_PRESETS[presetIdx[z.id]].leds, FAN_PRESETS[presetIdx[z.id]].leds)}>{t("adv.usePreset")}</button>
+                = <b>{fans(z.id) * preset(z.id).leds}</b>
+                <button onclick={() => resize(z.id, fans(z.id) * preset(z.id).leds, preset(z.id).leds)}>{t("adv.usePreset")}</button>
               </td>
             </tr>
           {/if}

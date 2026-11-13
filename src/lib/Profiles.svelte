@@ -1,7 +1,9 @@
 <script lang="ts">
   /** Profiles screen: save, apply, duplicate, rename, delete, default, import/export. */
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { api, type ProfileInfo } from "./api";
+  import { api, hex, type ProfileInfo, type ThemeStatus } from "./api";
+  import ThemeEditor from "./ThemeEditor.svelte";
+  import { palette } from "./palette.svelte";
   import { t } from "./i18n/index.svelte";
   import { confirmDialog, toast, toastError } from "./state.svelte";
   import { isDirty } from "./scene.svelte";
@@ -14,6 +16,23 @@
   let orgbPick = $state("");
 
   const current = $derived(profiles.settings.current_profile);
+  /** Which profile's theme editor is open. */
+  let editing: string | null = $state(null);
+  let themeStat = $state<ThemeStatus | null>(null);
+  $effect(() => {
+    palette.generation;
+    api.themeStatus().then((s) => (themeStat = s)).catch(() => {});
+  });
+  const detected = (src: string) => themeStat?.sources.find((x) => x.id === src);
+
+  async function setEnabled(p: ProfileInfo, on: boolean) {
+    try {
+      await api.setBuiltinEnabled(p.name, on);
+      await loadProfiles();
+    } catch (e) {
+      toastError(e);
+    }
+  }
 
   function begin(mode: Edit["mode"], target: string, initial: string) {
     edit = { mode, target };
@@ -142,22 +161,46 @@
 {/if}
 
 <ul class="list">
-  {#each profiles.list.profiles as p (p.file)}
-    <li>
-      <span class="n">
-        <b>{p.name}</b>
-        {#if p.name === current}<span class="badge">{t("prof.badgeCurrent")}</span>{/if}
-        {#if p.name === profiles.settings.default_profile}<span class="badge def">{t("prof.badgeDefault")}</span>{/if}
-        {#if p.openrgb}<span class="badge">OpenRGB</span>{/if}
-      </span>
+  {#each profiles.list.profiles as p (p.builtin ? `b:${p.name}` : p.file)}
+    {@const live = p.source === "omarchy" ? detected("omarchy") : null}
+    <li class:builtin={p.builtin} class:off={p.builtin && !p.enabled} data-profile={p.name}>
+      <div class="top">
+        <span class="n">
+          <b>{p.name}</b>
+          {#if p.builtin}<span class="badge b">{t("prof.badgeBuiltin")}</span>{/if}
+          {#if p.name === current}<span class="badge">{t("prof.badgeCurrent")}</span>{/if}
+          {#if p.name === profiles.settings.default_profile}<span class="badge def">{t("prof.badgeDefault")}</span>{/if}
+          {#if p.openrgb}<span class="badge">OpenRGB</span>{/if}
+        </span>
+        <span class="theme" title={t("prof.themeSource")}>
+          {#if p.strip.length}
+            <span class="strip" aria-hidden="true">{#each p.strip as c, i (i)}<span style:background={hex(c)}></span>{/each}</span>
+          {:else if live?.strip.length}
+            <span class="strip" aria-hidden="true">{#each live.strip as c, i (i)}<span style:background={hex(c)}></span>{/each}</span>
+          {/if}
+          <small>{t(`src.${p.source}`)}{#if live?.name}&nbsp;·&nbsp;<b data-live-theme>{live.name}</b>{/if}</small>
+        </span>
+      </div>
       <span class="btns">
-        <button class="primary" onclick={() => apply(p)}>{t("prof.apply")}</button>
-        <button onclick={() => toggleDefault(p)}>{p.name === profiles.settings.default_profile ? t("prof.unsetDefault") : t("prof.setDefault")}</button>
-        <button onclick={() => begin("duplicate", p.name, `${p.name} (2)`)}>{t("prof.duplicate")}</button>
-        <button onclick={() => begin("rename", p.name, p.name)}>{t("prof.rename")}</button>
-        <button onclick={() => exportOne(p)}>{t("prof.export")}</button>
-        <button class="danger" onclick={() => remove(p)}>{t("common.delete")}</button>
+        {#if p.builtin}
+          {#if p.requires}
+            <label class="switch"><input type="checkbox" checked={p.enabled} onchange={(e) => setEnabled(p, e.currentTarget.checked)} aria-label={t("prof.enable")} /> {t("prof.enable")}</label>
+          {/if}
+          <button class="primary" onclick={() => apply(p)} disabled={!p.enabled}>{t("prof.apply")}</button>
+          <button onclick={() => begin("duplicate", p.name, `${p.name} (copy)`)}>{t("prof.duplicateToEdit")}</button>
+          <button onclick={() => (editing = editing === p.name ? null : p.name)}>{t("prof.theme")}</button>
+        {:else}
+          <button class="primary" onclick={() => apply(p)}>{t("prof.apply")}</button>
+          <button onclick={() => (editing = editing === p.name ? null : p.name)}>{t("prof.editTheme")}</button>
+          <button onclick={() => toggleDefault(p)}>{p.name === profiles.settings.default_profile ? t("prof.unsetDefault") : t("prof.setDefault")}</button>
+          <button onclick={() => begin("duplicate", p.name, `${p.name} (2)`)}>{t("prof.duplicate")}</button>
+          <button onclick={() => begin("rename", p.name, p.name)}>{t("prof.rename")}</button>
+          <button onclick={() => exportOne(p)}>{t("prof.export")}</button>
+          <button class="danger" onclick={() => remove(p)}>{t("common.delete")}</button>
+        {/if}
       </span>
+      {#if p.builtin && !p.enabled}<p class="muted small full">{t("prof.disabledHint")}</p>{/if}
+      {#if editing === p.name}<div class="full"><ThemeEditor name={p.name} onclose={() => (editing = null)} /></div>{/if}
     </li>
   {/each}
 </ul>
@@ -185,7 +228,15 @@
   .dirty { color: var(--danger); margin-left: 0.6rem; }
   .edit { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
   .list { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-  .list li { display: flex; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.7rem; }
+  .list li { display: flex; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.8rem; }
+  .list li.off { opacity: 0.8; }
+  .top { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+  .theme { display: flex; align-items: center; gap: 0.6rem; color: var(--muted); }
+  .strip { display: inline-flex; width: 8rem; height: 0.9rem; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+  .strip span { flex: 1; }
+  .badge.b { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+  .switch { display: inline-flex; align-items: center; gap: 0.35rem; margin-right: 0.4rem; }
+  .full { flex-basis: 100%; margin: 0; }
   .badge { font-size: 0.72rem; border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.5rem; margin-left: 0.3rem; color: var(--muted); }
   .badge.def { color: var(--accent); border-color: var(--accent); }
   .warn { color: var(--danger); }

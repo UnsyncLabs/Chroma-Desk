@@ -6,12 +6,14 @@
    * It edits a `colors` model (`null` = transparent, only for layers) and reports every
    * change through `onchange`; the parent decides where that goes (hardware or a Paint layer).
    */
-  import { hex, fromHex, type Rgb } from "./api";
+  import { hex, type Color, type Rgb } from "./api";
+  import ColorPicker from "./ColorPicker.svelte";
+  import { cloneColor, resolveColor, sameColor } from "./palette.svelte";
   import type { Layout, LedItem } from "./layout/buildLayout";
   import { KEY_GROUPS } from "./layout/keyGroups";
   import { t } from "./i18n/index.svelte";
 
-  export type Paint = (Rgb | null)[];
+  export type Paint = (Color | null)[];
   export type Tool = "brush" | "select" | "picker" | "eraser" | "path" | "gradient";
 
   let {
@@ -33,7 +35,7 @@
     /** The editable model. */
     colors: Paint;
     /** What to draw (e.g. the live animation frame); defaults to `colors`. */
-    display?: (Rgb | null)[] | null;
+    display?: (Color | null)[] | null;
     editable?: boolean;
     /** Allow erasing to transparent (layers). */
     transparent?: boolean;
@@ -57,8 +59,8 @@
   let tool = $state<Tool>(tools[0] ?? "select");
   const hasBrush = $derived(tools.includes("brush"));
   const hasHistory = $derived(history && (hasBrush || tools.includes("eraser")));
-  let current = $state("#ff0000");
-  let recent: string[] = $state(["#ff0000", "#00ff00", "#0000ff", "#ffffff", "#ff8800", "#aa00ff"]);
+  let current = $state<Color>([255, 0, 0]);
+  let recent: Color[] = $state([[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255], [255, 136, 0], [170, 0, 255]]);
 
   const MAX_HISTORY = 100;
   let undo: Paint[] = $state([]);
@@ -77,7 +79,7 @@
     if (!transparent && tool === "eraser") tool = tools.find((x) => x !== "eraser") ?? "select";
   });
 
-  const clone = (p: Paint): Paint => p.map((c) => (c ? ([...c] as Rgb) : null));
+  const clone = (p: Paint): Paint => p.map((c) => (c ? cloneColor(c) : null));
   const itemByLed = $derived(new Map(layout.items.map((i) => [i.led, i])));
   const pad = 0.5;
 
@@ -101,15 +103,15 @@
   }
 
   /** Applies `value` to `leds`; `snapshot` records an undo step first. */
-  function apply(leds: Iterable<number>, value: Rgb | null, snapshot: boolean) {
+  function apply(leds: Iterable<number>, value: Color | null, snapshot: boolean) {
     if (snapshot) pushHistory();
     const next = clone(colors);
-    for (const l of leds) if (l < next.length) next[l] = value ? ([...value] as Rgb) : null;
+    for (const l of leds) if (l < next.length) next[l] = value ? cloneColor(value) : null;
     onchange(next);
   }
 
-  function remember(h: string) {
-    recent = [h, ...recent.filter((x) => x !== h)].slice(0, 12);
+  function remember(h: Color) {
+    recent = [cloneColor(h), ...recent.filter((x) => !sameColor(x, h))].slice(0, 12);
   }
 
   // ---------- pointer interaction ----------
@@ -146,8 +148,8 @@
     }
     if (tool === "picker") {
       // Pick what is on screen (the live frame), not only the edited layer.
-      const c = shown(it.led);
-      if (c) current = hex(c);
+      const c = (display ?? colors)[it.led];
+      if (c) current = cloneColor(c);
       tool = hasBrush ? "brush" : (tools.find((x) => x !== "picker") ?? "select");
       return;
     }
@@ -170,7 +172,7 @@
     additive = e.ctrlKey || e.shiftKey;
     base = new Set(additive ? selected : []);
     if (tool === "brush") {
-      apply([it.led], fromHex(current), true);
+      apply([it.led], current, true);
       remember(current);
     } else if (tool === "eraser") {
       apply([it.led], null, true);
@@ -190,7 +192,7 @@
     endItem = it;
     if (tool === "path") onpathadd?.(it.led);
     else if (tool === "gradient" && startItem) gradLine = { a: startItem, b: it };
-    else if (tool === "brush") apply([it.led], fromHex(current), false);
+    else if (tool === "brush") apply([it.led], current, false);
     else if (tool === "eraser") apply([it.led], null, false);
     else if (startItem) selected = new Set([...base, ...rectSelect(startItem, it)]);
   }
@@ -245,7 +247,7 @@
   }
 
   function fill() {
-    apply(selected.size ? selected : allLeds, fromHex(current), true);
+    apply(selected.size ? selected : allLeds, current, true);
     remember(current);
   }
   function clearAll() {
@@ -280,7 +282,11 @@
 
   const px = (i: number, c: Rgb | null | undefined) => (c ? hex(c) : "#1b1b24");
   const dark = (c: Rgb | null | undefined) => !c || c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11 < 140;
-  const shown = (led: number) => (display ?? colors)[led] ?? null;
+  /** What a LED shows right now (slots resolved against the active palette). */
+  const shown = (led: number): Rgb | null => {
+    const c = (display ?? colors)[led];
+    return c ? resolveColor(c) : null;
+  };
   const inDragRect = $derived(
     tool === "select" && startItem && endItem ? new Set(rectSelect(startItem, endItem)) : new Set<number>(),
   );
@@ -328,10 +334,7 @@
     {/if}
   </div>
   {#if hasBrush}
-    <label class="color">
-      <input type="color" bind:value={current} aria-label={t("canvas.color")} />
-      <span>{current}</span>
-    </label>
+    <span class="color"><ColorPicker value={current} onchange={(c) => (current = c)} label={t("canvas.color")} /></span>
     <button onclick={fill} disabled={!editable} title="F">{selected.size ? t("canvas.fillSel", { n: selected.size }) : t("canvas.fillAll")}</button>
   {/if}
   {#if tools.includes("select")}
@@ -350,8 +353,8 @@
 
 {#if hasBrush}
   <div class="recent">
-    {#each recent as r (r)}
-      <button class="swatch" style:background={r} title={r} onclick={() => (current = r)} aria-label={r}></button>
+    {#each recent as r (JSON.stringify(r))}
+      <button class="swatch" style:background={hex(resolveColor(r))} title={hex(resolveColor(r))} onclick={() => (current = cloneColor(r))} aria-label={hex(resolveColor(r))}></button>
     {/each}
   </div>
 {/if}
@@ -442,7 +445,6 @@
   .tools button.on { background: var(--accent); color: var(--accent-fg); }
   .tools svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .color { display: flex; align-items: center; gap: 0.4rem; font-family: monospace; }
-  .color input { width: 2.4rem; height: 2rem; border: none; padding: 0; background: none; }
   .hist { margin-left: auto; display: flex; gap: 0.25rem; }
   .swatch { width: 1.6rem; height: 1.6rem; padding: 0; border-radius: 4px; }
   .groups span { opacity: 0.7; }

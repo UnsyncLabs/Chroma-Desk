@@ -1,5 +1,5 @@
 /** Profiles and persistent settings store. */
-import { api, type ProfileList, type Settings, type Scene } from "./api";
+import { api, type Profile, type ProfileList, type Settings, type Scene } from "./api";
 import { setLocale } from "./i18n/index.svelte";
 import { flush, markClean, setScene } from "./scene.svelte";
 import { toastError } from "./state.svelte";
@@ -7,8 +7,28 @@ import { toastError } from "./state.svelte";
 export const profiles = $state({
   list: { profiles: [], corrupt: [] } as ProfileList,
   path: "",
-  settings: { language: null, start_hidden: false, default_profile: null, current_profile: null, fps_by_type: {}, show_phantom_devices: false } as Settings,
+  settings: { language: null, start_hidden: false, default_profile: null, current_profile: null, fps_by_type: {}, show_phantom_devices: false, builtin_enabled: {}, theme_rules: [], global_notifications: {}, desktop_notifications: false } as Settings,
 });
+
+/** The active profile's full document (theme, presets, notifications); replaced wholesale on reload. */
+class ActiveProfile {
+  value = $state.raw<Profile | null>(null);
+}
+export const activeProfile = new ActiveProfile();
+
+/** Re-reads the active profile (after switching or editing it). */
+export async function refreshActiveProfile() {
+  const name = profiles.settings.current_profile;
+  if (!name) {
+    activeProfile.value = null;
+    return;
+  }
+  try {
+    activeProfile.value = await api.profileGet(name);
+  } catch {
+    activeProfile.value = null;
+  }
+}
 
 export async function loadProfiles() {
   try {
@@ -17,6 +37,7 @@ export async function loadProfiles() {
     profiles.settings = settings;
     profiles.path = path;
     if (settings.language) setLocale(settings.language);
+    await refreshActiveProfile();
   } catch (e) {
     toastError(e);
   }

@@ -1,6 +1,8 @@
 <script lang="ts">
   /** "All devices": master brightness, lights off, quick colour and the global synchronised scene. */
-  import { api, fromHex, type Device, type Rgb } from "./api";
+  import { api, type Color, type Device } from "./api";
+  import ColorPicker from "./ColorPicker.svelte";
+  import { cloneColor } from "./palette.svelte";
   import { t, deviceLabel } from "./i18n/index.svelte";
   import { app, confirmDialog, navigate, toast, toastError } from "./state.svelte";
   import { commit, devScene, ensureDev, frames, newLayer, sceneStore } from "./scene.svelte";
@@ -8,7 +10,7 @@
   import Strip from "./Strip.svelte";
 
   const scene = $derived(sceneStore.scene);
-  let color = $state("#da1d1d");
+  let color = $state<Color>([218, 29, 29]);
   let globalSel: string | null = $state(null);
   let dragFrom = $state(-1);
 
@@ -50,11 +52,10 @@
 
   async function applyColor() {
     if (!(await confirmDialog(t("all.confirmColor"), t("all.apply")))) return;
-    const c = fromHex(color);
     for (const d of app.devices) {
       const ds = ensureDev(d.key);
       ds.mode = "effects";
-      ds.layers = [newLayer("solid", { params: { color: [...c] as Rgb } })];
+      ds.layers = [newLayer("solid", { params: { color: cloneColor(color) } })];
     }
     commit();
     toast(t("all.applied"), "ok");
@@ -94,7 +95,7 @@
   </label>
   <button class={sceneStore.blackout ? "primary" : ""} onclick={toggleBlackout}>{sceneStore.blackout ? t("all.lightsOn") : t("all.lightsOff")}</button>
   <span class="quick">
-    <input type="color" bind:value={color} aria-label={t("all.color")} />
+    <ColorPicker value={color} onchange={(c) => (color = c)} label={t("all.color")} />
     <button onclick={applyColor}>{t("all.apply")}</button>
   </span>
 </section>
@@ -164,7 +165,6 @@
   .bar { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 0.9rem; }
   .bar label { display: flex; gap: 0.5rem; align-items: center; }
   .quick { display: flex; gap: 0.4rem; align-items: center; margin-left: auto; }
-  .quick input { width: 2.2rem; height: 1.9rem; padding: 0; border: none; background: none; }
   .check { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.7rem; }
   .syncgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem); gap: 1rem; align-items: start; }
   .order { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem; }

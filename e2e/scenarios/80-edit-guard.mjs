@@ -80,7 +80,7 @@ export default async function (t, url) {
   await t.level("Quick");
   await sleep(300);
   const ds = (await t.scene()).devices[KB];
-  assert.equal(ds.layers.length, 1);
+  assert.equal(ds.layers.length, 1, JSON.stringify(ds.layers.map((l) => l.effect)));
   assert.equal(ds.layers[0].effect, "animation");
   assert.notEqual(ds.layers[0].params.anim_id, "draft");
 }

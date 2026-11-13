@@ -3,7 +3,8 @@
  * `frames`, `path` and `palette` follow `effects.rs` exactly; the effect presets are lightweight
  * approximations (good for a thumbnail, not bit-exact with the engine).
  */
-import type { Animation, ParamValue, Rgb, Stop } from "../api";
+import type { Animation, Color, ParamValue, Rgb, Stop } from "../api";
+import { resolveColor } from "../palette.svelte";
 import { nameIndex, resolveRef } from "./ref";
 import { sampleStops, sortStops } from "./palette";
 
@@ -32,7 +33,7 @@ export function resolveAnim(a: Animation, names: string[]): Resolved {
         frames: k.frames.map((f) => ({
           leds: Object.entries(f.leds).flatMap(([r, c]) => {
             const i = ref(r);
-            return i === null ? [] : [[i, c] as [number, Rgb]];
+            return i === null ? [] : [[i, resolveColor(c)] as [number, Rgb]];
           }),
           ms: f.duration_ms ?? k.frame_ms,
         })),
@@ -147,7 +148,8 @@ export function hsv(h: number, s: number, v: number): Rgb {
 }
 
 const num = (p: Record<string, ParamValue>, k: string, d: number) => (typeof p[k] === "number" ? (p[k] as number) : d);
-const list = (p: Record<string, ParamValue>, k: string): Rgb[] => (Array.isArray(p[k]) ? (p[k] as Rgb[]) : []);
+/** A colour list parameter, slots resolved against the active palette. */
+const list = (p: Record<string, ParamValue>, k: string): Rgb[] => (Array.isArray(p[k]) ? (p[k] as Color[]).map((c) => resolveColor(c)) : []);
 
 function project(p: Pos, deg: number): number {
   const a = (deg * Math.PI) / 180;
@@ -170,7 +172,7 @@ export function renderEffect(effectId: string, p: Record<string, ParamValue>, t:
   const all = (f: (i: number) => Px) => Array.from({ length: n }, (_, i) => f(i));
   switch (effectId) {
     case "solid":
-      return all(() => px((p.color as Rgb) ?? [255, 0, 0]));
+      return all(() => px(p.color ? resolveColor(p.color as Color) : [255, 0, 0]));
     case "rainbow": {
       const [sp, ang, sc] = [num(p, "speed", 0.25), num(p, "angle", 0), num(p, "scale", 1)];
       return all((i) => px(hsv(project(at(i), ang) * sc - t * sp, 1, 1)));

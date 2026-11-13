@@ -1,19 +1,25 @@
 /** Colour stops: sampling (mirrors `sample_stops` in effects.rs) and presets. */
-import type { Rgb, Stop } from "../api";
+import type { Color, Rgb, Stop } from "../api";
+import { resolveColor } from "../palette.svelte";
 
 const mix = (a: Rgb, b: Rgb, f: number): Rgb => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
 
 export const sortStops = (s: Stop[]): Stop[] => [...s].sort((a, b) => a.pos - b.pos);
 
+/** Stops with every slot resolved to RGB (what the samplers work on). */
+export const resolveStops = (s: Stop[]): { pos: number; color: Rgb }[] => s.map((x) => ({ pos: x.pos, color: resolveColor(x.color) }));
+
 /** Colour at `x`; cyclic palettes wrap from the last stop back to the first. `stops` must be sorted. */
-export function sampleStops(stops: Stop[], x: number, cyclic: boolean): Rgb {
+export function sampleStops(input: Stop[], x: number, cyclic: boolean): Rgb {
+  const stops = resolveStops(input);
   const n = stops.length;
   if (n === 0) return [0, 0, 0];
   if (n === 1) return stops[0].color;
   const first = stops[0];
   const last = stops[n - 1];
   x = cyclic ? ((x % 1) + 1) % 1 : Math.min(1, Math.max(0, x));
-  const wrap = (from: Stop, to: Stop, at: number) => {
+  type RS = (typeof stops)[number];
+  const wrap = (from: RS, to: RS, at: number) => {
     const span = Math.max(to.pos + 1 - from.pos, 1e-6);
     return mix(from.color, to.color, Math.min(1, Math.max(0, (at - from.pos) / span)));
   };
@@ -34,7 +40,7 @@ export function sampleStops(stops: Stop[], x: number, cyclic: boolean): Rgb {
   return mix(a.color, b.color, (x - a.pos) / Math.max(b.pos - a.pos, 1e-6));
 }
 
-const even = (cols: Rgb[], loop = false): Stop[] => {
+const even = (cols: Color[], loop = false): Stop[] => {
   const c = loop ? [...cols, cols[0]] : cols;
   return c.map((color, i) => ({ pos: c.length === 1 ? 0 : i / (c.length - 1), color }));
 };

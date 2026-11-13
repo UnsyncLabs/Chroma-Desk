@@ -60,13 +60,13 @@ export default async function (t, url) {
   // --- eyedropper picks what is on screen and returns to the brush.
   await t.tool("Eyedropper");
   await t.clickLed("Key: W");
-  assert.equal(await t.page.$eval('.toolbar input[type="color"]', (e) => e.value), "#ff00ff", "picked the shown colour");
+  assert.equal(await t.page.$eval(".toolbar .trigger", (e) => e.getAttribute("title")), "#ff00ff", "picked the shown colour");
   assert.deepEqual(await t.page.$$eval(".tools button.on", (e) => e.map((x) => x.textContent.trim())), ["Brush"]);
 
   // Eyedropper also reads the live frame colour of an unpainted key (rainbow underneath).
   await t.tool("Eyedropper");
   await t.clickLed("Key: Escape");
-  const picked = await t.page.$eval('.toolbar input[type="color"]', (e) => e.value);
+  const picked = await t.page.$eval(".toolbar .trigger", (e) => e.getAttribute("title"));
   assert.notEqual(picked, "#ff00ff");
   assert.match(picked, /^#[0-9a-f]{6}$/);
   assert.notEqual(picked, "#1b1b24", "it is the animated frame colour, not the empty-cell grey");

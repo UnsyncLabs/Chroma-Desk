@@ -2,7 +2,7 @@
 import { api, type Device } from "./api";
 import { errText, t } from "./i18n/index.svelte";
 
-export type View = { kind: "all" } | { kind: "device"; key: string } | { kind: "animations" } | { kind: "profiles" } | { kind: "settings" };
+export type View = { kind: "all" } | { kind: "device"; key: string } | { kind: "animations" } | { kind: "profiles" } | { kind: "notifications" } | { kind: "settings" };
 
 export const app = $state({
   devices: [] as Device[],

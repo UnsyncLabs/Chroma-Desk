@@ -209,12 +209,30 @@ export class T {
     }, String(value));
   }
 
-  async setColor(hex) {
-    await this.page.$eval('.toolbar input[type="color"]', (el, v) => {
+  /** Opens the colour picker inside `scope`, switches to "Custom" and sets a fixed colour (the native colour input cannot be driven by the mouse). */
+  async setColor(hex, scope = ".toolbar") {
+    await this.clickText(`${scope} .trigger`, ".*");
+    await this.waitFor(() => this.page.$(`${scope} .pop`), "colour popover");
+    // Pickers that cannot link to the theme (palette editor) have no tabs, only the custom colour.
+    if (await this.page.$(`${scope} .pop [role="tab"]`)) await this.clickText(`${scope} .pop [role="tab"]`, "^Custom$");
+    await this.page.$eval(`${scope} .pop input[type="color"]`, (el, v) => {
       el.value = v;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }, hex);
+    await this.page.keyboard.press("Escape");
+    await sleep(80);
+  }
+
+  /** Links the colour of the picker inside `scope` to a palette slot (real clicks). */
+  async pickSlot(slot, scope = ".toolbar") {
+    await this.clickText(`${scope} .trigger`, ".*");
+    await this.waitFor(() => this.page.$(`${scope} .pop`), "colour popover");
+    await this.clickText(`${scope} .pop [role="tab"]`, "^Palette$");
+    await this.page.click(`${scope} .pop button[data-slot="${slot}"]`);
+    await sleep(100);
+    await this.page.keyboard.press("Escape");
+    await sleep(80);
   }
 
   async tool(re) {

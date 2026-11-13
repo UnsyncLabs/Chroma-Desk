@@ -7,7 +7,10 @@
   import Animations from "$lib/Animations.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
   import { loadProfiles, profiles } from "$lib/profiles.svelte";
+  import { listenPalette, loadPalette } from "$lib/palette.svelte";
+  import { toastError } from "$lib/state.svelte";
   import Profiles from "$lib/Profiles.svelte";
+  import Notifications from "$lib/Notifications.svelte";
   import AllDevices from "$lib/AllDevices.svelte";
   import DeviceView from "$lib/DeviceView.svelte";
   import Settings from "$lib/Settings.svelte";
@@ -22,6 +25,7 @@
   async function start() {
     await api.waitStartup();
     await loadProfiles();
+    await loadPalette();
     loadAnimations();
     await loadDevices(api.connect);
     if (app.error) return;
@@ -32,6 +36,7 @@
     // Dev aid (screenshots): `#d=<index>` opens that device.
     const m = import.meta.env.DEV ? location.hash.match(/^#d=(\d+)/) : null;
     if (import.meta.env.DEV && location.hash === "#profiles") app.view = { kind: "profiles" };
+    if (import.meta.env.DEV && location.hash === "#notifications") app.view = { kind: "notifications" };
     if (import.meta.env.DEV && location.hash === "#animations") app.view = { kind: "animations" };
     if (m && app.devices[Number(m[1])]) app.view = { kind: "device", key: app.devices[Number(m[1])].key };
   }
@@ -41,6 +46,9 @@
     start();
     // A profile applied from the tray changes `current_profile` behind the UI's back.
     const offScene = on<unknown>("scene-changed", () => loadProfiles());
+    // A theme rule or a script switched the profile behind the UI's back: refresh the list and the tray.
+    const offApplied = on<unknown>("profile-applied", () => loadProfiles().then(() => api.refreshTray().catch(() => {})));
+    const offPalette = listenPalette((msg) => toastError({ code: "palette_source", detail: msg }));
     listenEngine(async () => {
       await loadDevices(api.listDevices);
       syncPositions(app.devices);
@@ -48,6 +56,8 @@
     return () => {
       off();
       offScene.then((f) => f());
+      offApplied.then((f) => f());
+      offPalette.then((f) => f());
     };
   });
 
@@ -106,6 +116,10 @@
         <span class="name">{t("nav.animations")}</span>
         <small>{t("nav.animationsHint")}</small>
       </button>
+      <button class="dev" class:active={app.view.kind === "notifications"} onclick={() => go({ kind: "notifications" })} data-nav="notifications">
+        <span class="name">{t("nav.notifications")}</span>
+        <small>{t("nav.notificationsHint")}</small>
+      </button>
       <button class="dev" class:active={app.view.kind === "profiles"} onclick={() => go({ kind: "profiles" })}>
         <span class="name">{t("nav.profiles")}{#if isDirty()}<span class="dirty" title={t("prof.unsaved")}> ●</span>{/if}</span>
         <small>{profiles.settings.current_profile ?? t("prof.none")}</small>
@@ -150,6 +164,8 @@
       <Animations />
     {:else if app.view.kind === "profiles"}
       <Profiles />
+    {:else if app.view.kind === "notifications"}
+      <Notifications />
     {:else if !app.devices.length}
       <div class="empty">
         <h2>{t("empty.noDevices")}</h2>

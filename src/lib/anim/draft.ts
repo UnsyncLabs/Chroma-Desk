@@ -1,8 +1,9 @@
 /** Conversions between what the editors hold (LED indices of one device) and portable animations. */
-import type { AnimKind, Animation, LoopMode, Rgb, Stop } from "../api";
+import type { AnimKind, Animation, Color, LoopMode, Stop } from "../api";
+import { cloneColor } from "../palette.svelte";
 import { nameIndex, refMaker, resolveRef } from "./ref";
 
-export type Paint = (Rgb | null)[];
+export type Paint = (Color | null)[];
 export interface FrameDraft {
   /** Stable key for the timeline. */
   id: number;
@@ -14,16 +15,16 @@ export interface FrameDraft {
 let nextId = 1;
 export const newFrameId = () => nextId++;
 export const blankPaint = (n: number): Paint => Array.from({ length: n }, () => null);
-export const clonePaint = (p: Paint): Paint => p.map((c) => (c ? ([...c] as Rgb) : null));
+export const clonePaint = (p: Paint): Paint => p.map((c) => (c ? cloneColor(c) : null));
 
 export function framesToKind(frames: FrameDraft[], names: string[], o: { frameMs: number; loop: LoopMode; crossfade: number }): AnimKind {
   const ref = refMaker(names);
   return {
     type: "frames",
     frames: frames.map((f) => {
-      const leds: Record<string, Rgb> = {};
+      const leds: Record<string, Color> = {};
       f.leds.forEach((c, i) => {
-        if (c) leds[ref(i)] = [...c] as Rgb;
+        if (c) leds[ref(i)] = cloneColor(c);
       });
       return f.ms == null ? { leds } : { leds, duration_ms: f.ms };
     }),
@@ -42,7 +43,7 @@ export function kindToFrames(kind: AnimKind & { type: "frames" }, names: string[
     for (const [r, c] of Object.entries(f.leds)) {
       const i = resolveRef(r, idx, names.length);
       if (i === null) lostRefs.add(r);
-      else leds[i] = [...c] as Rgb;
+      else leds[i] = cloneColor(c);
     }
     return { id: newFrameId(), leds, ms: f.duration_ms ?? null };
   });

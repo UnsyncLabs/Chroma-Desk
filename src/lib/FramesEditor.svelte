@@ -2,6 +2,7 @@
   /** Flipbook editor: a timeline of frames, each painted on the canvas; plays in a loop. */
   import { onDestroy, onMount, untrack } from "svelte";
   import type { Animation, Device, LoopMode, Rgb } from "./api";
+  import { resolveColor } from "./palette.svelte";
   import { blankPaint, clonePaint, framesToKind, kindToFrames, makeAnimation, newFrameId, type FrameDraft } from "./anim/draft";
   import { flatten, renderAnimation } from "./anim/render";
   import { EditorSession, nextUpdated } from "./editorSession.svelte";
@@ -57,7 +58,7 @@
     if (playing || !onion || cur === 0) return null;
     const prev = frames[cur - 1]?.leds;
     if (!prev) return null;
-    return current.leds.map((c, i) => c ?? (prev[i] ? (prev[i]!.map((v) => Math.round(v * 0.28)) as Rgb) : null));
+    return current.leds.map((c, i) => c ?? (prev[i] ? (resolveColor(prev[i]!).map((v) => Math.round(v * 0.28)) as Rgb) : null));
   });
   const display = $derived(preview ?? onionDisplay);
 

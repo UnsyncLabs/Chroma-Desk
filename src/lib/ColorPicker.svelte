@@ -102,7 +102,7 @@
   .sw svg { width: 1rem; height: 1rem; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; filter: drop-shadow(0 0 2px #000); }
   .chip { font-size: 0.75rem; background: var(--accent); color: var(--accent-fg); border-radius: 999px; padding: 0.05rem 0.5rem; }
   .hexv { font-family: monospace; font-size: 0.8rem; color: var(--muted); }
-  .pop { position: absolute; z-index: 30; top: calc(100% + 0.3rem); left: 0; width: min(17.5rem, calc(100vw - 2rem)); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem; box-shadow: 0 10px 30px #0008; }
+  .pop { font-family: Inter, system-ui, sans-serif; position: absolute; z-index: 30; top: calc(100% + 0.3rem); left: 0; width: min(17.5rem, calc(100vw - 2rem)); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem; box-shadow: 0 10px 30px #0008; }
   .tabs { display: flex; gap: 0.3rem; margin-bottom: 0.5rem; }
   .tabs .on { background: var(--accent); color: var(--accent-fg); }
   .hint { margin: 0 0 0.5rem; font-size: 0.78rem; color: var(--muted); }

@@ -21,7 +21,7 @@ export default async function (t, url) {
   assert.deepEqual(await ids(t), []);
   assert.ok(await t.page.$(".none"), "no-matches message");
   await t.clickText(".pill", "^Built-in");
-  assert.equal((await ids(t)).length, 9);
+  assert.equal((await ids(t)).length, 19);
   await t.clickText(".pill", "^All");
 
   // Apply to the selected preview device (the keyboard).
@@ -36,7 +36,7 @@ export default async function (t, url) {
   await t.clickText("dialog button", "^Apply to all devices$");
   await sleep(400);
   const sc = await t.scene();
-  assert.equal(Object.keys(sc.devices).length, 5, "every device now has a scene");
+  assert.equal(Object.keys(sc.devices).length, 6, "every device now has a scene");
   for (const d of Object.values(sc.devices)) assert.equal(d.layers[0].params.anim_id, "builtin:wave");
 
   // Test = trigger overlay.
@@ -55,7 +55,7 @@ export default async function (t, url) {
   await t.nav("^Animations");
 
   // Rename the copy.
-  await t.waitFor(async () => (await ids(t)).length === 10, "10 cards");
+  await t.waitFor(async () => (await ids(t)).length === 20, "20 cards");
   const copyId = (await ids(t)).find((i) => i.startsWith("u-"));
   await t.clickText(`${card(copyId)} summary`, "More actions");
   await t.clickText(`${card(copyId)} .items button`, "^Rename$");
@@ -74,7 +74,7 @@ export default async function (t, url) {
   // Duplicate.
   await t.clickText(`${card(copyId)} summary`, "More actions");
   await t.clickText(`${card(copyId)} .items button`, "^Duplicate$");
-  await t.waitFor(async () => (await ids(t)).length === 11, "duplicate added");
+  await t.waitFor(async () => (await ids(t)).length === 21, "duplicate added");
 
   // Export + import into a fresh name.
   await t.page.evaluate(() => (globalThis.__chromaMock.nextSave = "/tmp/worm.json"));
@@ -84,7 +84,7 @@ export default async function (t, url) {
   assert.ok((await t.mockState("files"))["/tmp/worm.json"], "file exported");
   await t.page.evaluate(() => (globalThis.__chromaMock.nextOpen = "/tmp/worm.json"));
   await t.clickText(".headBtns button", "^Import");
-  await t.waitFor(async () => (await ids(t)).length === 12, "imported");
+  await t.waitFor(async () => (await ids(t)).length === 22, "imported");
   const names = await t.page.$$eval("[data-anim] .name", (e) => e.map((x) => x.textContent));
   assert.ok(names.includes("Green worm (2)"), `imported with suffix: ${names}`);
 
@@ -92,11 +92,11 @@ export default async function (t, url) {
   await t.clickText(`${card(copyId)} summary`, "More actions");
   await t.clickText(`${card(copyId)} .items button`, "^Delete$");
   await t.clickText("dialog button", "^Cancel$");
-  assert.equal((await ids(t)).length, 12, "cancel keeps it");
+  assert.equal((await ids(t)).length, 22, "cancel keeps it");
   await t.clickText(`${card(copyId)} summary`, "More actions");
   await t.clickText(`${card(copyId)} .items button`, "^Delete$");
   await t.clickText("dialog button", "^Delete$");
-  await t.waitFor(async () => (await ids(t)).length === 11, "deleted");
+  await t.waitFor(async () => (await ids(t)).length === 21, "deleted");
   await t.shot("library", 1200, 800);
   await t.shot("library", 400, 400);
 }

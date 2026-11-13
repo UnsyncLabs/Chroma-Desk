@@ -1,5 +1,6 @@
 <script lang="ts">
   /** Palette editor: shape a region with the gradient tool; its colours then cycle through the palette. */
+  import { cloneColor } from "./palette.svelte";
   import { onDestroy, onMount, untrack } from "svelte";
   import type { Animation, Device, Rgb, Stop } from "./api";
   import { cellsToKind, kindToCells, makeAnimation } from "./anim/draft";
@@ -25,7 +26,7 @@
 
   type Cells = Record<number, number>;
   let cells = $state<Cells>(start?.cells ?? {});
-  let palette = $state<Stop[]>(k?.palette ?? PALETTE_PRESETS[1].stops.map((s) => ({ pos: s.pos, color: [...s.color] as Rgb })));
+  let palette = $state<Stop[]>(k?.palette ?? PALETTE_PRESETS[1].stops.map((s) => ({ pos: s.pos, color: cloneColor(s.color) })));
   let speed = $state(k?.speed ?? 0.3);
   let reverse = $state(k?.reverse ?? false);
   const reduced = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;

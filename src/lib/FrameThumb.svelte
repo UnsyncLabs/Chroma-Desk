@@ -1,9 +1,10 @@
 <script lang="ts">
   /** Static miniature of one frame (timeline). */
-  import type { Rgb } from "./api";
+  import type { Color } from "./api";
+  import { resolveColor } from "./palette.svelte";
   import type { Layout } from "./layout/buildLayout";
 
-  let { leds, layout }: { leds: (Rgb | null)[]; layout: Layout } = $props();
+  let { leds, layout }: { leds: (Color | null)[]; layout: Layout } = $props();
   let canvas: HTMLCanvasElement | undefined = $state();
 
   const W = 150;
@@ -16,7 +17,7 @@
     const k = canvas.width / (layout.width + PAD * 2);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const it of layout.items) {
-      const c = leds[it.led];
+      const c = leds[it.led] ? resolveColor(leds[it.led]!) : null;
       ctx.fillStyle = c ? `rgb(${c[0]},${c[1]},${c[2]})` : "#242430";
       const x = (it.x + PAD) * k;
       const y = (it.y + PAD) * k;

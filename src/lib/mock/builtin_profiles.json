@@ -1,0 +1,202 @@
+[
+  {
+    "schema_version": 2,
+    "name": "Omarchy (follow theme)",
+    "openrgb_profile": null,
+    "zone_sizes": {},
+    "scene": {
+      "master_brightness": 1.0,
+      "sync": false,
+      "order": [],
+      "global_layers": [],
+      "devices": {}
+    },
+    "theme": {
+      "source": "omarchy"
+    },
+    "presets": [
+      {
+        "id": "builtin:accent-breathing",
+        "name": "Accent breathing"
+      },
+      {
+        "id": "builtin:theme-wave",
+        "name": "Theme wave"
+      },
+      {
+        "id": "builtin:theme-chase",
+        "name": "Theme chase"
+      },
+      {
+        "id": "builtin:starlight",
+        "name": "Starlight"
+      }
+    ],
+    "triggers": {
+      "alert": {
+        "anim": "Alert",
+        "color": "@alert",
+        "duration": 3.0
+      },
+      "notify": {
+        "anim": "Flash",
+        "color": "@info",
+        "duration": 1.5
+      },
+      "success": {
+        "anim": "Pulse",
+        "color": "@ok",
+        "duration": 1.5
+      }
+    },
+    "enabled": false,
+    "builtin": true,
+    "requires": "omarchy"
+  },
+  {
+    "schema_version": 2,
+    "name": "Cyberpunk",
+    "openrgb_profile": null,
+    "zone_sizes": {},
+    "scene": {
+      "master_brightness": 1.0,
+      "sync": false,
+      "order": [],
+      "global_layers": [],
+      "devices": {}
+    },
+    "theme": {
+      "source": "manual",
+      "manual_palette": {
+        "accent": [
+          252,
+          238,
+          10
+        ],
+        "alert": [
+          255,
+          0,
+          60
+        ],
+        "background": [
+          10,
+          6,
+          18
+        ],
+        "c1": [
+          255,
+          0,
+          60
+        ],
+        "c2": [
+          255,
+          138,
+          0
+        ],
+        "c3": [
+          252,
+          238,
+          10
+        ],
+        "c4": [
+          0,
+          255,
+          159
+        ],
+        "c5": [
+          0,
+          240,
+          255
+        ],
+        "c6": [
+          58,
+          123,
+          255
+        ],
+        "c7": [
+          123,
+          44,
+          255
+        ],
+        "c8": [
+          255,
+          42,
+          109
+        ],
+        "foreground": [
+          232,
+          224,
+          255
+        ],
+        "info": [
+          0,
+          240,
+          255
+        ],
+        "ok": [
+          0,
+          255,
+          159
+        ],
+        "primary": [
+          0,
+          240,
+          255
+        ],
+        "secondary": [
+          255,
+          42,
+          109
+        ],
+        "tertiary": [
+          123,
+          44,
+          255
+        ],
+        "warn": [
+          255,
+          138,
+          0
+        ]
+      }
+    },
+    "presets": [
+      {
+        "id": "builtin:neon-scan",
+        "name": "Neon Scan"
+      },
+      {
+        "id": "builtin:breach-alert",
+        "name": "Breach Alert"
+      },
+      {
+        "id": "builtin:glitch",
+        "name": "Glitch"
+      },
+      {
+        "id": "builtin:theme-wave",
+        "name": "Theme wave"
+      },
+      {
+        "id": "builtin:theme-chase",
+        "name": "Theme chase"
+      }
+    ],
+    "triggers": {
+      "alert": {
+        "anim": "Breach Alert",
+        "duration": 3.0
+      },
+      "notify": {
+        "anim": "Neon Scan",
+        "duration": 2.5
+      },
+      "success": {
+        "anim": "Pulse",
+        "color": "@ok",
+        "duration": 1.5
+      }
+    },
+    "builtin": true
+  }
+]

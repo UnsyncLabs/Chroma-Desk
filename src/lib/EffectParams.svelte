@@ -1,29 +1,31 @@
 <script lang="ts">
   /** Parameter editor generated from the effect schema (sliders, colours, angle, switches). */
-  import { hex, fromHex, type EffectDef, type ParamValue, type Rgb } from "./api";
+  import type { Color, EffectDef, ParamValue } from "./api";
+  import ColorPicker from "./ColorPicker.svelte";
+  import { cloneColor } from "./palette.svelte";
   import { t } from "./i18n/index.svelte";
 
   let { def, params, oncommit }: { def: EffectDef; params: Record<string, ParamValue>; oncommit: () => void } = $props();
 
   const num = (k: string, fallback: number) => (typeof params[k] === "number" ? (params[k] as number) : fallback);
-  const colorList = (k: string): Rgb[] => (Array.isArray(params[k]) ? (params[k] as Rgb[]) : []);
+  const colorList = (k: string): Color[] => (Array.isArray(params[k]) ? (params[k] as Color[]) : []);
 
   function setNum(k: string, e: Event) {
     params[k] = Number((e.currentTarget as HTMLInputElement).value);
     oncommit();
   }
-  function setColor(k: string, v: string) {
-    params[k] = fromHex(v);
+  function setColor(k: string, c: Color) {
+    params[k] = c;
     oncommit();
   }
-  function setListColor(k: string, i: number, v: string) {
-    const list = colorList(k).map((c) => [...c] as Rgb);
-    list[i] = fromHex(v);
+  function setListColor(k: string, i: number, c: Color) {
+    const list = colorList(k).map(cloneColor);
+    list[i] = c;
     params[k] = list;
     oncommit();
   }
   function addColor(k: string) {
-    params[k] = [...colorList(k), [255, 255, 255] as Rgb];
+    params[k] = [...colorList(k).map(cloneColor), { slot: "accent" } as Color];
     oncommit();
   }
   function removeColor(k: string) {
@@ -42,14 +44,14 @@
   {:else if p.kind === "color"}
     <label class="row">
       <span>{t(`param.${p.key}`)}</span>
-      <input type="color" value={hex((params[p.key] as Rgb) ?? (p.default as Rgb))} oninput={(e) => setColor(p.key, e.currentTarget.value)} />
+      <ColorPicker value={(params[p.key] as Color) ?? (p.default as Color)} onchange={(c) => setColor(p.key, c)} label={t(`param.${p.key}`)} />
     </label>
   {:else if p.kind === "colors"}
     <div class="row">
       <span>{t(`param.${p.key}`)}</span>
       <span class="colors">
         {#each colorList(p.key) as c, i (i)}
-          <input type="color" value={hex(c)} aria-label={t("hw.colorN", { n: i + 1 })} oninput={(e) => setListColor(p.key, i, e.currentTarget.value)} />
+          <ColorPicker value={c} onchange={(nc) => setListColor(p.key, i, nc)} label={t("hw.colorN", { n: i + 1 })} />
         {/each}
         {#if colorList(p.key).length < p.max}<button onclick={() => addColor(p.key)} aria-label={t("hw.addColor")}>+</button>{/if}
         {#if colorList(p.key).length > p.min}<button onclick={() => removeColor(p.key)} aria-label={t("hw.removeColor")}>−</button>{/if}
@@ -75,5 +77,4 @@
   .row > span:first-child { color: var(--muted); font-size: 0.9rem; }
   .row output { text-align: right; font-variant-numeric: tabular-nums; }
   .colors { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; grid-column: 2 / -1; }
-  input[type="color"] { width: 2rem; height: 1.7rem; padding: 0; border: none; background: none; }
 </style>

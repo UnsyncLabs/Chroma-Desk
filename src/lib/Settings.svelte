@@ -1,7 +1,8 @@
 <script lang="ts">
   /** Settings screen. */
   import { getVersion } from "@tauri-apps/api/app";
-  import { api, type ServerStatus } from "./api";
+  import { api, hex, type HookStatus, type ServerStatus, type ThemeStatus } from "./api";
+  import { SLOTS, palette } from "./palette.svelte";
   import { t, deviceLabel, getLocale, setLocale, LANGUAGES } from "./i18n/index.svelte";
   import { app, copyText, loadDevices, tour, toast, toastError } from "./state.svelte";
   import { commit, sceneStore } from "./scene.svelte";
@@ -86,6 +87,43 @@
     saveSettings();
   }
 
+  // ---------- themes ----------
+  let themeStat = $state<ThemeStatus | null>(null);
+  let hook = $state<HookStatus | null>(null);
+  let ruleTheme = $state("");
+  let ruleProfile = $state("");
+  const omarchy = $derived(themeStat?.sources.find((x) => x.id === "omarchy"));
+  const userProfiles = $derived(profiles.list.profiles.filter((p) => p.enabled));
+
+  $effect(() => {
+    palette.generation;
+    api.themeStatus().then((x) => (themeStat = x)).catch(() => {});
+  });
+  $effect(() => {
+    api.omarchyHookStatus().then((h) => (hook = h)).catch(() => {});
+  });
+
+  function addRule() {
+    const theme = ruleTheme.trim();
+    const profile = ruleProfile || userProfiles[0]?.name;
+    if (!theme || !profile) return;
+    profiles.settings.theme_rules = [...profiles.settings.theme_rules.filter((r) => r.theme.toLowerCase() !== theme.toLowerCase()), { theme, profile }];
+    ruleTheme = "";
+    saveSettings();
+  }
+  function removeRule(theme: string) {
+    profiles.settings.theme_rules = profiles.settings.theme_rules.filter((r) => r.theme !== theme);
+    saveSettings();
+  }
+  async function toggleHook(install: boolean) {
+    try {
+      hook = await (install ? api.omarchyHookInstall() : api.omarchyHookRemove());
+      toast(t(install ? "themes.hookInstalled" : "themes.hookRemoved"), "ok");
+    } catch (e) {
+      toastError(e);
+    }
+  }
+
   async function reconnect() {
     await loadDevices(api.connect);
     await refresh();
@@ -156,6 +194,56 @@
   <p class="muted small">{t("set.serviceHint")}</p>
 </section>
 
+<section data-themes>
+  <h3>{t("themes.title")}</h3>
+  <p class="muted small">{t("themes.hint")}</p>
+  <h4>{t("themes.current")}</h4>
+  <p>
+    <b data-palette-name>{palette.name}</b>
+    <span class="muted"> · {t(`src.${palette.source}`)}{palette.external ? ` · ${t("themes.external")}` : ""}</span>
+  </p>
+  {#if palette.error}<p class="warn small">{t("themes.error", { detail: palette.error })}</p>{/if}
+  <div class="pal" data-palette>
+    {#each SLOTS as s (s)}
+      <span class="sw" data-swatch={s} style:background={hex(palette.slots[s] ?? [0, 0, 0])} title={`@${s} ${hex(palette.slots[s] ?? [0, 0, 0])}`}></span>
+    {/each}
+  </div>
+
+  <h4>{t("themes.rules")}</h4>
+  <p class="muted small">{t("themes.rulesHint")}</p>
+  {#each profiles.settings.theme_rules as r (r.theme)}
+    <div class="rule" data-rule={r.theme}>
+      <span>{t("themes.ruleLine")} <b>{r.theme}</b> → <b>{r.profile}</b></span>
+      <button onclick={() => removeRule(r.theme)} aria-label={t("common.delete")}>✕</button>
+    </div>
+  {/each}
+  <div class="rule add">
+    <input type="text" bind:value={ruleTheme} placeholder={omarchy?.name ?? "tokyo-night"} list="omarchy-themes" aria-label={t("themes.ruleTheme")} />
+    <datalist id="omarchy-themes">{#if omarchy?.name}<option value={omarchy.name}></option>{/if}</datalist>
+    <span>→</span>
+    <select bind:value={ruleProfile} aria-label={t("themes.ruleProfile")}>
+      {#each userProfiles as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
+    </select>
+    <button onclick={addRule} disabled={!ruleTheme.trim() || !userProfiles.length}>{t("themes.addRule")}</button>
+  </div>
+
+  <h4>{t("themes.hook")}</h4>
+  {#if hook?.available}
+    <p class="muted small">{t("themes.hookHint")}</p>
+    <div class="cmd"><code data-hook-command>{hook.command}</code><button onclick={() => copyText(hook?.command ?? "", t("trg.copied"))}>{t("trg.copy")}</button></div>
+    <p class="small">{hook.installed ? t("themes.hookIs", { path: hook.path }) : t("themes.hookNot")}</p>
+    <div class="row">
+      {#if hook.installed}
+        <button onclick={() => toggleHook(false)} data-hook="remove">{t("themes.hookRemove")}</button>
+      {:else}
+        <button class="primary" onclick={() => toggleHook(true)} data-hook="install">{t("themes.hookInstall")}</button>
+      {/if}
+    </div>
+  {:else}
+    <p class="muted small">{t("themes.noOmarchy")}</p>
+  {/if}
+</section>
+
 <section>
   <h3>{t("trg.title")}</h3>
   <p class="muted small">{t("trg.hint")}</p>
@@ -197,4 +285,7 @@
   .cmd { display: flex; gap: 0.5rem; align-items: flex-start; }
   .cmd code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.82rem; }
   .row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+  .pal { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .sw { width: 1.9rem; height: 1.9rem; border-radius: 6px; border: 1px solid var(--border); }
+  .rule { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.3rem 0; }
 </style>

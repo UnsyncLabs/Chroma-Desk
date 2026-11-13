@@ -1509,6 +1509,1492 @@
   },
   {
     "schema_version": 1,
+    "id": "builtin:accent-breathing",
+    "name": "Accent breathing",
+    "description": null,
+    "tags": [
+      "themed",
+      "calm"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "breathing",
+      "params": {
+        "colors": [
+          {
+            "slot": "accent"
+          }
+        ],
+        "period": 4.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:theme-wave",
+    "name": "Theme wave",
+    "description": null,
+    "tags": [
+      "themed",
+      "classic"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "color_wave",
+      "params": {
+        "angle": 0,
+        "colors": [
+          {
+            "slot": "accent"
+          },
+          {
+            "slot": "secondary"
+          },
+          {
+            "slot": "accent"
+          }
+        ],
+        "scale": 1.0,
+        "speed": 0.2
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:theme-chase",
+    "name": "Theme chase",
+    "description": null,
+    "tags": [
+      "themed",
+      "classic"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "chase",
+      "params": {
+        "colors": [
+          {
+            "slot": "primary"
+          }
+        ],
+        "gap": 0.35,
+        "length": 0.25,
+        "speed": 0.6
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:flash",
+    "name": "Flash",
+    "description": null,
+    "tags": [
+      "themed",
+      "notification"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "strobe",
+      "params": {
+        "colors": [
+          {
+            "slot": "info"
+          }
+        ],
+        "duty": 0.35,
+        "rate": 3.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:pulse",
+    "name": "Pulse",
+    "description": null,
+    "tags": [
+      "themed",
+      "notification"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "breathing",
+      "params": {
+        "colors": [
+          {
+            "slot": "ok"
+          }
+        ],
+        "period": 1.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:blink",
+    "name": "Blink",
+    "description": null,
+    "tags": [
+      "themed",
+      "notification"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "strobe",
+      "params": {
+        "colors": [
+          {
+            "slot": "alert"
+          }
+        ],
+        "duty": 0.5,
+        "rate": 2.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:fill",
+    "name": "Fill",
+    "description": null,
+    "tags": [
+      "themed",
+      "notification"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "solid",
+      "params": {
+        "color": {
+          "slot": "accent"
+        }
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:glitch",
+    "name": "Glitch",
+    "description": null,
+    "tags": [
+      "themed",
+      "cyberpunk"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "effect",
+      "effect": "glitch",
+      "params": {
+        "colors": [
+          {
+            "slot": "primary"
+          },
+          {
+            "slot": "secondary"
+          },
+          {
+            "slot": "accent"
+          }
+        ],
+        "density": 0.3,
+        "duration": 0.3,
+        "interval": 5.0,
+        "size": 0.16
+      }
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:neon-scan",
+    "name": "Neon Scan",
+    "description": null,
+    "tags": [
+      "themed",
+      "path",
+      "cyberpunk"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "keyboard",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "path",
+      "path": [
+        "name:Key: `",
+        "name:Key: 1",
+        "name:Key: 2",
+        "name:Key: 3",
+        "name:Key: 4",
+        "name:Key: 5",
+        "name:Key: 6",
+        "name:Key: 7",
+        "name:Key: 8",
+        "name:Key: 9",
+        "name:Key: 0",
+        "name:Key: -",
+        "name:Key: =",
+        "name:Key: Q",
+        "name:Key: W",
+        "name:Key: E",
+        "name:Key: R",
+        "name:Key: T",
+        "name:Key: Y",
+        "name:Key: U",
+        "name:Key: I",
+        "name:Key: O",
+        "name:Key: P",
+        "name:Key: [",
+        "name:Key: ]",
+        "name:Key: A",
+        "name:Key: S",
+        "name:Key: D",
+        "name:Key: F",
+        "name:Key: G",
+        "name:Key: H",
+        "name:Key: J",
+        "name:Key: K",
+        "name:Key: L",
+        "name:Key: ;",
+        "name:Key: '",
+        "name:Key: Z",
+        "name:Key: X",
+        "name:Key: C",
+        "name:Key: V",
+        "name:Key: B",
+        "name:Key: N",
+        "name:Key: M",
+        "name:Key: ,",
+        "name:Key: .",
+        "name:Key: /"
+      ],
+      "palette": [
+        {
+          "pos": 0.0,
+          "color": {
+            "slot": "primary"
+          }
+        },
+        {
+          "pos": 0.5,
+          "color": {
+            "slot": "secondary"
+          }
+        },
+        {
+          "pos": 1.0,
+          "color": {
+            "slot": "tertiary"
+          }
+        }
+      ],
+      "speed": 0.55,
+      "length": 0.22,
+      "gap": 0.3,
+      "reverse": false,
+      "tail_fade": 0.8
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "builtin:breach-alert",
+    "name": "Breach Alert",
+    "description": null,
+    "tags": [
+      "themed",
+      "frames",
+      "cyberpunk"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "keyboard",
+      "hint": null
+    },
+    "builtin": true,
+    "kind": {
+      "type": "frames",
+      "frames": [
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "alert"
+            },
+            "name:Key: ,": {
+              "slot": "alert"
+            },
+            "name:Key: -": {
+              "slot": "alert"
+            },
+            "name:Key: .": {
+              "slot": "alert"
+            },
+            "name:Key: /": {
+              "slot": "alert"
+            },
+            "name:Key: 0": {
+              "slot": "alert"
+            },
+            "name:Key: 1": {
+              "slot": "alert"
+            },
+            "name:Key: 2": {
+              "slot": "alert"
+            },
+            "name:Key: 3": {
+              "slot": "alert"
+            },
+            "name:Key: 4": {
+              "slot": "alert"
+            },
+            "name:Key: 5": {
+              "slot": "alert"
+            },
+            "name:Key: 6": {
+              "slot": "alert"
+            },
+            "name:Key: 7": {
+              "slot": "alert"
+            },
+            "name:Key: 8": {
+              "slot": "alert"
+            },
+            "name:Key: 9": {
+              "slot": "alert"
+            },
+            "name:Key: ;": {
+              "slot": "alert"
+            },
+            "name:Key: =": {
+              "slot": "alert"
+            },
+            "name:Key: A": {
+              "slot": "alert"
+            },
+            "name:Key: B": {
+              "slot": "alert"
+            },
+            "name:Key: C": {
+              "slot": "alert"
+            },
+            "name:Key: D": {
+              "slot": "alert"
+            },
+            "name:Key: E": {
+              "slot": "alert"
+            },
+            "name:Key: F": {
+              "slot": "alert"
+            },
+            "name:Key: G": {
+              "slot": "alert"
+            },
+            "name:Key: H": {
+              "slot": "alert"
+            },
+            "name:Key: I": {
+              "slot": "alert"
+            },
+            "name:Key: J": {
+              "slot": "alert"
+            },
+            "name:Key: K": {
+              "slot": "alert"
+            },
+            "name:Key: L": {
+              "slot": "alert"
+            },
+            "name:Key: M": {
+              "slot": "alert"
+            },
+            "name:Key: N": {
+              "slot": "alert"
+            },
+            "name:Key: O": {
+              "slot": "alert"
+            },
+            "name:Key: P": {
+              "slot": "alert"
+            },
+            "name:Key: Q": {
+              "slot": "alert"
+            },
+            "name:Key: R": {
+              "slot": "alert"
+            },
+            "name:Key: S": {
+              "slot": "alert"
+            },
+            "name:Key: Space": {
+              "slot": "alert"
+            },
+            "name:Key: T": {
+              "slot": "alert"
+            },
+            "name:Key: U": {
+              "slot": "alert"
+            },
+            "name:Key: V": {
+              "slot": "alert"
+            },
+            "name:Key: W": {
+              "slot": "alert"
+            },
+            "name:Key: X": {
+              "slot": "alert"
+            },
+            "name:Key: Y": {
+              "slot": "alert"
+            },
+            "name:Key: Z": {
+              "slot": "alert"
+            },
+            "name:Key: [": {
+              "slot": "alert"
+            },
+            "name:Key: ]": {
+              "slot": "alert"
+            },
+            "name:Key: `": {
+              "slot": "alert"
+            }
+          },
+          "duration_ms": 90
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ,": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: -": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: .": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: /": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 0": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 1": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 2": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 3": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 4": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 5": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 6": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 7": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 8": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 9": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ;": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: =": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: A": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: B": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: C": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: D": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: E": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: F": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: G": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: H": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: I": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: J": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: K": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: L": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: M": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: N": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: O": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: P": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Q": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: R": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: S": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Space": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: T": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: U": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: V": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: W": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: X": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Y": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Z": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: [": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ]": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: `": {
+              "slot": "alert",
+              "lighten": -0.8
+            }
+          },
+          "duration_ms": 70
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "accent"
+            },
+            "name:Key: ,": {
+              "slot": "accent"
+            },
+            "name:Key: -": {
+              "slot": "accent"
+            },
+            "name:Key: .": {
+              "slot": "accent"
+            },
+            "name:Key: /": {
+              "slot": "accent"
+            },
+            "name:Key: 0": {
+              "slot": "accent"
+            },
+            "name:Key: 1": {
+              "slot": "accent"
+            },
+            "name:Key: 2": {
+              "slot": "accent"
+            },
+            "name:Key: 3": {
+              "slot": "accent"
+            },
+            "name:Key: 4": {
+              "slot": "accent"
+            },
+            "name:Key: 5": {
+              "slot": "accent"
+            },
+            "name:Key: 6": {
+              "slot": "accent"
+            },
+            "name:Key: 7": {
+              "slot": "accent"
+            },
+            "name:Key: 8": {
+              "slot": "accent"
+            },
+            "name:Key: 9": {
+              "slot": "accent"
+            },
+            "name:Key: ;": {
+              "slot": "accent"
+            },
+            "name:Key: =": {
+              "slot": "accent"
+            },
+            "name:Key: A": {
+              "slot": "accent"
+            },
+            "name:Key: B": {
+              "slot": "accent"
+            },
+            "name:Key: C": {
+              "slot": "accent"
+            },
+            "name:Key: D": {
+              "slot": "accent"
+            },
+            "name:Key: E": {
+              "slot": "accent"
+            },
+            "name:Key: F": {
+              "slot": "accent"
+            },
+            "name:Key: G": {
+              "slot": "accent"
+            },
+            "name:Key: H": {
+              "slot": "accent"
+            },
+            "name:Key: I": {
+              "slot": "accent"
+            },
+            "name:Key: J": {
+              "slot": "accent"
+            },
+            "name:Key: K": {
+              "slot": "accent"
+            },
+            "name:Key: L": {
+              "slot": "accent"
+            },
+            "name:Key: M": {
+              "slot": "accent"
+            },
+            "name:Key: N": {
+              "slot": "accent"
+            },
+            "name:Key: O": {
+              "slot": "accent"
+            },
+            "name:Key: P": {
+              "slot": "accent"
+            },
+            "name:Key: Q": {
+              "slot": "accent"
+            },
+            "name:Key: R": {
+              "slot": "accent"
+            },
+            "name:Key: S": {
+              "slot": "accent"
+            },
+            "name:Key: Space": {
+              "slot": "accent"
+            },
+            "name:Key: T": {
+              "slot": "accent"
+            },
+            "name:Key: U": {
+              "slot": "accent"
+            },
+            "name:Key: V": {
+              "slot": "accent"
+            },
+            "name:Key: W": {
+              "slot": "accent"
+            },
+            "name:Key: X": {
+              "slot": "accent"
+            },
+            "name:Key: Y": {
+              "slot": "accent"
+            },
+            "name:Key: Z": {
+              "slot": "accent"
+            },
+            "name:Key: [": {
+              "slot": "accent"
+            },
+            "name:Key: ]": {
+              "slot": "accent"
+            },
+            "name:Key: `": {
+              "slot": "accent"
+            }
+          },
+          "duration_ms": 60
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "alert"
+            },
+            "name:Key: ,": {
+              "slot": "alert"
+            },
+            "name:Key: -": {
+              "slot": "alert"
+            },
+            "name:Key: .": {
+              "slot": "alert"
+            },
+            "name:Key: /": {
+              "slot": "alert"
+            },
+            "name:Key: 0": {
+              "slot": "alert"
+            },
+            "name:Key: 1": {
+              "slot": "alert"
+            },
+            "name:Key: 2": {
+              "slot": "alert"
+            },
+            "name:Key: 3": {
+              "slot": "alert"
+            },
+            "name:Key: 4": {
+              "slot": "alert"
+            },
+            "name:Key: 5": {
+              "slot": "alert"
+            },
+            "name:Key: 6": {
+              "slot": "alert"
+            },
+            "name:Key: 7": {
+              "slot": "alert"
+            },
+            "name:Key: 8": {
+              "slot": "alert"
+            },
+            "name:Key: 9": {
+              "slot": "alert"
+            },
+            "name:Key: ;": {
+              "slot": "alert"
+            },
+            "name:Key: =": {
+              "slot": "alert"
+            },
+            "name:Key: A": {
+              "slot": "alert"
+            },
+            "name:Key: B": {
+              "slot": "alert"
+            },
+            "name:Key: C": {
+              "slot": "alert"
+            },
+            "name:Key: D": {
+              "slot": "alert"
+            },
+            "name:Key: E": {
+              "slot": "alert"
+            },
+            "name:Key: F": {
+              "slot": "alert"
+            },
+            "name:Key: G": {
+              "slot": "alert"
+            },
+            "name:Key: H": {
+              "slot": "alert"
+            },
+            "name:Key: I": {
+              "slot": "alert"
+            },
+            "name:Key: J": {
+              "slot": "alert"
+            },
+            "name:Key: K": {
+              "slot": "alert"
+            },
+            "name:Key: L": {
+              "slot": "alert"
+            },
+            "name:Key: M": {
+              "slot": "alert"
+            },
+            "name:Key: N": {
+              "slot": "alert"
+            },
+            "name:Key: O": {
+              "slot": "alert"
+            },
+            "name:Key: P": {
+              "slot": "alert"
+            },
+            "name:Key: Q": {
+              "slot": "alert"
+            },
+            "name:Key: R": {
+              "slot": "alert"
+            },
+            "name:Key: S": {
+              "slot": "alert"
+            },
+            "name:Key: Space": {
+              "slot": "alert"
+            },
+            "name:Key: T": {
+              "slot": "alert"
+            },
+            "name:Key: U": {
+              "slot": "alert"
+            },
+            "name:Key: V": {
+              "slot": "alert"
+            },
+            "name:Key: W": {
+              "slot": "alert"
+            },
+            "name:Key: X": {
+              "slot": "alert"
+            },
+            "name:Key: Y": {
+              "slot": "alert"
+            },
+            "name:Key: Z": {
+              "slot": "alert"
+            },
+            "name:Key: [": {
+              "slot": "alert"
+            },
+            "name:Key: ]": {
+              "slot": "alert"
+            },
+            "name:Key: `": {
+              "slot": "alert"
+            }
+          },
+          "duration_ms": 110
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ,": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: -": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: .": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: /": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 0": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 1": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 2": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 3": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 4": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 5": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 6": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 7": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 8": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: 9": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ;": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: =": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: A": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: B": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: C": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: D": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: E": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: F": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: G": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: H": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: I": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: J": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: K": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: L": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: M": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: N": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: O": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: P": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Q": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: R": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: S": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Space": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: T": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: U": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: V": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: W": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: X": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Y": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: Z": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: [": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: ]": {
+              "slot": "alert",
+              "lighten": -0.8
+            },
+            "name:Key: `": {
+              "slot": "alert",
+              "lighten": -0.8
+            }
+          },
+          "duration_ms": 80
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "secondary"
+            },
+            "name:Key: ,": {
+              "slot": "secondary"
+            },
+            "name:Key: -": {
+              "slot": "secondary"
+            },
+            "name:Key: .": {
+              "slot": "secondary"
+            },
+            "name:Key: /": {
+              "slot": "secondary"
+            },
+            "name:Key: 0": {
+              "slot": "secondary"
+            },
+            "name:Key: 1": {
+              "slot": "secondary"
+            },
+            "name:Key: 2": {
+              "slot": "secondary"
+            },
+            "name:Key: 3": {
+              "slot": "secondary"
+            },
+            "name:Key: 4": {
+              "slot": "secondary"
+            },
+            "name:Key: 5": {
+              "slot": "secondary"
+            },
+            "name:Key: 6": {
+              "slot": "secondary"
+            },
+            "name:Key: 7": {
+              "slot": "secondary"
+            },
+            "name:Key: 8": {
+              "slot": "secondary"
+            },
+            "name:Key: 9": {
+              "slot": "secondary"
+            },
+            "name:Key: ;": {
+              "slot": "secondary"
+            },
+            "name:Key: =": {
+              "slot": "secondary"
+            },
+            "name:Key: A": {
+              "slot": "secondary"
+            },
+            "name:Key: B": {
+              "slot": "secondary"
+            },
+            "name:Key: C": {
+              "slot": "secondary"
+            },
+            "name:Key: D": {
+              "slot": "secondary"
+            },
+            "name:Key: E": {
+              "slot": "secondary"
+            },
+            "name:Key: F": {
+              "slot": "secondary"
+            },
+            "name:Key: G": {
+              "slot": "secondary"
+            },
+            "name:Key: H": {
+              "slot": "secondary"
+            },
+            "name:Key: I": {
+              "slot": "secondary"
+            },
+            "name:Key: J": {
+              "slot": "secondary"
+            },
+            "name:Key: K": {
+              "slot": "secondary"
+            },
+            "name:Key: L": {
+              "slot": "secondary"
+            },
+            "name:Key: M": {
+              "slot": "secondary"
+            },
+            "name:Key: N": {
+              "slot": "secondary"
+            },
+            "name:Key: O": {
+              "slot": "secondary"
+            },
+            "name:Key: P": {
+              "slot": "secondary"
+            },
+            "name:Key: Q": {
+              "slot": "secondary"
+            },
+            "name:Key: R": {
+              "slot": "secondary"
+            },
+            "name:Key: S": {
+              "slot": "secondary"
+            },
+            "name:Key: Space": {
+              "slot": "secondary"
+            },
+            "name:Key: T": {
+              "slot": "secondary"
+            },
+            "name:Key: U": {
+              "slot": "secondary"
+            },
+            "name:Key: V": {
+              "slot": "secondary"
+            },
+            "name:Key: W": {
+              "slot": "secondary"
+            },
+            "name:Key: X": {
+              "slot": "secondary"
+            },
+            "name:Key: Y": {
+              "slot": "secondary"
+            },
+            "name:Key: Z": {
+              "slot": "secondary"
+            },
+            "name:Key: [": {
+              "slot": "secondary"
+            },
+            "name:Key: ]": {
+              "slot": "secondary"
+            },
+            "name:Key: `": {
+              "slot": "secondary"
+            }
+          },
+          "duration_ms": 50
+        },
+        {
+          "leds": {
+            "name:Key: '": {
+              "slot": "alert"
+            },
+            "name:Key: ,": {
+              "slot": "alert"
+            },
+            "name:Key: -": {
+              "slot": "alert"
+            },
+            "name:Key: .": {
+              "slot": "alert"
+            },
+            "name:Key: /": {
+              "slot": "alert"
+            },
+            "name:Key: 0": {
+              "slot": "alert"
+            },
+            "name:Key: 1": {
+              "slot": "alert"
+            },
+            "name:Key: 2": {
+              "slot": "alert"
+            },
+            "name:Key: 3": {
+              "slot": "alert"
+            },
+            "name:Key: 4": {
+              "slot": "alert"
+            },
+            "name:Key: 5": {
+              "slot": "alert"
+            },
+            "name:Key: 6": {
+              "slot": "alert"
+            },
+            "name:Key: 7": {
+              "slot": "alert"
+            },
+            "name:Key: 8": {
+              "slot": "alert"
+            },
+            "name:Key: 9": {
+              "slot": "alert"
+            },
+            "name:Key: ;": {
+              "slot": "alert"
+            },
+            "name:Key: =": {
+              "slot": "alert"
+            },
+            "name:Key: A": {
+              "slot": "alert"
+            },
+            "name:Key: B": {
+              "slot": "alert"
+            },
+            "name:Key: C": {
+              "slot": "alert"
+            },
+            "name:Key: D": {
+              "slot": "alert"
+            },
+            "name:Key: E": {
+              "slot": "alert"
+            },
+            "name:Key: F": {
+              "slot": "alert"
+            },
+            "name:Key: G": {
+              "slot": "alert"
+            },
+            "name:Key: H": {
+              "slot": "alert"
+            },
+            "name:Key: I": {
+              "slot": "alert"
+            },
+            "name:Key: J": {
+              "slot": "alert"
+            },
+            "name:Key: K": {
+              "slot": "alert"
+            },
+            "name:Key: L": {
+              "slot": "alert"
+            },
+            "name:Key: M": {
+              "slot": "alert"
+            },
+            "name:Key: N": {
+              "slot": "alert"
+            },
+            "name:Key: O": {
+              "slot": "alert"
+            },
+            "name:Key: P": {
+              "slot": "alert"
+            },
+            "name:Key: Q": {
+              "slot": "alert"
+            },
+            "name:Key: R": {
+              "slot": "alert"
+            },
+            "name:Key: S": {
+              "slot": "alert"
+            },
+            "name:Key: Space": {
+              "slot": "alert"
+            },
+            "name:Key: T": {
+              "slot": "alert"
+            },
+            "name:Key: U": {
+              "slot": "alert"
+            },
+            "name:Key: V": {
+              "slot": "alert"
+            },
+            "name:Key: W": {
+              "slot": "alert"
+            },
+            "name:Key: X": {
+              "slot": "alert"
+            },
+            "name:Key: Y": {
+              "slot": "alert"
+            },
+            "name:Key: Z": {
+              "slot": "alert"
+            },
+            "name:Key: [": {
+              "slot": "alert"
+            },
+            "name:Key: ]": {
+              "slot": "alert"
+            },
+            "name:Key: `": {
+              "slot": "alert"
+            }
+          },
+          "duration_ms": 400
+        }
+      ],
+      "frame_ms": 100,
+      "loop": "loop",
+      "crossfade": 0.0
+    }
+  },
+  {
+    "schema_version": 1,
     "id": "builtin:soft-fire",
     "name": "Soft fire",
     "description": null,

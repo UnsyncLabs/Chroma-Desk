@@ -39,10 +39,7 @@ export default async function (t, url) {
   assert.equal(ds.layers[0].params.anim_id, "builtin:snake");
 
   // Solid colour.
-  await t.page.$eval(".solid input[type=color]", (el) => {
-    el.value = "#00ff88";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  await t.setColor("#00ff88", ".solid");
   await t.clickText(".solid button", "Use this colour");
   await sleep(300);
   ds = (await t.scene()).devices[kb];

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { PaletteEvent } from "./palette.svelte";
 
 export type Rgb = [number, number, number];
 
@@ -74,7 +75,14 @@ export interface ModeRequest {
 
 export type Blend = "normal" | "add" | "multiply" | "screen";
 export type Mask = { type: "all" } | { type: "zone"; id: number } | { type: "leds"; leds: number[] };
-export type ParamValue = number | boolean | string | Rgb | Rgb[] | Record<string, Rgb> | Record<string, unknown> | unknown[] | null;
+/** A reference to a palette slot (follows the theme); `lighten` > 0 mixes towards white, < 0 towards black. */
+export interface SlotRef {
+  slot: string;
+  lighten?: number;
+}
+/** A fixed colour or a palette slot. */
+export type Color = Rgb | SlotRef;
+export type ParamValue = number | boolean | string | Color | Color[] | Record<string, Color> | Record<string, unknown> | unknown[] | null;
 
 export interface Layer {
   id: string;
@@ -140,12 +148,104 @@ export interface Settings {
   current_profile: string | null;
   fps_by_type: Record<string, number>;
   show_phantom_devices: boolean;
+  builtin_enabled: Record<string, boolean>;
+  theme_rules: ThemeRule[];
+  global_notifications: Record<string, NamedTrigger>;
+  desktop_notifications: boolean;
 }
 
+export type ThemeSourceId = "manual" | "omarchy" | "kde" | "pywal" | "gtk" | "external";
+export interface ProfileTheme {
+  source: ThemeSourceId;
+  manual_palette?: Record<string, Rgb> | null;
+  overrides?: Record<string, Rgb>;
+}
+export interface AnimRef {
+  id: string;
+  name: string;
+}
+export interface DesktopMatch {
+  /** Part of the application name (case-insensitive); empty = any. */
+  app: string;
+  urgency?: "low" | "normal" | "critical" | null;
+  /** Text the summary must contain; empty = anything. */
+  contains: string;
+}
+export interface NotifSources {
+  desktop?: DesktopMatch | null;
+  omarchy?: string[];
+}
+/** A notification: what to show, where, in which colour, and what fires it. */
+export interface NamedTrigger {
+  anim: string;
+  keys?: string[];
+  /** `@slot` or `#rrggbb`. */
+  color?: string | null;
+  duration?: number | null;
+  device?: string | null;
+  enabled?: boolean;
+  devices?: string[];
+  repeat?: number | null;
+  speed?: number | null;
+  priority?: number;
+  replace?: boolean;
+  sources?: NotifSources;
+}
+export interface EventHookStatus {
+  kind: string;
+  event: string;
+  installed: boolean;
+  path: string;
+  script_text: string;
+  command: string;
+}
+export interface Profile {
+  schema_version: number;
+  name: string;
+  theme: ProfileTheme;
+  presets?: AnimRef[];
+  triggers?: Record<string, NamedTrigger>;
+  enabled?: boolean;
+  builtin?: boolean;
+  requires?: string | null;
+}
 export interface ProfileInfo {
   name: string;
   file: string;
   openrgb: boolean;
+  builtin: boolean;
+  enabled: boolean;
+  requires: string | null;
+  source: ThemeSourceId;
+  /** A few palette colours for the card (empty when the source is dynamic). */
+  strip: Rgb[];
+  triggers: number;
+}
+export interface SourceStatus {
+  id: ThemeSourceId;
+  detected: boolean;
+  name: string | null;
+  error: string | null;
+  strip: Rgb[];
+}
+export interface ThemeStatus {
+  active: ThemeSourceId;
+  runtime_override: boolean;
+  external: boolean;
+  error: string | null;
+  sources: SourceStatus[];
+  palette: { name: string; source: string; slots: Record<string, Rgb>; generation: number };
+}
+export interface HookStatus {
+  available: boolean;
+  installed: boolean;
+  path: string;
+  script: string;
+  command: string;
+}
+export interface ThemeRule {
+  theme: string;
+  profile: string;
 }
 
 export interface ProfileList {
@@ -174,12 +274,12 @@ export interface TrayLabels {
 
 export interface Stop {
   pos: number;
-  color: Rgb;
+  color: Color;
 }
 export type LoopMode = "loop" | "pingpong" | "once";
 export interface Frame {
   /** LedRef -> colour. */
-  leds: Record<string, Rgb>;
+  leds: Record<string, Color>;
   duration_ms?: number | null;
 }
 export type AnimKind =
@@ -211,6 +311,8 @@ export interface TriggerSpec {
   color?: string;
   repeat?: number;
   priority?: number;
+  speed?: number;
+  replace?: boolean;
 }
 export interface TriggerResult {
   overlay: number;
@@ -272,6 +374,19 @@ export const api = {
   trigger: (spec: TriggerSpec) => invoke<TriggerResult>("trigger", { spec }),
   stopTriggers: () => invoke<number>("stop_triggers"),
   triggerSocketPath: () => invoke<string | null>("trigger_socket_path"),
+  getPalette: () => invoke<PaletteEvent>("get_palette"),
+  themeStatus: () => invoke<ThemeStatus>("theme_status"),
+  paletteReload: () => invoke<boolean>("palette_reload"),
+  profileGet: (name: string) => invoke<Profile>("profile_get", { name }),
+  profileUpdate: (name: string, theme: ProfileTheme, presets: AnimRef[], triggers: Record<string, NamedTrigger>) => invoke<void>("profile_update", { name, theme, presets, triggers }),
+  setBuiltinEnabled: (name: string, on: boolean) => invoke<void>("set_builtin_enabled", { name, on }),
+  omarchyHookStatus: () => invoke<HookStatus>("omarchy_hook_status"),
+  omarchyHookInstall: () => invoke<HookStatus>("omarchy_hook_install"),
+  omarchyHookRemove: () => invoke<HookStatus>("omarchy_hook_remove"),
+  omarchyEventHooks: () => invoke<EventHookStatus[]>("omarchy_event_hooks"),
+  omarchyEventHookInstall: (kind: string) => invoke<EventHookStatus[]>("omarchy_event_hook_install", { kind }),
+  omarchyEventHookRemove: (kind: string) => invoke<EventHookStatus[]>("omarchy_event_hook_remove", { kind }),
+  desktopStatus: () => invoke<string>("desktop_status"),
 };
 
 /** Subscribes to a backend event; resolves to the unsubscribe function. */

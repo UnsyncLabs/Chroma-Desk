@@ -1,6 +1,8 @@
 <script lang="ts">
   /** Gradient editor: a bar with draggable colour stops, presets, add/remove, per-stop colour. */
-  import { fromHex, hex, type Rgb, type Stop } from "./api";
+  import { hex, type Color, type Stop } from "./api";
+  import ColorPicker from "./ColorPicker.svelte";
+  import { cloneColor, resolveColor } from "./palette.svelte";
   import { PALETTE_PRESETS, sampleStops, sortStops } from "./anim/palette";
   import { t } from "./i18n/index.svelte";
 
@@ -21,7 +23,7 @@
   const cur = $derived(sorted[Math.min(sel, sorted.length - 1)]);
 
   function commit(next: Stop[], keep?: number) {
-    onchange(next.map((s) => ({ pos: Math.min(1, Math.max(0, Math.round(s.pos * 1000) / 1000)), color: [...s.color] as Rgb })));
+    onchange(next.map((s) => ({ pos: Math.min(1, Math.max(0, Math.round(s.pos * 1000) / 1000)), color: cloneColor(s.color) })));
     if (keep !== undefined) sel = keep;
   }
 
@@ -29,7 +31,7 @@
     if (!bar || (e.target as HTMLElement).closest(".stop")) return;
     const r = bar.getBoundingClientRect();
     const pos = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    const color = sampleStops(sorted, pos, cyclic).map(Math.round) as Rgb;
+    const color: Color = sampleStops(sorted, pos, cyclic).map(Math.round) as [number, number, number];
     const next = sortStops([...sorted, { pos, color }]);
     commit(next, next.findIndex((s) => s.pos === pos));
   }
@@ -62,8 +64,8 @@
     }
   }
 
-  function setColor(v: string) {
-    commit(sorted.map((s, i) => (i === sel ? { ...s, color: fromHex(v) } : s)));
+  function setColor(c: Color) {
+    commit(sorted.map((s, i) => (i === sel ? { ...s, color: c } : s)));
   }
   function remove(i = sel) {
     if (sorted.length <= 1) return;
@@ -74,7 +76,7 @@
     const a = sorted[Math.min(sel, sorted.length - 1)];
     const b = sorted[sel + 1] ?? { pos: 1, color: a.color };
     const pos = a === b || b.pos === a.pos ? Math.min(1, a.pos + 0.1) : (a.pos + b.pos) / 2;
-    const next = sortStops([...sorted, { pos, color: sampleStops(sorted, pos, cyclic).map(Math.round) as Rgb }]);
+    const next = sortStops([...sorted, { pos, color: sampleStops(sorted, pos, cyclic).map(Math.round) as [number, number, number] }]);
     commit(next, next.findIndex((s) => s.pos === pos));
   }
 </script>
@@ -88,7 +90,7 @@
           class="stop"
           class:on={i === sel}
           style:left={`${s.pos * 100}%`}
-          style:background={hex(s.color)}
+          style:background={hex(resolveColor(s.color))}
           aria-label={t("pal.stopN", { n: i + 1 })}
           title={`${Math.round(s.pos * 100)}%`}
           onpointerdown={(e) => down(i, e)}
@@ -101,7 +103,7 @@
   </div>
   <div class="row">
     {#if cur}
-      <input type="color" value={hex(cur.color)} oninput={(e) => setColor(e.currentTarget.value)} aria-label={t("pal.stopColour")} />
+      <ColorPicker value={cur.color} onchange={setColor} label={t("pal.stopColour")} />
       <span class="muted pos">{Math.round(cur.pos * 100)}%</span>
     {/if}
     <button onclick={addButton} disabled={sorted.length >= 16}>{t("pal.add")}</button>
@@ -120,6 +122,5 @@
   .stop { position: absolute; top: 100%; width: 1rem; height: 1rem; margin: 0.15rem 0 0 -0.5rem; padding: 0; border-radius: 50% 50% 50% 50%; border: 2px solid var(--text); cursor: grab; box-shadow: 0 1px 4px #0008; touch-action: none; }
   .stop.on { outline: 2px solid var(--accent); outline-offset: 2px; }
   .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  .row input[type="color"] { width: 2.4rem; height: 1.9rem; padding: 0; border: none; background: none; }
   .pos { min-width: 2.6rem; font-variant-numeric: tabular-nums; }
 </style>

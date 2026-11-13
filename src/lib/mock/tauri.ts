@@ -5,7 +5,10 @@
  *
  * State lives on `globalThis.__chromaMock` so tests can assert on what the "backend" received.
  */
-import type { Animation, Device, EffectDef, ParamDef, Scene } from "../api";
+import type { Animation, Color, Device, EffectDef, ParamDef, Scene } from "../api";
+import { resolveColor } from "../palette.svelte";
+import * as TM from "./themes";
+import { recolorAnim } from "../anim/recolor";
 import builtinsJson from "./builtins.json";
 import { renderAnimation, renderEffect, flatten, type Px } from "../anim/render";
 import { buildLayout } from "../layout/buildLayout";
@@ -35,6 +38,7 @@ interface MockState {
   overlays: MockOverlay[];
   counter: number;
   setSceneCalls: number;
+  theme: TM.ThemeMock;
 }
 // Vite may instantiate this module twice (once per aliased specifier); keep one shared state.
 const G = globalThis as unknown as { __chromaMock?: MockState };
@@ -52,6 +56,7 @@ const M = (G.__chromaMock ??= {
   overlays: [],
   counter: 0,
   setSceneCalls: 0,
+  theme: TM.initialTheme(),
 });
 const listeners = M.listeners;
 const emit = (event: string, payload: unknown) => listeners.get(event)?.forEach((h) => h({ payload }));
@@ -90,10 +95,12 @@ function makeDevices(): Device[] {
   });
   return [
     device(0, "Razer Huntsman V3 Pro TKL", "Keyboard", [z(0, "Keyboard", 114, 0, { zone_type: "Matrix", matrix: { width: 19, height: 6, map } })], kbNames),
-    device(1, "Corsair Lighting Node Core", "LEDStrip", [z(0, "Corsair RGB Header 1", 24, 0, { leds_min: 0, leds_max: 96, resizable: true }), z(1, "Corsair RGB Header 2", 0, 24, { leds_min: 0, leds_max: 96, resizable: true })], Array(24).fill("")),
+    device(1, "Corsair Lighting Node Core", "LEDStrip", [z(0, "Corsair RGB Header 1", 24, 0, { leds_min: 0, leds_max: 204, resizable: true }), z(1, "Corsair RGB Header 2", 0, 24, { leds_min: 0, leds_max: 204, resizable: true })], Array(24).fill("")),
     device(2, "ENE DRAM", "DRam", [z(0, "DRAM", 8, 0)], Array(8).fill("")),
     device(3, "Gigabyte GeForce RTX 4070 SUPER", "Gpu", [1, 2, 3, 4, 5].map((i) => z(i - 1, `GPU zone ${i}`, 1, i - 1, { zone_type: "Single" })), Array(5).fill("")),
     device(4, "G502 HERO Gaming Mouse", "Mouse", [z(0, "Primary", 1, 0, { zone_type: "Single" }), z(1, "Logo", 1, 1, { zone_type: "Single" })], ["", ""]),
+    // The real X870 board: three resizable ARGB headers (0-256 LEDs, empty by default) and a fixed zone.
+    device(5, "X870 AORUS ELITE WIFI7", "Motherboard", [z(0, "Motherboard", 1, 0, { zone_type: "Single" }), ...[1, 2, 3].map((i) => z(i, `ARGB_V2_${i}`, 0, 1, { leds_min: 0, leds_max: 256, resizable: true }))], [""]),
   ];
 }
 
@@ -128,8 +135,8 @@ function renderDevice(d: Device, ds: Scene["devices"][string], t: number, now: n
   for (const l of ds.layers) {
     if (!l.enabled) continue;
     if (l.effect === "paint") {
-      const leds = (l.params.leds ?? {}) as Record<string, number[]>;
-      over(Array.from({ length: n }, (_, i) => (leds[i] ? [leds[i][0], leds[i][1], leds[i][2], 1] : [0, 0, 0, 0]) as Px));
+      const leds = (l.params.leds ?? {}) as Record<string, Color>;
+      over(Array.from({ length: n }, (_, i) => (leds[i] ? [...resolveColor(leds[i]), 1] : [0, 0, 0, 0]) as Px));
     } else if (l.effect === "animation") {
       const snap = l.params.snapshot as unknown as Animation | undefined;
       if (snap) over(renderAnimation(snap, t, names, pos).map((p) => [p[0], p[1], p[2], p[3] * l.opacity] as Px));
@@ -185,6 +192,7 @@ const DEFS: EffectDef[] = [
   { id: "path", params: [data("path", []), data("palette", PAL), slider("speed", 0.05, 3, 0.01, 0.5), slider("length", 0.05, 1, 0.01, 0.35), slider("gap", 0, 1, 0.01, 0.3), slider("tail_fade", 0, 1, 0.01, 0.6), flag("reverse", false)] },
   { id: "palette", params: [data("cells", {}), data("palette", PAL), slider("speed", -2, 2, 0.01, 0.3), flag("reverse", false)] },
   { id: "animation", params: [data("anim_id", ""), data("snapshot", null)] },
+  { id: "glitch", params: [colors("colors", [[0, 240, 255], [255, 42, 109]]), slider("interval", 1, 30, 0.5, 6), slider("duration", 0.05, 1, 0.01, 0.25), slider("density", 0.05, 0.9, 0.01, 0.3), slider("size", 0.04, 0.5, 0.01, 0.16)] },
   { id: "ripple", params: [slider("rate", 0.1, 5, 0.05, 0.8), slider("speed", 0.2, 3, 0.01, 0.9), slider("width", 0.02, 0.5, 0.01, 0.12), flag("random", true), colors("colors", [BLUE])] },
 ];
 
@@ -216,27 +224,94 @@ function lookup(key: string): Animation {
 }
 
 function trigger(spec: Record<string, unknown>) {
-  const anim = lookup(String(spec.animation ?? ""));
-  const devs = devices.filter((d) => M.scene.devices[d.key]?.mode === "effects" && (!spec.device || d.name.toLowerCase().includes(String(spec.device).toLowerCase()) || d.key === spec.device));
+  let anim = lookup(String(spec.animation ?? ""));
+  const keys = ((spec.keys as string[]) ?? []).map((k) => k.toLowerCase());
+  const devs = devices.filter(
+    (d) =>
+      M.scene.devices[d.key]?.mode === "effects" &&
+      (!spec.device || d.name.toLowerCase().includes(String(spec.device).toLowerCase()) || d.key === spec.device) &&
+      (!keys.length || d.led_names.some((n) => keys.includes(n.toLowerCase()) || keys.includes(n.toLowerCase().replace("key: ", "")))),
+  );
   if (!devs.length) fail("trigger_no_device");
-  const secs = typeof spec.duration === "number" ? spec.duration : 3;
+  const col = typeof spec.color === "string" ? spec.color : null;
+  if (col) {
+    const rgb = col.startsWith("@") ? resolveColor({ slot: col.slice(1) }) : ([1, 3, 5].map((i) => parseInt(col.slice(i, i + 2), 16)) as [number, number, number]);
+    anim = recolorAnim(anim, rgb);
+  }
+  const secs = typeof spec.duration === "number" ? spec.duration : typeof spec.duration === "string" ? parseFloat(spec.duration) || 3 : 3;
   const id = ++M.counter;
-  M.overlays.push({ id, anim, device: (spec.device as string) ?? null, keys: (spec.keys as string[]) ?? [], start: Date.now(), until: Date.now() + secs * 1000 });
+  if (spec.replace && spec.name) M.overlays = M.overlays.filter((o) => (o as { name?: string }).name !== spec.name);
+  M.overlays.push({ id, anim, device: (spec.device as string) ?? null, keys: (spec.keys as string[]) ?? [], start: Date.now(), until: Date.now() + secs * 1000, name: spec.name } as never);
   M.triggers.push({ ...spec, at: Date.now() });
   return { overlay: id, devices: devs.length, duration: secs };
 }
 
+TM.bind({
+  S: M.theme,
+  emit,
+  devices,
+  scene: () => M.scene,
+  setScene: (s) => {
+    M.scene = s;
+    M.setSceneCalls++;
+  },
+  fail,
+  trigger,
+});
+// Test controls: `globalThis.__chromaMock.fns` (switch the Omarchy theme, send a game palette, fire sources).
+(M as unknown as { fns: unknown }).fns = {
+  setOmarchyTheme: TM.setOmarchyTheme,
+  setPalette: TM.setPalette,
+  fireDesktop: TM.fireDesktop,
+  fireEvent: TM.fireEvent,
+  omarchyThemes: TM.OMARCHY_THEMES,
+};
+
 export async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   switch (cmd) {
-    case "connect": case "list_devices": case "rescan": case "resize_zone": return devices;
+    case "resize_zone": {
+      // Like OpenRGB: the zone gets `size` LEDs, later zones shift, the LED list grows or shrinks.
+      const d = devices.find((x) => x.id === args.device);
+      const zone = d?.zones.find((x) => x.id === args.zone);
+      const size = Number(args.size);
+      if (!d || !zone) throw { code: "mode_not_found", detail: "" };
+      if (!zone.resizable || size < zone.leds_min || size > zone.leds_max) throw { code: "size_out_of_range", detail: `${zone.leds_min}-${zone.leds_max}` };
+      const delta = size - zone.num_leds;
+      const at = zone.offset + zone.num_leds;
+      zone.num_leds = size;
+      d.zones.forEach((x) => { if (x.offset >= at && x !== zone) x.offset += delta; });
+      if (delta > 0) { d.led_names.splice(at, 0, ...Array(delta).fill("")); d.colors.splice(at, 0, ...Array.from({ length: delta }, () => [10, 10, 10] as [number, number, number])); }
+      else { d.led_names.splice(at + delta, -delta); d.colors.splice(at + delta, -delta); }
+      return devices.map((x) => ({ ...x }));
+    }
+    case "connect": case "list_devices": case "rescan": return devices;
     case "get_scene": return M.scene;
     case "set_scene": M.scene = args.scene as Scene; M.setSceneCalls++; return null;
     case "set_visible_devices": M.visible = args.keys as string[]; return null;
     case "effect_defs": return DEFS;
     case "effect_defaults": return Object.fromEntries(DEFS.map((d) => [d.id, Object.fromEntries(d.params.map((p) => [p.key, p.default]))]));
     case "get_blackout": return false;
-    case "get_settings": return { language: "en", start_hidden: false, fps_by_type: {}, show_phantom_devices: false, default_profile: null, current_profile: null };
-    case "list_profiles": return { profiles: [{ name: "Gaming", file: "gaming.json", openrgb: false }, { name: "OpenRGB: yado1", file: "o.json", openrgb: true }], corrupt: ["broken.json"] };
+    case "get_settings": return clone(M.theme.settings);
+    case "set_settings": { const cur = M.theme.settings.current_profile; M.theme.settings = { ...clone(args.settings as typeof M.theme.settings), current_profile: cur }; return null; }
+    case "list_profiles": return TM.listProfiles();
+    case "profile_get": return TM.getProfile(String(args.name));
+    case "profile_update": TM.updateProfile(String(args.name), args.theme as never, args.presets as never, args.triggers as never); return null;
+    case "save_profile": return TM.saveProfile(String(args.name));
+    case "apply_profile": return TM.applyProfile(String(args.name));
+    case "delete_profile": TM.deleteProfile(String(args.name)); return null;
+    case "rename_profile": return TM.renameProfile(String(args.old), String(args.new));
+    case "duplicate_profile": return TM.duplicateProfile(String(args.name), String(args.new));
+    case "set_builtin_enabled": M.theme.settings.builtin_enabled[String(args.name)] = Boolean(args.on); return null;
+    case "get_palette": return TM.refreshPalette();
+    case "theme_status": return TM.themeStatus();
+    case "palette_reload": return false;
+    case "omarchy_hook_status": return TM.hookStatus();
+    case "omarchy_hook_install": M.theme.hook = true; M.theme.hookCalls.push("install theme-set"); return TM.hookStatus();
+    case "omarchy_hook_remove": M.theme.hook = false; M.theme.hookCalls.push("remove theme-set"); return TM.hookStatus();
+    case "omarchy_event_hooks": return TM.eventHooks();
+    case "omarchy_event_hook_install": M.theme.eventHooks[String(args.kind)] = true; M.theme.hookCalls.push(`install ${args.kind}`); return TM.eventHooks();
+    case "omarchy_event_hook_remove": M.theme.eventHooks[String(args.kind)] = false; M.theme.hookCalls.push(`remove ${args.kind}`); return TM.eventHooks();
+    case "desktop_status": return M.theme.settings.desktop_notifications ? "listening" : "off";
     case "profiles_path": return "~/.config/chroma-desk/profiles";
     case "get_autostart": return false;
     case "default_fps": return Object.fromEntries((args.types as string[]).map((ty) => [ty, ty === "Keyboard" || ty === "Mouse" ? 60 : 30]));
@@ -267,7 +342,10 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
       for (let i = 2; allAnims().some((x) => x.name.toLowerCase() === c.name.toLowerCase()); i++) c.name = `${base} (${i})`;
       return saveAnim(c);
     }
-    case "trigger": return trigger(args.spec as Record<string, unknown>);
+    case "trigger": {
+      const sp = args.spec as Record<string, unknown>;
+      return TM.notifications()[String(sp.animation ?? "")] ? TM.fireNamed(String(sp.animation), sp) : trigger(sp);
+    }
     case "stop_triggers": { const n = M.overlays.length; M.overlays = []; return n; }
     case "trigger_socket_path": return "/run/user/1000/chroma-desk.sock";
     // native dialogs (tauri-plugin-dialog goes through invoke)

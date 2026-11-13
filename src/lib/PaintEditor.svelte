@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Draw > Paint: static LED painting into a Paint layer, savable as a one-frame animation. */
-  import { api, type Animation, type Device, type Rgb } from "./api";
+  import { api, type Animation, type Color, type Device } from "./api";
+  import { cloneColor } from "./palette.svelte";
   import { refMaker } from "./anim/ref";
   import { loadAnimations } from "./animations.svelte";
   import { t } from "./i18n/index.svelte";
@@ -33,10 +34,10 @@
   async function saveAs(name: string, tags: string[]) {
     const names = Array.from({ length: n }, (_, i) => device.led_names[i] ?? "");
     const ref = refMaker(names);
-    const leds: Record<string, Rgb> = {};
+    const leds: Record<string, Color> = {};
     // Only what was painted: without a paint layer the canvas shows the live effect, which is not a drawing.
     (layer ? toPaint(layer, n) : []).forEach((c, i) => {
-      if (c) leds[ref(i)] = [...c] as Rgb;
+      if (c) leds[ref(i)] = cloneColor(c);
     });
     if (!Object.keys(leds).length) {
       toast(t("save.nothing"), "error");
