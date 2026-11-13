@@ -243,5 +243,22 @@
   "tray.show": "Mostrar",
   "tray.noProfiles": "Sin perfiles",
   "tray.quit": "Salir",
-  "err.service_failed": "No se pudo cambiar el servicio de systemd"
+  "err.service_failed": "No se pudo cambiar el servicio de systemd",
+  "set.startup": "Inicio",
+  "set.autostart": "Iniciar al iniciar sesión",
+  "set.autostartHint": "Añade una entrada de inicio automático que lanza chroma-desk oculto en la bandeja.",
+  "set.startHidden": "Iniciar siempre oculto en la bandeja",
+  "set.fps": "Límites de fotogramas por segundo",
+  "set.fpsHint": "Máximo de actualizaciones por segundo enviadas a cada tipo de dispositivo. Déjalo vacío para el valor por defecto.",
+  "set.server": "Servidor de OpenRGB",
+  "set.serverRunning": "El servidor de OpenRGB está en marcha.",
+  "set.serverStopped": "El servidor de OpenRGB no está en marcha.",
+  "set.protocol": "protocolo {n}",
+  "set.reconnect": "Reconectar",
+  "set.service": "Mantener OpenRGB en marcha con un servicio de usuario de systemd",
+  "set.serviceHint": "Inicia “openrgb --server --startminimized” al iniciar sesión y lo reinicia si falla. Cierra antes cualquier OpenRGB iniciado a mano.",
+  "set.serviceChanged": "Servicio actualizado.",
+  "set.folder": "Carpeta de perfiles",
+  "set.about": "Acerca de",
+  "set.aboutText": "Una nueva interfaz para OpenRGB."
 }

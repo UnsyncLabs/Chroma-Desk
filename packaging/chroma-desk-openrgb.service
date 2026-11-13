@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenRGB SDK server (chroma-desk)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/openrgb --server --startminimized
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

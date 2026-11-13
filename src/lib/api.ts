@@ -207,6 +207,7 @@ export const api = {
   refreshTray: () => invoke<void>("refresh_tray"),
   showWindow: () => invoke<void>("show_window"),
   quitApp: () => invoke<void>("quit_app"),
+  defaultFps: (types: string[]) => invoke<Record<string, number>>("default_fps", { types }),
   getBlackout: () => invoke<boolean>("get_blackout"),
   setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
 };

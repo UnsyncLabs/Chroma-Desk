@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.neokuze.chromadesk</id>
+  <name>chroma-desk</name>
+  <summary>A modern interface for OpenRGB</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+  <description>
+    <p>Paint every LED of your keyboard, fans, RAM, GPU and mice, stack animated effect layers, synchronise devices and save profiles. chroma-desk talks to the OpenRGB SDK server.</p>
+  </description>
+  <launchable type="desktop-id">chroma-desk.desktop</launchable>
+  <provides><binary>chroma-desk</binary></provides>
+</component>

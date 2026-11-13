@@ -284,3 +284,9 @@ pub fn show_window(app: tauri::AppHandle) {
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
+
+/// Default fps cap for each of the given device types (Settings placeholders).
+#[tauri::command]
+pub fn default_fps(types: Vec<String>) -> HashMap<String, u32> {
+    types.into_iter().map(|t| (crate::engine::default_fps(&t), t)).map(|(f, t)| (t, f)).collect()
+}

@@ -108,6 +108,7 @@ pub fn run() {
             commands::refresh_tray,
             commands::show_window,
             commands::quit_app,
+            commands::default_fps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

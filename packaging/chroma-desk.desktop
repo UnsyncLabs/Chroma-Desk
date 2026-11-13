@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=chroma-desk
+GenericName=RGB lighting
+Comment=Control your RGB lighting through OpenRGB
+Comment[es]=Controla tu iluminación RGB mediante OpenRGB
+Exec=chroma-desk
+Icon=chroma-desk
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=rgb;openrgb;lighting;keyboard;
+StartupWMClass=chroma-desk

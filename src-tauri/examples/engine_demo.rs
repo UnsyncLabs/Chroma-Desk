@@ -46,6 +46,14 @@ async fn main() {
     let cpu = cpu_secs() - cpu0;
     r.abort();
     println!("ran {secs}s, process CPU {:.2}s ({:.1}% of one core)", cpu, cpu / secs as f64 * 100.0);
+    // Read the keyboard back from the server to confirm what the hardware received.
+    state.refresh(false).await.unwrap();
+    for d in state.devices().await.unwrap().iter().filter(|d| d.device_type == "Keyboard") {
+        for key in ["Key: W", "Key: A", "Key: S", "Key: D", "Key: Q", "Key: E"] {
+            let i = d.led_names.iter().position(|n| n == key).unwrap();
+            println!("{key}: {:?}", d.colors[i]);
+        }
+    }
     for (k, v) in counts.lock().unwrap().iter() {
         println!("{k}: {:.1} preview/s", *v as f64 / secs as f64);
     }

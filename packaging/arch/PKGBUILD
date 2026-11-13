@@ -1,0 +1,33 @@
+# Maintainer: neokuze
+# Builds chroma-desk from the checkout this PKGBUILD lives in (packaging/arch/ inside the repo):
+#   cd packaging/arch && makepkg -si
+pkgname=chroma-desk
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Modern UI for OpenRGB: per-LED painting, effect layers, profiles and tray'
+arch=(x86_64)
+url='https://github.com/neokuze/chroma-desk'
+license=(GPL-2.0-or-later)
+# openrgb-razer (and any other package providing openrgb) satisfies `openrgb`.
+depends=(openrgb webkit2gtk-4.1 gtk3 libayatana-appindicator)
+makedepends=(rust npm)
+options=(!lto)
+
+_root="$startdir/../.."
+
+build() {
+  cd "$_root"
+  npm ci
+  npm run tauri build -- --no-bundle
+}
+
+package() {
+  cd "$_root"
+  install -Dm755 src-tauri/target/release/chroma-desk "$pkgdir/usr/bin/chroma-desk"
+  install -Dm644 packaging/chroma-desk.desktop "$pkgdir/usr/share/applications/chroma-desk.desktop"
+  install -Dm644 packaging/org.neokuze.chromadesk.metainfo.xml "$pkgdir/usr/share/metainfo/org.neokuze.chromadesk.metainfo.xml"
+  install -Dm644 packaging/chroma-desk.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/chroma-desk.svg"
+  install -Dm644 src-tauri/icons/128x128.png "$pkgdir/usr/share/icons/hicolor/128x128/apps/chroma-desk.png"
+  install -Dm644 src-tauri/icons/32x32.png "$pkgdir/usr/share/icons/hicolor/32x32/apps/chroma-desk.png"
+  install -Dm644 packaging/chroma-desk-openrgb.service "$pkgdir/usr/lib/systemd/user/chroma-desk-openrgb.service"
+}
