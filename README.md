@@ -233,6 +233,8 @@ A **notification** makes the lights react: a flash when a message arrives, a red
 
 3. **Omarchy events** (only shown when Omarchy is detected): *battery low* (`hooks/battery-low.d`), *theme changed* (`theme-set.d`) and *after an update* (`post-update.d`). Each has an **Install hook** button that shows exactly what will be installed: a tiny script copied with `omarchy hook install <type> <script>` into `~/.config/omarchy/hooks/<type>.d/55-chroma-desk-<type>`, which runs `chroma-desk event omarchy:<type>`. There is a **Remove hook** button too (it only deletes that one file). Hooks are never installed on their own.
 
+   > **Requirement:** the hook scripts call `chroma-desk` from your `PATH` (falling back to `socat` and the socket). If neither is available the hook silently does nothing. Installing the package (`makepkg -si`, see *Install*) puts `chroma-desk` in `/usr/bin`. Check with `command -v chroma-desk || command -v socat`, and test a hook by hand with `chroma-desk event omarchy:battery-low` while the app is running.
+
 ```sh
 chroma-desk event omarchy:battery-low    # what the hook runs; fires every enabled notification listening to it
 ```
@@ -252,6 +254,8 @@ Settings → *Start on login* creates `~/.config/autostart/chroma-desk.desktop` 
 To keep the OpenRGB server alive, enable *Keep OpenRGB running with a systemd user service* in Settings (installs `chroma-desk-openrgb.service`, `openrgb --server --startminimized`). Close any OpenRGB you started by hand first.
 
 ## Troubleshooting
+
+- **Omarchy events or `chroma-desk trigger` do nothing**: the app must be running (tray is fine) and `chroma-desk` must be on `PATH` — install the package with `makepkg -si`. `chroma-desk trigger …` exits with code 1 and says so when it cannot reach the app.
 
 - **“Cannot reach OpenRGB”**: chroma-desk starts `openrgb --server --startminimized` if nothing listens on port 6742. Check that `openrgb` is installed and in `PATH`, or run it yourself with `--server`.
 - **No devices / RAM or motherboard missing**: load the `i2c-dev` module (`echo i2c-dev | sudo tee /etc/modules-load.d/i2c.conf`) and install OpenRGB's udev rules (`60-openrgb.rules`), then re-login and press *Rescan*.
@@ -459,6 +463,8 @@ Una **notificación** hace que las luces reaccionen: un destello cuando llega un
 2. **Notificaciones de escritorio** (opcional, desactivado por defecto): chroma-desk observa en el D-Bus de sesión las llamadas `org.freedesktop.Notifications.Notify` y dispara las notificaciones cuyo criterio coincida con el **nombre de la aplicación**, la **urgencia** o texto del **título** (p. ej. *la app contiene `discord`*). Privacidad: solo se comparan el nombre de la aplicación, la urgencia y el título; el texto del mensaje nunca se lee, guarda ni envía, y no se registra nada.
 3. **Eventos de Omarchy** (solo si se detecta Omarchy): *batería baja* (`battery-low.d`), *tema cambiado* (`theme-set.d`) y *tras una actualización* (`post-update.d`). Cada uno tiene un botón **Instalar hook** que muestra exactamente qué se instalará (un script pequeño copiado con `omarchy hook install <tipo> <script>` en `~/.config/omarchy/hooks/<tipo>.d/55-chroma-desk-<tipo>`, que ejecuta `chroma-desk event omarchy:<tipo>`) y un botón **Quitar hook** (solo borra ese archivo). Nunca se instalan solos.
 
+   > **Requisito:** los scripts de los hooks llaman a `chroma-desk` desde tu `PATH` (y, si no está, a `socat` con el socket). Si no hay ninguno de los dos, el hook no hace nada y no avisa. Instalar el paquete (`makepkg -si`, ver *Instalación*) deja `chroma-desk` en `/usr/bin`. Compruébalo con `command -v chroma-desk || command -v socat` y prueba un hook a mano con `chroma-desk event omarchy:battery-low` con la app abierta.
+
 ## Pruebas
 
 ```sh
@@ -474,6 +480,8 @@ Ajustes → *Iniciar al iniciar sesión* crea `~/.config/autostart/chroma-desk.d
 Para mantener vivo el servidor de OpenRGB, activa *Mantener OpenRGB en marcha con un servicio de usuario de systemd* en Ajustes (instala `chroma-desk-openrgb.service`, `openrgb --server --startminimized`). Cierra antes cualquier OpenRGB lanzado a mano.
 
 ## Solución de problemas
+
+- **Los eventos de Omarchy o `chroma-desk trigger` no hacen nada**: la app tiene que estar abierta (en la bandeja vale) y `chroma-desk` tiene que estar en el `PATH`: instala el paquete con `makepkg -si`. Si no puede contactar con la app, `chroma-desk trigger …` sale con código 1 y lo indica.
 
 - **«No se puede contactar con OpenRGB»**: chroma-desk lanza `openrgb --server --startminimized` si nada escucha en el puerto 6742. Comprueba que `openrgb` está instalado y en el `PATH`, o ejecútalo tú con `--server`.
 - **Sin dispositivos / faltan RAM o placa**: carga el módulo `i2c-dev` (`echo i2c-dev | sudo tee /etc/modules-load.d/i2c.conf`), instala las reglas udev de OpenRGB (`60-openrgb.rules`), vuelve a iniciar sesión y pulsa *Re-detectar*.

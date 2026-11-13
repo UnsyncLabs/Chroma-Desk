@@ -11,6 +11,7 @@ license=(GPL-2.0-or-later)
 # openrgb-razer (and any other package providing openrgb) satisfies `openrgb`.
 depends=(openrgb webkit2gtk-4.1 gtk3 libayatana-appindicator)
 makedepends=(rust npm)
+optdepends=('socat: fallback used by the Omarchy hooks and shell examples to reach the app socket')
 options=(!lto)
 
 _root="$startdir/../.."
