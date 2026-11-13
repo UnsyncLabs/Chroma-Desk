@@ -11,7 +11,7 @@ async fn main() {
     println!("resizable zones now: {sizes:?}");
     println!("config after migration: {:?}", state.config.lock().unwrap().zone_sizes_by_key);
     let scene = state.engine.scene.lock().unwrap().clone();
-    let p = profiles::Profile { schema_version: 1, name: "zz-demo".into(), openrgb_profile: None, zone_sizes: sizes, scene };
+    let p = profiles::Profile { zone_sizes: sizes, ..profiles::Profile::new("zz-demo", scene) };
     profiles::save(&profiles::profiles_dir(), &p).unwrap();
     let emit: chroma_desk_lib::engine::runner::Emit = Arc::new(|e, _| println!("event {e}"));
     apply::apply_profile(&state, &emit, "zz-demo").await.expect("apply");

@@ -13,6 +13,7 @@ use crate::engine::compositor::Geometry;
 use crate::engine::effects::{self, Params, Px};
 use crate::error::{ApiError, Res};
 use crate::fsutil::write_atomic;
+use crate::themes::{Color, Palette};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, HashMap};
@@ -73,7 +74,7 @@ impl LoopMode {
 pub struct Frame {
     /// `LedRef` -> colour; LEDs not listed are transparent.
     #[serde(default)]
-    pub leds: BTreeMap<String, Rgb3>,
+    pub leds: BTreeMap<String, Color>,
     /// Overrides the animation's default frame time.
     #[serde(default)]
     pub duration_ms: Option<u32>,
@@ -82,7 +83,7 @@ pub struct Frame {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stop {
     pub pos: f32,
-    pub color: Rgb3,
+    pub color: Color,
 }
 
 fn d_frame_ms() -> u32 {
@@ -248,8 +249,8 @@ fn stops_json(stops: &[Stop]) -> Value {
     Value::Array(stops.iter().map(|s| json!({ "pos": s.pos, "color": s.color })).collect())
 }
 
-/// Resolves `anim`'s LED references against a device's LED names.
-pub fn resolve(anim: &Animation, names: &[String]) -> Resolved {
+/// Resolves `anim`'s LED references against a device's LED names and its slot colours against `pal`.
+pub fn resolve(anim: &Animation, names: &[String], pal: &Palette) -> Resolved {
     let index = name_index(names);
     let n = names.len();
     let mut m = Map::new();
@@ -296,20 +297,22 @@ pub fn resolve(anim: &Animation, names: &[String]) -> Resolved {
         }
     };
     let (matched, total) = compatibility(anim, names);
+    let mut params = params;
+    pal.resolve_map(&mut params.0);
     Resolved { effect, params, matched, total }
 }
 
-type CacheKey = (String, u64, String, usize);
+type CacheKey = (String, u64, String, usize, u64);
 
 fn cache() -> &'static Mutex<HashMap<CacheKey, Arc<Resolved>>> {
     static C: OnceLock<Mutex<HashMap<CacheKey, Arc<Resolved>>>> = OnceLock::new();
     C.get_or_init(Mutex::default)
 }
 
-/// Resolution cached by `(animation id, updated, device, LED count)`: names are resolved once
+/// Resolution cached by `(animation id, updated, device, LED count, palette generation)`: names are resolved once
 /// per device, not once per frame.
 fn cached(id: &str, updated: u64, geo: &Geometry, make: impl FnOnce() -> Option<Resolved>) -> Option<Arc<Resolved>> {
-    let key = (id.to_string(), updated, geo.device_key.to_string(), geo.led_count);
+    let key = (id.to_string(), updated, geo.device_key.to_string(), geo.led_count, geo.palette.generation);
     if let Some(r) = cache().lock().unwrap().get(&key) {
         return Some(r.clone());
     }
@@ -328,7 +331,7 @@ fn draw(r: &Resolved, t: f32, geo: &Geometry, seed: u32, out: &mut [Px]) {
 
 /// Renders an animation onto `out` (transparent where it draws nothing).
 pub fn render_animation(anim: &Animation, t: f32, geo: &Geometry, seed: u32, out: &mut [Px]) {
-    match cached(&anim.id, anim.updated, geo, || Some(resolve(anim, geo.led_names))) {
+    match cached(&anim.id, anim.updated, geo, || Some(resolve(anim, geo.led_names, geo.palette))) {
         Some(r) => draw(&r, t, geo, seed, out),
         None => out.fill(Px::CLEAR),
     }
@@ -343,7 +346,7 @@ pub fn render_layer(params: &Params, t: f32, geo: &Geometry, seed: u32, out: &mu
     };
     let id = params.0.get("anim_id").and_then(Value::as_str).or_else(|| snap.get("id").and_then(Value::as_str)).unwrap_or("");
     let updated = snap.get("updated").and_then(Value::as_u64).unwrap_or(0);
-    let r = cached(id, updated, geo, || serde_json::from_value::<Animation>(snap.clone()).ok().map(|a| resolve(&a, geo.led_names)));
+    let r = cached(id, updated, geo, || serde_json::from_value::<Animation>(snap.clone()).ok().map(|a| resolve(&a, geo.led_names, geo.palette)));
     match r {
         Some(r) => draw(&r, t, geo, seed, out),
         None => out.fill(Px::CLEAR),
@@ -367,6 +370,9 @@ pub fn validate_name(name: &str) -> Res<String> {
 fn check_stops(stops: &[Stop]) -> Res<()> {
     if stops.is_empty() || stops.len() > MAX_STOPS {
         return Err(bad(format!("palette needs 1..={MAX_STOPS} stops")));
+    }
+    if stops.iter().any(|s| !s.color.is_valid()) {
+        return Err(bad("unknown palette slot"));
     }
     if stops.iter().any(|s| !s.pos.is_finite()) {
         return Err(bad("palette position is not a number"));
@@ -408,6 +414,9 @@ pub fn validate(a: &Animation) -> Res<()> {
                     return Err(bad("frame too large or duration out of range"));
                 }
                 f.leds.keys().try_for_each(|r| check_ref(r))?;
+                if f.leds.values().any(|c| !c.is_valid()) {
+                    return Err(bad("unknown palette slot"));
+                }
             }
         }
         AnimKind::Path { path, palette, speed, length, gap, tail_fade, .. } => {
@@ -657,13 +666,13 @@ fn effect(slug: &str, name: &str, effect: &str, params: Value, tags: &[&str]) ->
 }
 
 fn stop(pos: f32, c: Rgb3) -> Stop {
-    Stop { pos, color: c }
+    Stop { pos, color: Color::Rgb(c) }
 }
 
 /// Read-only presets shipped with the app: five effect presets and one example of each new kind.
 pub fn builtins() -> Vec<Animation> {
     let all_keys: Vec<String> = KEY_ROWS.iter().flat_map(|r| r.iter()).map(|k| key_ref(k)).collect();
-    let heart = |c: Rgb3, ms: u32| Frame { leds: all_keys.iter().map(|k| (k.clone(), c)).collect(), duration_ms: Some(ms) };
+    let heart = |c: Rgb3, ms: u32| Frame { leds: all_keys.iter().map(|k| (k.clone(), Color::Rgb(c))).collect(), duration_ms: Some(ms) };
     let snake: Vec<String> = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", ";", "L", "K", "J", "H", "G", "F", "D", "S", "A", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/"]
         .iter()
         .map(|k| key_ref(k))
@@ -759,15 +768,16 @@ pub fn cycle_secs(a: &Animation) -> f32 {
 }
 
 /// A copy of `a` recoloured with `c` (keeps each colour's brightness as shading).
-pub fn recolor(a: &Animation, c: Rgb3) -> Animation {
-    let shade = |old: Rgb3| {
+pub fn recolor(a: &Animation, c: Rgb3, pal: &Palette) -> Animation {
+    let shade = |old: &Color| {
+        let old = pal.resolve(old);
         let k = old.iter().copied().max().unwrap_or(255) as f32 / 255.0;
-        [0, 1, 2].map(|i| (c[i] as f32 * k).round() as u8)
+        Color::Rgb([0, 1, 2].map(|i| (c[i] as f32 * k).round() as u8))
     };
     let mut out = a.clone();
     match &mut out.kind {
-        AnimKind::Frames { frames, .. } => frames.iter_mut().flat_map(|f| f.leds.values_mut()).for_each(|v| *v = shade(*v)),
-        AnimKind::Path { palette, .. } | AnimKind::Palette { palette, .. } => palette.iter_mut().for_each(|s| s.color = shade(s.color)),
+        AnimKind::Frames { frames, .. } => frames.iter_mut().flat_map(|f| f.leds.values_mut()).for_each(|v| *v = shade(v)),
+        AnimKind::Path { palette, .. } | AnimKind::Palette { palette, .. } => palette.iter_mut().for_each(|s| s.color = shade(&s.color)),
         AnimKind::Effect { params, .. } => {
             if params.0.contains_key("color") {
                 params.0.insert("color".into(), json!(c));
@@ -809,8 +819,8 @@ mod tests {
             builtin: false,
             kind: AnimKind::Frames {
                 frames: vec![
-                    Frame { leds: [("name:Key: W".to_string(), [255, 0, 0])].into(), duration_ms: Some(100) },
-                    Frame { leds: [("idx:2".to_string(), [0, 255, 0]), ("name:Key: Missing".to_string(), [1, 1, 1])].into(), duration_ms: None },
+                    Frame { leds: [("name:Key: W".to_string(), Color::Rgb([255, 0, 0]))].into(), duration_ms: Some(100) },
+                    Frame { leds: [("idx:2".to_string(), Color::Rgb([0, 255, 0])), ("name:Key: Missing".to_string(), Color::Rgb([1, 1, 1]))].into(), duration_ms: None },
                 ],
                 frame_ms: 100,
                 loop_mode: LoopMode::Loop,
@@ -820,7 +830,7 @@ mod tests {
     }
 
     fn geo<'a>(key: &'a str, names: &'a [String], pos: &'a [[f32; 2]]) -> Geometry<'a> {
-        Geometry { led_count: names.len(), device_key: key, led_names: names, zones: &[], positions: pos }
+        Geometry { led_count: names.len(), device_key: key, led_names: names, zones: &[], positions: pos, palette: crate::themes::default_palette() }
     }
 
     #[test]
@@ -842,7 +852,7 @@ mod tests {
         let a = frames_anim("x");
         // Same keys in a different order on another keyboard.
         let other: Vec<String> = ["", "Key: W", "Key: Q"].iter().map(|s| s.to_string()).collect();
-        let r = resolve(&a, &other);
+        let r = resolve(&a, &other, crate::themes::default_palette());
         let f0 = r.params.0["frames"][0]["leds"].as_object().unwrap();
         assert!(f0.contains_key("1"), "W moved to index 1: {f0:?}");
         // idx:2 exists on both, the missing key is ignored.
@@ -1034,12 +1044,35 @@ mod tests {
     #[test]
     fn recolor_and_cycle() {
         let a = frames_anim("rc");
-        let r = recolor(&a, [0, 0, 200]);
+        let r = recolor(&a, [0, 0, 200], crate::themes::default_palette());
         let AnimKind::Frames { frames, .. } = r.kind else { panic!() };
-        assert_eq!(frames[0].leds["name:Key: W"], [0, 0, 200]);
+        assert_eq!(frames[0].leds["name:Key: W"], Color::Rgb([0, 0, 200]));
         let alert = builtins().into_iter().find(|b| b.id == "builtin:alert").unwrap();
-        let AnimKind::Effect { params, .. } = recolor(&alert, [1, 2, 3]).kind else { panic!() };
+        let AnimKind::Effect { params, .. } = recolor(&alert, [1, 2, 3], crate::themes::default_palette()).kind else { panic!() };
         assert_eq!(params.0["colors"], json!([[1, 2, 3], [1, 2, 3]]));
         assert!((cycle_secs(&a) - 0.2).abs() < 1e-3, "{}", cycle_secs(&a));
+    }
+
+    #[test]
+    fn old_rgb_animations_load_unchanged_and_slots_roundtrip() {
+        let old = r#"{ "name": "Old", "kind": { "type": "path", "path": ["idx:0"], "palette": [ { "pos": 0.0, "color": [1, 2, 3] }, { "pos": 1.0, "color": [4, 5, 6] } ] } }"#;
+        let a = parse(old).unwrap();
+        let AnimKind::Path { palette, .. } = &a.kind else { panic!() };
+        assert_eq!(palette[0].color, Color::Rgb([1, 2, 3]));
+        let back: Animation = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+        assert_eq!(back, a);
+        let with_slots = old.replace("[1, 2, 3]", r#"{"slot": "accent"}"#);
+        let b = parse(&with_slots).unwrap();
+        let AnimKind::Path { palette, .. } = &b.kind else { panic!() };
+        assert_eq!(palette[0].color, Color::slot("accent"));
+        assert!(parse(&old.replace("[1, 2, 3]", r#"{"slot": "nope"}"#)).is_err());
+        // Resolution turns the slot into the palette colour.
+        let mut pal = Palette::default_manual();
+        pal.slots.insert("accent".into(), [255, 128, 0]);
+        let r = resolve(&b, &["Key: A".to_string()], &pal);
+        assert_eq!(r.params.0["palette"][0]["color"], json!([255, 128, 0]));
+        // Recolouring a slot-coloured animation shades by the slot's brightness.
+        let AnimKind::Path { palette, .. } = recolor(&b, [200, 100, 0], &pal).kind else { panic!() };
+        assert_eq!(palette[0].color, Color::Rgb([200, 100, 0]));
     }
 }

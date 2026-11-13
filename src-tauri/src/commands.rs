@@ -151,14 +151,11 @@ pub fn profiles_path() -> String {
 pub async fn save_profile(state: State<'_, AppState>, name: String) -> Res<ProfileInfo> {
     let zone_sizes = state.resizable_zone_sizes().await.unwrap_or_default();
     let scene = state.engine.scene.lock().unwrap().clone();
-    let existing = profiles::load(&profiles::profiles_dir(), name.trim()).ok();
-    let profile = Profile {
-        schema_version: profiles::SCHEMA_VERSION,
-        name,
-        openrgb_profile: existing.and_then(|p| p.openrgb_profile),
-        zone_sizes,
-        scene,
-    };
+    // Saving the scene keeps what the profile already has besides it (theme, presets, triggers).
+    let mut profile = profiles::load(&profiles::profiles_dir(), name.trim()).unwrap_or_else(|_| Profile::new(&name, Scene::default()));
+    profile.name = name;
+    profile.zone_sizes = zone_sizes;
+    profile.scene = scene;
     let info = profiles::save(&profiles::profiles_dir(), &profile)?;
     state.set_current_profile(Some(info.name.clone()))?;
     Ok(info)
@@ -209,13 +206,8 @@ pub async fn list_openrgb_profiles(state: State<'_, AppState>) -> Res<Vec<String
 pub fn import_openrgb_profile(name: String) -> Res<ProfileInfo> {
     let dir = profiles::profiles_dir();
     let pname = format!("OpenRGB: {name}");
-    let profile = Profile {
-        schema_version: profiles::SCHEMA_VERSION,
-        name: pname,
-        openrgb_profile: Some(name),
-        zone_sizes: Default::default(),
-        scene: Scene::default(),
-    };
+    let mut profile = Profile::new(&pname, Scene::default());
+    profile.openrgb_profile = Some(name);
     profiles::save(&dir, &profile)
 }
 

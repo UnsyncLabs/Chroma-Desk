@@ -4,6 +4,7 @@ use crate::animations::{self, Animation};
 use crate::engine::overlay::{self, Overlay};
 use crate::engine::{Engine, SceneMode};
 use crate::error::{ApiError, Res};
+use crate::themes::Color;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -35,7 +36,7 @@ pub struct TriggerSpec {
     pub keys: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<DurationSpec>,
-    /// `#rrggbb` (or `#rgb`): recolours the animation.
+    /// `#rrggbb`, `#rgb` or `@slot` (a palette slot, e.g. `@alert`): recolours the animation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// Number of passes of the animation (limited by `duration` when both are given).
@@ -70,18 +71,9 @@ pub fn parse_duration(s: &str) -> Option<f64> {
     (v.is_finite() && v >= 0.0).then_some(v * mul)
 }
 
-/// `#ff0000`, `ff0000`, `#f00`.
-pub fn parse_color(s: &str) -> Option<[u8; 3]> {
-    let h = s.trim().trim_start_matches('#');
-    if !h.is_ascii() {
-        return None;
-    }
-    let byte = |a: &str| u8::from_str_radix(a, 16).ok();
-    match h.len() {
-        6 => Some([byte(&h[0..2])?, byte(&h[2..4])?, byte(&h[4..6])?]),
-        3 => Some([byte(&h[0..1])? * 17, byte(&h[1..2])? * 17, byte(&h[2..3])? * 17]),
-        _ => None,
-    }
+/// `#ff0000`, `ff0000`, `#f00` or a palette slot (`@alert`).
+pub fn parse_color(s: &str) -> Option<Color> {
+    Color::parse(s)
 }
 
 fn invalid(why: impl ToString) -> ApiError {
@@ -160,8 +152,10 @@ pub fn start(engine: &Engine, dir: &Path, spec: &TriggerSpec, now: Instant) -> R
     if devices == 0 {
         return Err(ApiError::new("trigger_no_device", ""));
     }
-    if let Some(c) = spec.color.as_deref().and_then(parse_color) {
-        anim = animations::recolor(&anim, c);
+    if let Some(c) = spec.color.as_deref().and_then(Color::parse) {
+        // `@slot` colours are taken from the palette at the moment the trigger fires.
+        let pal = engine.palette.lock().unwrap().clone();
+        anim = animations::recolor(&anim, pal.resolve(&c), &pal);
     }
     let priority = spec.priority;
     let id = engine.overlays.lock().unwrap().add(now, |id| {
@@ -250,7 +244,7 @@ mod tests {
             updated: 0,
             target: Target::default(),
             builtin: false,
-            kind: AnimKind::Frames { frames: vec![Frame { leds: [("name:Key: W".to_string(), [255, 0, 0])].into(), duration_ms: Some(500) }], frame_ms: 500, loop_mode: LoopMode::Loop, crossfade: 0.0 },
+            kind: AnimKind::Frames { frames: vec![Frame { leds: [("name:Key: W".to_string(), Color::Rgb([255, 0, 0]))].into(), duration_ms: Some(500) }], frame_ms: 500, loop_mode: LoopMode::Loop, crossfade: 0.0 },
         };
         animations::save(&d, &a).unwrap();
         d
@@ -266,8 +260,10 @@ mod tests {
         for bad in ["", "abc", "-1s", "NaN", "inf", "1x"] {
             assert_eq!(parse_duration(bad), None, "{bad}");
         }
-        assert_eq!(parse_color("#ff8000"), Some([255, 128, 0]));
-        assert_eq!(parse_color("f00"), Some([255, 0, 0]));
+        assert_eq!(parse_color("#ff8000"), Some(Color::Rgb([255, 128, 0])));
+        assert_eq!(parse_color("@alert"), Some(Color::slot("alert")));
+        assert_eq!(parse_color("@bogus"), None);
+        assert_eq!(parse_color("f00"), Some(Color::Rgb([255, 0, 0])));
         assert_eq!(parse_color("#12345"), None);
         assert_eq!(parse_color("#gg0000"), None);
         assert_eq!(parse_color("é12345"), None);
@@ -326,7 +322,7 @@ mod tests {
         let active = e.overlays.lock().unwrap().active(t0);
         let mut buf = crate::engine::compositor::black(4);
         let devs = e.devs.lock().unwrap().clone();
-        overlay::compose(&mut buf, &active, &devs[0], &[[0.5, 0.5]; 4], t0);
+        overlay::compose(&mut buf, &active, &devs[0], &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert_eq!((buf[0].r, buf[0].b), (0.0, 255.0));
     }
 

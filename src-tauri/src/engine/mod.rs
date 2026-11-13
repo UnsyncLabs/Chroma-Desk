@@ -6,6 +6,8 @@ pub mod overlay;
 pub mod runner;
 
 use crate::sdk::{DeviceDto, Rgb};
+use crate::themes;
+use crate::themes::Palette;
 use compositor::{Geometry, Layer};
 use effects::Pos;
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,21 @@ impl Default for Scene {
     }
 }
 
+/// A copy of `scene` with every palette slot replaced by its colour (the engine renders this).
+pub fn resolve_scene(scene: &Scene, pal: &Palette) -> Scene {
+    let mut s = scene.clone();
+    let fix = |layers: &mut Vec<Layer>| {
+        for l in layers.iter_mut() {
+            if l.params.0.values().any(themes::contains_slot) {
+                pal.resolve_map(&mut l.params.0);
+            }
+        }
+    };
+    fix(&mut s.global_layers);
+    s.devices.values_mut().for_each(|d| fix(&mut d.layers));
+    s
+}
+
 /// What the engine knows about a connected device.
 #[derive(Debug, Clone)]
 pub struct DevInfo {
@@ -218,12 +235,14 @@ pub struct Tick<'a> {
     pub blackout: bool,
     pub overlays: &'a [std::sync::Arc<overlay::Overlay>],
     pub now: Instant,
+    /// Palette for the colours the scene did not resolve itself (overlays).
+    pub palette: &'a Palette,
 }
 
 impl Tick<'_> {
     /// No overlays, `now` = the real clock (tests and simple callers).
     pub fn plain(t: f32, blackout: bool) -> Self {
-        Tick { t, blackout, overlays: &[], now: Instant::now() }
+        Tick { t, blackout, overlays: &[], now: Instant::now(), palette: crate::themes::default_palette() }
     }
 }
 
@@ -235,7 +254,7 @@ pub fn render_device(
     slot: Option<(usize, usize)>,
     tick: &Tick,
 ) -> Option<Vec<[u8; 3]>> {
-    let Tick { t, blackout, overlays, now } = *tick;
+    let Tick { t, blackout, overlays, now, palette } = *tick;
     let ds = scene.devices.get(&dev.key)?;
     if ds.mode != SceneMode::Effects {
         return None;
@@ -254,12 +273,12 @@ pub fn render_device(
         && let Some((i, n)) = slot
     {
         let global: Vec<Pos> = local.iter().map(|p| [(i as f32 + p[0]) / n as f32, p[1]]).collect();
-        let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: &global };
+        let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: &global, palette };
         compositor::composite_onto(&mut buf, &scene.global_layers, &geo, t, 7);
     }
-    let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: local };
+    let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions: local, palette };
     compositor::composite_onto(&mut buf, &ds.layers, &geo, t, key_seed(&dev.key));
-    overlay::compose(&mut buf, overlays, dev, local, now);
+    overlay::compose(&mut buf, overlays, dev, local, now, palette);
     Some(compositor::finalize(&buf, scene.master_brightness * ds.brightness))
 }
 
@@ -275,6 +294,8 @@ pub struct Engine {
     pub fps_by_type: Mutex<HashMap<String, u32>>,
     /// Temporary animations drawn over the scene (triggers).
     pub overlays: Mutex<overlay::Overlays>,
+    /// The active palette (slot colours resolve against it).
+    pub palette: Mutex<std::sync::Arc<Palette>>,
     /// Everything off until cleared (tray "Lights off").
     pub blackout: AtomicBool,
     pub start: Instant,
@@ -289,6 +310,7 @@ impl Default for Engine {
             visible: Mutex::default(),
             fps_by_type: Mutex::default(),
             overlays: Mutex::default(),
+            palette: Mutex::new(std::sync::Arc::new(Palette::default_manual())),
             blackout: AtomicBool::new(false),
             start: Instant::now(),
         }
@@ -457,13 +479,13 @@ mod tests {
             updated: 1,
             target: Target::default(),
             builtin: false,
-            kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), [255, 0, 0])].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
+            kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), crate::themes::Color::Rgb([255, 0, 0]))].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
         };
         let mut ov = overlay::Overlays::default();
         ov.add(t0, |id| overlay::Overlay { id, anim, device: None, keys: vec![], start: t0, until: t0 + Duration::from_secs(1), priority: 0 }).unwrap();
         let during = ov.active(t0 + Duration::from_millis(500));
         fn tick(now: Instant, overlays: &[std::sync::Arc<overlay::Overlay>]) -> Tick<'_> {
-            Tick { t: 0.0, blackout: false, overlays, now }
+            Tick { t: 0.0, blackout: false, overlays, now, palette: crate::themes::default_palette() }
         }
         let a = render_device(&s, &d, None, None, &tick(t0 + Duration::from_millis(500), &during)).unwrap();
         assert_eq!(a, vec![[255, 0, 0], [0, 0, 255]]);
@@ -495,5 +517,66 @@ mod tests {
         assert_eq!(s, back);
         let minimal: Scene = serde_json::from_str("{}").unwrap();
         assert_eq!(minimal.master_brightness, 1.0);
+    }
+
+    #[test]
+    fn slot_colours_follow_the_palette_and_fixed_ones_do_not() {
+        let s = scene_with("k", vec![layer("solid", json!({"color": {"slot": "accent"}})), {
+            let mut l = layer("solid", json!({"color": [1, 2, 3]}));
+            l.mask = Mask::Leds { leds: vec![1] };
+            l
+        }]);
+        let d = dev("k", 2);
+        let mut pal = Palette::default_manual();
+        pal.slots.insert("accent".into(), [200, 10, 20]);
+        let r = resolve_scene(&s, &pal);
+        let out = render_device(&r, &d, None, None, &Tick::plain(0.0, false)).unwrap();
+        assert_eq!(out, vec![[200, 10, 20], [1, 2, 3]]);
+        // The source scene is untouched; a new palette gives new colours.
+        assert!(themes::contains_slot(&serde_json::to_value(&s).unwrap()));
+        pal.slots.insert("accent".into(), [0, 99, 0]);
+        let out = render_device(&resolve_scene(&s, &pal), &d, None, None, &Tick::plain(0.0, false)).unwrap();
+        assert_eq!(out[0], [0, 99, 0]);
+    }
+
+    #[test]
+    fn overlay_and_animation_colours_resolve_with_the_palette() {
+        use crate::animations::{AnimKind, Animation, Frame, LoopMode, Target};
+        use crate::themes::Color;
+        let s = scene_with("k", vec![]);
+        let d = dev("k", 2);
+        let t0 = Instant::now();
+        let anim = Animation {
+            schema_version: 1,
+            id: "ov-slot".into(),
+            name: "ov".into(),
+            description: None,
+            tags: vec![],
+            created: 0,
+            updated: 1,
+            target: Target::default(),
+            builtin: false,
+            kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), Color::slot("alert"))].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
+        };
+        let mut ov = overlay::Overlays::default();
+        ov.add(t0, |id| overlay::Overlay { id, anim, device: None, keys: vec![], start: t0, until: t0 + Duration::from_secs(5), priority: 0 }).unwrap();
+        let active = ov.active(t0 + Duration::from_millis(10));
+        let mut pal = Palette::default_manual();
+        pal.slots.insert("alert".into(), [10, 200, 30]);
+        pal.generation += 1000;
+        let tick = Tick { t: 0.0, blackout: false, overlays: &active, now: t0 + Duration::from_millis(10), palette: &pal };
+        assert_eq!(render_device(&s, &d, None, None, &tick).unwrap()[0], [10, 200, 30]);
+        // A new palette generation re-resolves the cached animation.
+        let mut pal2 = pal.clone();
+        pal2.slots.insert("alert".into(), [7, 7, 7]);
+        pal2.generation += 1;
+        let tick = Tick { palette: &pal2, ..tick };
+        assert_eq!(render_device(&s, &d, None, None, &tick).unwrap()[0], [7, 7, 7]);
+    }
+
+    #[test]
+    fn plain_rgb_scenes_are_byte_identical_after_resolution() {
+        let s = scene_with("k", vec![layer("gradient", json!({"colors": [[255, 0, 0], [0, 0, 255]], "angle": 0, "speed": 0}))]);
+        assert_eq!(resolve_scene(&s, &Palette::default_manual()), s);
     }
 }

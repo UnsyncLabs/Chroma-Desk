@@ -58,6 +58,8 @@ pub struct Geometry<'a> {
     /// `(zone id, first LED, LED count)`.
     pub zones: &'a [(usize, usize, usize)],
     pub positions: &'a [Pos],
+    /// Active palette (animations resolve their slot colours with it).
+    pub palette: &'a crate::themes::Palette,
 }
 
 impl Mask {
@@ -161,7 +163,7 @@ mod tests {
 
     fn run(layers: &[Layer], n: usize, zones: &[(usize, usize, usize)]) -> Vec<[u8; 3]> {
         let pos = vec![[0.5, 0.5]; n];
-        let geo = Geometry { led_count: n, device_key: "t", led_names: &[], zones, positions: &pos };
+        let geo = Geometry { led_count: n, device_key: "t", led_names: &[], zones, positions: &pos, palette: crate::themes::default_palette() };
         let mut buf = black(n);
         composite_onto(&mut buf, layers, &geo, 0.0, 1);
         finalize(&buf, 1.0)

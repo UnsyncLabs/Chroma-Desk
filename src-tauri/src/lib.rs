@@ -12,6 +12,7 @@ pub mod sdk;
 pub mod server;
 pub mod socket;
 pub mod state;
+pub mod themes;
 pub mod tray;
 pub mod triggers;
 

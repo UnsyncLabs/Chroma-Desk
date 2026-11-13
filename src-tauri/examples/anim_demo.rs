@@ -59,7 +59,7 @@ async fn engine() {
     let wasd = ["W", "A", "S", "D", "Q"];
 
     println!("FRAMES: W red, then A red, then D red (400 ms each, no crossfade)");
-    let f = |k: &str| Frame { leds: [(key(k), [255, 0, 0])].into(), duration_ms: None };
+    let f = |k: &str| Frame { leds: [(key(k), chroma_desk_lib::themes::Color::Rgb([255, 0, 0]))].into(), duration_ms: None };
     play(anim("f", AnimKind::Frames { frames: vec![f("W"), f("A"), f("D")], frame_ms: 400, loop_mode: LoopMode::Loop, crossfade: 0.0 }));
     for i in 0..6 {
         tokio::time::sleep(Duration::from_millis(if i == 0 { 250 } else { 400 })).await;
@@ -77,7 +77,7 @@ async fn engine() {
     let route = ["Q", "W", "E", "R", "T", "G", "F", "D", "S", "Z", "X", "C", "V"];
     play(anim("p", AnimKind::Path {
         path: route.iter().map(|k| key(k)).collect(),
-        palette: vec![Stop { pos: 0.0, color: [255, 255, 255] }, Stop { pos: 1.0, color: [255, 255, 255] }],
+        palette: vec![Stop { pos: 0.0, color: chroma_desk_lib::themes::Color::Rgb([255, 255, 255]) }, Stop { pos: 1.0, color: chroma_desk_lib::themes::Color::Rgb([255, 255, 255]) }],
         speed: 0.5, length: 0.2, gap: 1.0, reverse: false, tail_fade: 0.0,
     }));
     for _ in 0..6 {
@@ -91,7 +91,7 @@ async fn engine() {
     let cells: BTreeMap<String, f32> = [("A", 0.0), ("S", 0.33), ("D", 0.66), ("W", 0.5)].iter().map(|(k, p)| (key(k), *p)).collect();
     play(anim("c", AnimKind::Palette {
         cells,
-        palette: vec![Stop { pos: 0.0, color: [255, 0, 0] }, Stop { pos: 0.5, color: [0, 255, 0] }, Stop { pos: 1.0, color: [255, 0, 0] }],
+        palette: vec![Stop { pos: 0.0, color: chroma_desk_lib::themes::Color::Rgb([255, 0, 0]) }, Stop { pos: 0.5, color: chroma_desk_lib::themes::Color::Rgb([0, 255, 0]) }, Stop { pos: 1.0, color: chroma_desk_lib::themes::Color::Rgb([255, 0, 0]) }],
         speed: 0.5, reverse: false,
     }));
     for i in 0..4 {
@@ -136,7 +136,7 @@ async fn main() {
             let devs = state.devices().await.unwrap();
             let kb = devs.iter().find(|d| d.device_type == "Keyboard").expect("keyboard");
             scene.devices.insert(kb.key.clone(), DeviceScene { mode: SceneMode::Effects, layers: vec![solid_blue()], ..Default::default() });
-            let p = profiles::Profile { schema_version: profiles::SCHEMA_VERSION, name: "zz-anim-test".into(), openrgb_profile: None, zone_sizes: Default::default(), scene };
+            let p = profiles::Profile::new("zz-anim-test", scene);
             profiles::save(&profiles::profiles_dir(), &p).unwrap();
             println!("profile zz-anim-test written");
         }

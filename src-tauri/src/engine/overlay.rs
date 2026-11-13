@@ -119,11 +119,11 @@ pub fn resolve_keys(keys: &[String], names: &[String]) -> Vec<usize> {
 }
 
 /// Draws the active overlays onto `buf` (a device already composed from its layers).
-pub fn compose(buf: &mut [Px], overlays: &[Arc<Overlay>], dev: &DevInfo, positions: &[Pos], now: Instant) {
+pub fn compose(buf: &mut [Px], overlays: &[Arc<Overlay>], dev: &DevInfo, positions: &[Pos], now: Instant, palette: &crate::themes::Palette) {
     if overlays.is_empty() {
         return;
     }
-    let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions };
+    let geo = Geometry { led_count: dev.led_count, device_key: &dev.key, led_names: &dev.led_names, zones: &dev.zones, positions, palette };
     let mut scratch = vec![Px::CLEAR; buf.len()];
     for ov in overlays {
         if !device_matches(ov.device.as_deref(), dev) || now < ov.start || now >= ov.until {
@@ -182,7 +182,7 @@ mod tests {
             target: Target::default(),
             builtin: false,
             kind: AnimKind::Frames {
-                frames: vec![Frame { leds: (0..4).map(|i| (format!("idx:{i}"), c)).collect(), duration_ms: Some(1000) }],
+                frames: vec![Frame { leds: (0..4).map(|i| (format!("idx:{i}"), crate::themes::Color::Rgb(c))).collect(), duration_ms: Some(1000) }],
                 frame_ms: 1000,
                 loop_mode: LoopMode::Loop,
                 crossfade: 0.0,
@@ -230,14 +230,14 @@ mod tests {
         o.add(t0, |id| ov(id, solid_anim("lo", [255, 0, 0]), t0, 5.0, 1)).unwrap();
         let active = o.active(t0);
         let mut buf = compositor::black(4);
-        compose(&mut buf, &active, &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &active, &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert_eq!((buf[0].r, buf[0].g), (0.0, 255.0));
         // Same priority: the newer one is on top.
         let mut o = Overlays::default();
         o.add(t0, |id| ov(id, solid_anim("first", [0, 255, 0]), t0, 5.0, 0)).unwrap();
         o.add(t0, |id| ov(id, solid_anim("second", [255, 0, 0]), t0, 5.0, 0)).unwrap();
         let mut buf = compositor::black(4);
-        compose(&mut buf, &o.active(t0), &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &o.active(t0), &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert_eq!(buf[1].r, 255.0);
     }
 
@@ -247,13 +247,13 @@ mod tests {
         let mut limited = ov(1, solid_anim("k", [255, 0, 0]), t0, 5.0, 0);
         limited.keys = vec!["w".into(), "Left Shift".into(), "Nope".into()];
         let mut buf = compositor::black(4);
-        compose(&mut buf, &[Arc::new(limited)], &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &[Arc::new(limited)], &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         let lit: Vec<bool> = buf.iter().map(|p| p.r > 0.0).collect();
         assert_eq!(lit, vec![true, false, true, false]);
         let mut none = ov(2, solid_anim("k2", [255, 0, 0]), t0, 5.0, 0);
         none.keys = vec!["F13".into()];
         let mut buf = compositor::black(4);
-        compose(&mut buf, &[Arc::new(none)], &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &[Arc::new(none)], &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert!(buf.iter().all(|p| p.r == 0.0), "no matching key: nothing is drawn");
     }
 
@@ -263,13 +263,13 @@ mod tests {
         let mut o = ov(1, solid_anim("d", [255, 0, 0]), t0, 1.0, 0);
         o.device = Some("mouse".into());
         let mut buf = compositor::black(4);
-        compose(&mut buf, &[Arc::new(o.clone())], &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &[Arc::new(o.clone())], &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert!(buf.iter().all(|p| p.r == 0.0), "other device");
         o.device = Some("razer".into());
-        compose(&mut buf, &[Arc::new(o.clone())], &dev(), &[[0.5, 0.5]; 4], t0);
+        compose(&mut buf, &[Arc::new(o.clone())], &dev(), &[[0.5, 0.5]; 4], t0, crate::themes::default_palette());
         assert!(buf.iter().all(|p| p.r == 255.0));
         let mut buf = compositor::black(4);
-        compose(&mut buf, &[Arc::new(o)], &dev(), &[[0.5, 0.5]; 4], t0 + Duration::from_secs(2));
+        compose(&mut buf, &[Arc::new(o)], &dev(), &[[0.5, 0.5]; 4], t0 + Duration::from_secs(2), crate::themes::default_palette());
         assert!(buf.iter().all(|p| p.r == 0.0), "expired");
     }
 

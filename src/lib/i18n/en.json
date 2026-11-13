@@ -456,5 +456,6 @@
   "tour.next": "Next",
   "tour.done": "Open the library",
   "tour.settings": "Tour",
-  "tour.replay": "Show the tour again"
+  "tour.replay": "Show the tour again",
+  "err.profile_invalid": "Invalid profile: {detail}"
 }

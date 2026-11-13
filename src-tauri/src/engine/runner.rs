@@ -64,6 +64,14 @@ struct Runner {
     /// Devices that failed recently, and when they may be tried again.
     blocked: HashMap<String, Instant>,
     next_poll: Option<Instant>,
+    /// The last scene with its palette slots resolved, and what it was resolved from.
+    resolved: Option<ResolvedScene>,
+}
+
+struct ResolvedScene {
+    raw: super::Scene,
+    generation: u64,
+    scene: Arc<super::Scene>,
 }
 
 /// Frames to send and to preview for this tick.
@@ -73,9 +81,25 @@ struct Plan {
 }
 
 impl Runner {
+    /// The scene with slots resolved against `pal`; recomputed only when the scene or the palette
+    /// changed (so a steady scene costs nothing per frame).
+    fn scene_for(&mut self, engine: &Engine, pal: &crate::themes::Palette) -> Arc<super::Scene> {
+        let raw = engine.scene.lock().unwrap();
+        if let Some(r) = &self.resolved
+            && r.generation == pal.generation
+            && r.raw == *raw
+        {
+            return r.scene.clone();
+        }
+        let scene = Arc::new(super::resolve_scene(&raw, pal));
+        self.resolved = Some(ResolvedScene { raw: raw.clone(), generation: pal.generation, scene: scene.clone() });
+        scene
+    }
+
     fn plan(&mut self, engine: &Engine, now: Instant) -> Plan {
         let t = now.saturating_duration_since(engine.start).as_secs_f32();
-        let scene = engine.scene.lock().unwrap().clone();
+        let pal = engine.palette.lock().unwrap().clone();
+        let scene = self.scene_for(engine, &pal);
         let devs: Vec<DevInfo> = engine.devs.lock().unwrap().clone();
         let positions = engine.positions.lock().unwrap().clone();
         let visible = engine.visible.lock().unwrap().clone();
@@ -103,7 +127,7 @@ impl Runner {
             if !due && !want_preview {
                 continue;
             }
-            let Some(frame) = render_device(&scene, dev, positions.get(&dev.key), slots.get(&dev.key).copied(), &Tick { t, blackout, overlays: &overlays, now }) else {
+            let Some(frame) = render_device(&scene, dev, positions.get(&dev.key), slots.get(&dev.key).copied(), &Tick { t, blackout, overlays: &overlays, now, palette: &pal }) else {
                 continue;
             };
             if want_preview && self.previewed.get(&dev.key).is_none_or(|(_, f)| *f != frame) {
