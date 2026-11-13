@@ -62,7 +62,7 @@ export default async function (t, url) {
   assert.deepEqual(ds.layers.at(-1).params.color, { slot: "tertiary" }, "effect parameter stores the slot");
 
   // Notifications editor.
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.clickText("[data-create]", ".*");
   await t.waitFor(() => t.page.$("[data-notif-editor]"), "editor");
   assert.ok((await pickers(t)) >= 1, "notification editor has the picker");

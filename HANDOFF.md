@@ -81,3 +81,24 @@ Frames W -> A -> D looping, crossfade (W fades into A), path head advancing in s
 - Desktop notifications: Wayland compositors that sandbox the bus or dbus-broker setups denying `BecomeMonitor` show `error: ...` as the listener status and retry every 30 s.
 - A notification's `devices` use device keys (`name#serial`/`name@n`); a removed device is skipped while another chosen one still shows it.
 - Built-in presets of effect kind still cannot be edited in the Draw editors (use Layers).
+
+
+## System monitors, sequences and automations (this round)
+
+### Rust
+- `sysmon/` (`mod.rs`, `cpu.rs`, `gpu.rs`): `Metric` (`cpu.usage`, `cpu.temp`, `gpu.usage`, `gpu.vram`, `gpu.temp`, `ram.usage`; percent / degrees C). **Demand-driven**: `sysmon::reading/live/touch` register interest, a sampler thread reads twice a second for `TTL` (3 s) after the last request and then parks on a condvar, dropping NVML. Readers: `/proc/stat` deltas, hwmon (k10temp/zenpower/coretemp), NVML (`nvml-wrapper`, `nvidia-smi` fallback, at most one call per 2 s), AMD sysfs, `/proc/meminfo`. `Reading::smooth` glides between samples. Settings: `sysmon_gpu` (`auto` or `nvidia:0` / `amd:card2`). Commands `sysmon_status`, `sysmon_read`. Example `sysmon_demo`.
+- Effects (`engine/effects.rs`): `meter` (path in pick order, `metric`/`value`, `min`/`max`, `sweep|live`, background `none` = transparent by default so the scene shows through and the last key blends by its fraction; `dim`/`off` paint a track), `blink` (exact count), `orbit` (laps, tail fades by alpha), `sequence` (steps with per-step effect/params/mask). Hidden from the Layers effect picker.
+- `AnimKind::Sequence { steps: Vec<Step>, loop }` (`animations.rs`): `Step { effect, params, keys (ordered LedRefs), duration_ms, anim? }`; step effects `meter|blink|orbit|hold|animation|<any effect>`. Keys chosen but absent on a device = nothing shown (never "everything"). `cycle_secs`, `with_speed`, `recolor` support it.
+- `profiles.rs`: `NamedTrigger.sequence` (inline sequence, wins over `anim`), `Sources` gained `ai`, `always`, `every{every_secs,for_secs}`, `threshold{metric,op,value,for_secs,hysteresis,cooldown_secs}`; all optional with serde defaults, so existing profiles/notifications load and re-serialise unchanged (test). The desktop `app` filter accepts a comma-separated list.
+- `automations.rs`: the scheduler polled from the runner loop every 200 ms (a no-op without scheduled automations): *Always* keeps one hour-long overlay (looped sequence), *Every* starts D-second overlays, *Threshold* (`ThresholdState`: hold time, hysteresis re-arm, cooldown) touches the metric. A changed/removed/disabled automation restarts or stops its overlay.
+- `triggers.rs`: `start_with(secs)`, `test_notification` (editor Test on unsaved automations, command `test_automation`), `fire_ai`/`clear_ai`; socket `{"cmd":"event","event":"ai:attention","from","kind"}` / `ai:clear`; CLI `chroma-desk event ai:attention [--from x] [--kind y]`.
+- `templates.rs` (+ `src/lib/mock/templates.json`, `UPDATE_FIXTURES=1 cargo test templates_fixture`): gpu_monitor, cpu_monitor, discord, telegram, slack, matrix, ai_needs_you. Command `automation_templates`.
+- `claude.rs`: merge/remove the Claude Code `Notification` hook in a settings.json *path* (backup `settings.json.chroma-desk-backup[-N]`, key order kept via serde_json `preserve_order`, invalid JSON untouched, idempotent). Commands `claude_status/install/remove` use `$CLAUDE_CONFIG_DIR` or `~/.claude`; tests only use temp files.
+- Gotcha: `animations::cached` keys on the animation id, so tests rendering several variants of one animation need unique ids.
+
+### Frontend
+`Automations.svelte` (grouped cards, When chips, templates), `AutomationEditor.svelte`, `SequenceEditor.svelte` (steps with drag + arrows, ordered key picking on `LedCanvas` path tool, live preview), `WhenPicker.svelte`, `ClaudeSetup.svelte`, `sysmon.svelte.ts` (polling store, only while watched), `anim/live.ts` + TS renderer for meter/blink/orbit/sequence (parity tests in `anim.test.ts`). Settings: System monitor and AI assistants sections. Mock: `mock/sysmon.ts` (moving fake values, `fns.setMetric`), `mock/automations.ts` (scheduler port), fake Claude settings file. e2e `160-automations.mjs`.
+
+### Open issues
+- Always/Every automations are restarted by "Stop all triggers" within 200 ms (disable the automation to stop it).
+- Intel GPUs report "not available" (no unprivileged usage counter).

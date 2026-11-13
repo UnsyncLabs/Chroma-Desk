@@ -9,9 +9,9 @@ export default async function (t, url) {
   await t.load(url);
 
   // Without a saved profile notifications are global; save one so they can live inside it.
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.waitFor(() => t.page.$("[data-empty]"), "empty state");
-  assert.equal((await t.page.$$("[data-template]")).length, 6, "six one-click templates");
+  assert.equal((await t.page.$$("[data-template]")).length, 13, "thirteen one-click templates");
   assert.match(await t.page.evaluate(() => document.body.innerText), /no editable profile/i);
   await t.shot("notifications-empty", 1200, 800);
   await t.shot("notifications-empty", 400, 400);
@@ -23,7 +23,7 @@ export default async function (t, url) {
   await t.waitFor(async () => (await theme(t)).settings.current_profile === "Gaming", "profile saved");
 
   // ---- template with one click: it belongs to the profile
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.waitFor(() => t.page.$("[data-template]"), "templates");
   await t.clickText('[data-template="alert_wasd"]', ".*");
   await t.waitFor(() => t.page.$('[data-notif="alert_wasd"]'), "card created");

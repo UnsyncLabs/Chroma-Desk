@@ -24,7 +24,7 @@ export default async function (t, url) {
   await t.waitFor(async () => (await theme(t)).settings.current_profile === "Gaming", "profile saved");
 
   // ---- Test on the real canvas: a notification on W only, colour @alert, long enough to look at.
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.clickText("[data-create]", ".*");
   await t.waitFor(() => t.page.$("[data-notif-editor]"), "editor");
   await t.page.$eval("[data-name]", (e) => (e.value = ""));
@@ -66,7 +66,7 @@ export default async function (t, url) {
   await t.page.evaluate(() => (globalThis.__chromaMock.overlays = []));
 
   // ---- rename never overwrites another notification
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.clickText("[data-create]", ".*");
   await t.page.$eval("[data-name]", (e) => (e.value = ""));
   await t.page.type("[data-name]", "second");
@@ -131,7 +131,7 @@ export default async function (t, url) {
   // ---- a built-in profile's notifications are shown but read-only (no error toasts from the backend)
   await t.clickText('[data-profile="Cyberpunk"] button', "^Apply$");
   await t.waitFor(async () => (await theme(t)).settings.current_profile === "Cyberpunk", "Cyberpunk applied");
-  await t.nav("^Notifications");
+  await t.nav("^Automations");
   await t.waitFor(() => t.page.$('[data-notif="alert"]'), "its notifications are listed");
   assert.equal(await t.page.$eval('[data-notif="alert"] [data-edit]', (e) => e.disabled), true, "edit is disabled");
   assert.equal(await t.page.$eval('[data-notif="alert"] button.danger', (e) => e.disabled), true, "delete is disabled");

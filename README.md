@@ -198,19 +198,42 @@ send(cmd="trigger", animation="low_health")        # a notification of the activ
 
 Colours sent by a script sit on top of the theme and of the profile's overrides; applying another profile drops them.
 
-## Notifications
+## Automations
 
-A **notification** makes the lights react: a flash when a message arrives, a red blink on WASD when your battery is low, a pulse when a build ends. Open *Notifications* in the sidebar (between Animations and Profiles).
+An **automation** makes the lights react or show live information: a chat message blinks and orbits your keys, the F-row fills with your GPU memory, the keyboard turns red when an AI assistant needs you. Open *Automations* (subtitle *Notifications & monitors*) in the sidebar. Everything below also applies to plain notifications (flash on a message, red blink on low battery...); existing notifications keep working unchanged.
 
-![Notifications](docs/notifications-list-1200x800.png)
+![Automations](docs/automations-list-1200x800.png)
 
-- **Cards** show a live preview, what it does, what fires it, an *Enabled* switch and a **Test** button that fires it on your real hardware. With no notifications yet you get one-click templates: *Flash all*, *Alert on WASD*, *Success pulse*, *Low battery*, *New desktop notification*, *Game: low health*.
-- **Visual editor** (no typing needed beyond the name): pick a style (flash, pulse, blink, wave, fill) or any library animation, with speed, repeat and duration; pick the devices (checkboxes) and, for keyboards, click the keys on the keyboard drawing (or use the WASD / arrows / F-keys groups); pick the colour with the colour picker (`@alert` follows the theme); set the priority and whether it stacks or replaces the previous one.
-- **Scope**: a notification belongs to the active profile (so it recolours with that theme) or is available in *all profiles*. A profile's own notification with the same name wins over a global one.
+- **Cards** are grouped as *Monitors* (always on or on a threshold), *Timers* and *Notifications*, each with a live preview, a **When** chip ("Always", "Every 5 min for 10 s", "CPU temperature > 80 °C", "Desktop: discord", "AI assistant"), an *Enabled* switch and a **Test** button.
+- **Templates** (read-only; adding one creates your own editable copy): *GPU monitor (F-row)*, *CPU monitor (number row)*, *Discord message*, *Telegram message*, *Slack message*, *Matrix message* (Element, Fractal, nheko, Cinny), *AI needs you* and the simple ones (*Flash all*, *Alert on WASD*, *Success pulse*, *Low battery*, *New desktop notification*, *Game: low health*).
+- **Visual editor**: a single *Animation* (flash, pulse, blink, wave, fill or any library animation) or a **Sequence** of steps (*Meter*, *Blink*, *Orbit*, *Library animation*, *Colour*, *Off / pause*) that you add, reorder (drag or the arrows) and delete. Each step has its own colour (`@ok`, `@warn`, `@alert` follow the theme), timing and **keys picked in order on the keyboard drawing** (numbers show the order; quick sets for the F-row, number row, WASD and arrows). A live preview plays the whole sequence on the drawing.
+- **Scope**: an automation belongs to the active profile (so it recolours with that theme) or is available in *all profiles*; a profile's own automation with the same name wins.
 
-![Notification editor](docs/notif-editor-top-1200x800.png)
+![Sequence editor](docs/automation-editor-meter-1200x800.png)
 
-### When does it fire?
+### System monitors
+
+A **Meter** step draws a bar along the keys you picked, in that order, filled to the live value: `cpu.usage`, `cpu.temp`, `gpu.usage`, `gpu.vram`, `gpu.temp`, `ram.usage`. *Empty at* / *Full at* map the value to the bar (temperatures default to 30-95 °C), the last key is partly lit to show the exact fraction, and the editor shows the live reading next to the metric ("VRAM 2/12 GB · 17 %"). The bar is drawn **on top of the running scene**: unfilled keys are transparent, so the theme keeps animating underneath (optionally paint a dim or black track instead). The built-in templates fill Esc-F12 with VRAM (green) then GPU usage (white), and the number row with CPU usage (orange) then CPU temperature (red).
+
+Sources: CPU usage from `/proc/stat`, CPU temperature from hwmon (`k10temp` Tctl, `zenpower`, `coretemp` Package), NVIDIA through NVML (loaded from the driver at run time; `nvidia-smi` as a fallback), AMD through sysfs (`gpu_busy_percent`, `mem_info_vram_*`), RAM from `/proc/meminfo`. *Settings → System monitor* shows what was detected, the GPU in use (automatic = the dedicated one) and live readings. **Sampling costs nothing when unused**: sensors are read twice a second only while a meter is being drawn, a threshold rule exists or the editor shows a live value, and everything is released a few seconds after the last one.
+
+### When does it run?
+
+Switch on one or more triggers in the editor:
+
+| Trigger | What it does |
+|---|---|
+| **Always** | Plays in a loop on top of your lights while enabled (monitors). |
+| **On a timer** | Every N seconds/minutes/hours, for D seconds. |
+| **Command or script** | Always available (see below). |
+| **Value crosses a limit** | A metric stays above/below a value for T seconds; *hysteresis* (it must retreat this far before it can fire again) and *cooldown* (minimum time between firings). |
+| **Desktop notification** | Matches the application name (several apps separated by commas, e.g. `element, fractal`), urgency and title. |
+| **Omarchy event** | battery low, theme changed, after an update. |
+| **AI assistant** | `chroma-desk event ai:attention` (see *AI assistants*). |
+
+![When](docs/automation-editor-when-1200x800.png)
+
+### Command, desktop and Omarchy sources
 
 ![Sources](docs/notif-editor-sources-1200x800-bottom.png)
 
@@ -238,6 +261,24 @@ A **notification** makes the lights react: a flash when a message arrives, a red
 ```sh
 chroma-desk event omarchy:battery-low    # what the hook runs; fires every enabled notification listening to it
 ```
+
+### AI assistants
+
+`chroma-desk event ai:attention [--from <tool>] [--kind permission|idle]` fires every enabled automation with the *AI assistant* trigger (optionally filtered by tool and kind); `chroma-desk event ai:clear` ends them early. The *AI needs you* template flashes the whole keyboard in the `@alert` colour for 10 s.
+
+**Claude Code.** *Settings → AI assistants* (or the AI trigger in the editor) has **Set up Claude Code**: it shows the exact JSON, merges it into `~/.claude/settings.json` (all your other settings and hooks stay, in order), makes a backup copy first (`settings.json.chroma-desk-backup`), refuses to touch a file that is not valid JSON, and can remove the hook again. The hook it adds:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "chroma-desk event ai:attention --from claude" } ] }
+    ]
+  }
+}
+```
+
+Claude Code fires `Notification` when it asks for permission or waits for your answer. **Other tools** (Codex CLI, aider, any script): run the same command from their notification/hook setting, e.g. `chroma-desk event ai:attention --from codex --kind idle`, or over the socket: `echo '{"cmd":"event","event":"ai:attention","from":"codex"}' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/chroma-desk.sock`.
 
 ## Testing
 
@@ -449,15 +490,28 @@ send(cmd="trigger", animation="low_health")        # una notificación del perfi
 
 Los colores enviados por un script van encima del tema y de los colores fijados del perfil; al aplicar otro perfil se descartan.
 
-## Notificaciones
+## Automatizaciones
 
-Una **notificación** hace que las luces reaccionen: un destello cuando llega un mensaje, un parpadeo rojo en WASD con la batería baja, un pulso cuando termina una compilación. Está en *Notificaciones* en la barra lateral (entre Animaciones y Perfiles).
+Una **automatización** hace que las luces reaccionen o muestren información en vivo: un mensaje de chat parpadea y recorre tus teclas, la fila F se llena con la memoria de la GPU, el teclado se pone rojo cuando una IA te necesita. Está en *Automatizaciones* (subtítulo *Notificaciones y monitores*) en la barra lateral. Lo siguiente también vale para notificaciones simples; las que ya tenías siguen funcionando igual.
 
-- **Tarjetas** con vista previa animada, qué hace, qué la dispara, un interruptor *Activada* y un botón **Probar** que la lanza en tu hardware real. Sin notificaciones hay plantillas de un clic: *Destello en todo*, *Alerta en WASD*, *Pulso de éxito*, *Batería baja*, *Nueva notificación de escritorio*, *Juego: poca vida*.
-- **Editor visual**: estilo (destello, pulso, parpadeo, ola, relleno) o cualquier animación de la biblioteca, con velocidad, repeticiones y duración; dispositivos con casillas y, en teclados, pulsa las teclas sobre el dibujo del teclado (o usa los grupos WASD / flechas / F1–F12); color con el selector (`@alert` sigue al tema); prioridad y si se apila o reemplaza a la anterior.
-- **Ámbito**: pertenece al perfil activo (se recolorea con su tema) o está disponible en *todos los perfiles*. Una notificación del perfil con el mismo nombre gana a una global.
+- **Tarjetas** agrupadas en *Monitores*, *Temporizadores* y *Notificaciones*, con vista previa, un chip **Cuándo** («Siempre», «Cada 5 min durante 10 s», «Temperatura de CPU > 80 °C», «Escritorio: discord», «Asistente de IA»), un interruptor *Activada* y un botón **Probar**.
+- **Plantillas** (de solo lectura; al añadir una se crea tu copia editable): *Monitor de GPU (fila F)*, *Monitor de CPU (fila de números)*, mensajes de *Discord*, *Telegram*, *Slack* y *Matrix* (Element, Fractal, nheko, Cinny), *La IA te necesita* y las simples.
+- **Editor visual**: una *Animación* o una **Secuencia** de pasos (*Medidor*, *Parpadeo*, *Órbita*, *Animación de la biblioteca*, *Color*, *Apagado / pausa*) que añades, reordenas (arrastrando o con las flechas) y borras. Cada paso tiene su color, tiempos y **teclas elegidas en orden sobre el teclado** (con números). Una vista previa reproduce toda la secuencia.
 
-### ¿Cuándo se dispara?
+### Monitores del sistema
+
+Un paso **Medidor** dibuja una barra sobre las teclas que elijas, en ese orden, llena hasta el valor en vivo: `cpu.usage`, `cpu.temp`, `gpu.usage`, `gpu.vram`, `gpu.temp`, `ram.usage`. La barra se dibuja **encima de la escena activa**: las teclas sin llenar son transparentes y el tema sigue animándose debajo; la última tecla se enciende en proporción. *Ajustes → Monitor del sistema* muestra lo detectado, la GPU en uso y lecturas en vivo. **Muestrear no cuesta nada si no se usa**: los sensores se leen dos veces por segundo solo mientras hay un medidor dibujándose, una regla de umbral o el editor mostrando un valor.
+
+### ¿Cuándo se ejecuta?
+
+*Siempre* (en bucle sobre tus luces), *con temporizador* (cada N s/min/h durante D s), *comando o script*, *umbral* (una medida por encima/debajo de un valor durante T s, con histéresis y tiempo de espera), *notificación de escritorio* (varias apps separadas por comas), *evento de Omarchy* y *asistente de IA*.
+
+### Asistentes de IA
+
+`chroma-desk event ai:attention [--from <herramienta>] [--kind permission|idle]` dispara las automatizaciones con el disparador *Asistente de IA*; `chroma-desk event ai:clear` las termina antes. En *Ajustes → Asistentes de IA* el botón **Configurar Claude Code** muestra el JSON exacto, lo fusiona en `~/.claude/settings.json` (sin tocar nada más), hace antes una copia de seguridad y puede quitarlo. El hook es el mismo JSON de arriba (`Notification` → `chroma-desk event ai:attention --from claude`). Para otras herramientas (Codex CLI, aider, scripts) ejecuta ese mismo comando desde su configuración de notificaciones o hooks.
+
+### Otros orígenes
+
 
 1. **Comando o script** (siempre): el editor muestra fragmentos listos para copiar de *esa* notificación (`chroma-desk trigger low_health`, línea del socket, Bash, Python y un atajo de Hyprland `o.bind(...)` para Omarchy).
 2. **Notificaciones de escritorio** (opcional, desactivado por defecto): chroma-desk observa en el D-Bus de sesión las llamadas `org.freedesktop.Notifications.Notify` y dispara las notificaciones cuyo criterio coincida con el **nombre de la aplicación**, la **urgencia** o texto del **título** (p. ej. *la app contiene `discord`*). Privacidad: solo se comparan el nombre de la aplicación, la urgencia y el título; el texto del mensaje nunca se lee, guarda ni envía, y no se registra nada.
