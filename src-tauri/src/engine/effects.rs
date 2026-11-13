@@ -208,6 +208,16 @@ pub fn effect_defs() -> &'static [EffectDef] {
             // Plays a library animation (snapshot in the params); rendered by `animations::render_layer`.
             EffectDef { id: "animation", params: vec![data("anim_id", json!("")), data("snapshot", Value::Null)] },
             EffectDef {
+                id: "glitch",
+                params: vec![
+                    colors("colors", &[[0.0, 240.0, 255.0], [255.0, 42.0, 109.0]]),
+                    slider("interval", 1.0, 30.0, 0.5, 6.0),
+                    slider("duration", 0.05, 1.0, 0.01, 0.25),
+                    slider("density", 0.05, 0.9, 0.01, 0.3),
+                    slider("size", 0.04, 0.5, 0.01, 0.16),
+                ],
+            },
+            EffectDef {
                 id: "ripple",
                 params: vec![
                     slider("rate", 0.1, 5.0, 0.05, 0.8),
@@ -374,6 +384,7 @@ pub fn render(effect: &str, params: &Params, t: f32, positions: &[Pos], seed: u3
         }
         "chase" => chase(&p, t, out),
         "ripple" => ripple(&p, t, positions, seed, out),
+        "glitch" => glitch(&p, t, positions, seed, out),
         "frames" => frames(&p, t, out),
         "path" => path(&p, t, out),
         "palette" => palette(&p, t, out),
@@ -391,6 +402,38 @@ fn paint(p: &Params, out: &mut [Px]) {
             {
                 *o = Px::rgb(c, 1.0);
             }
+        }
+    }
+}
+
+/// Digital glitch: every `interval` seconds, at a random moment, the keys flicker for `duration`
+/// seconds. The area is cut into blocks of about `size`; every 40 ms a different random `density`
+/// of them lights up in a palette colour, displaced sideways by a random amount (the
+/// "tearing"). Everything else stays transparent, so it sits on top of the scene.
+fn glitch(p: &Params, t: f32, positions: &[Pos], seed: u32, out: &mut [Px]) {
+    out.fill(Px::CLEAR);
+    let pal = p.colors("colors");
+    let interval = p.num("interval").max(0.2);
+    let dur = p.num("duration").clamp(0.02, interval);
+    let k = (t / interval).floor();
+    let local = t - k * interval;
+    let start = unit(hash(seed, k as i64 as u32, 0xA11C)) * (interval - dur);
+    if pal.is_empty() || local < start || local >= start + dur {
+        return;
+    }
+    let step = ((local - start) / 0.04).floor() as u32;
+    let size = p.num("size").clamp(0.03, 1.0);
+    let density = p.num("density").clamp(0.0, 1.0);
+    let n = out.len();
+    for (i, o) in out.iter_mut().enumerate() {
+        let pos = pos_of(positions, i, n);
+        // Rows tear sideways by a different amount each step.
+        let row = (pos[1] / (size * 0.6)).floor() as i32 as u32;
+        let shift = (unit(hash(seed ^ 0x51F7, step, row)) - 0.5) * size * 2.0;
+        let col = ((pos[0] + shift) / size).floor() as i32 as u32;
+        let h = hash(seed ^ 0x6C17, step, col.wrapping_mul(31).wrapping_add(row));
+        if unit(h) < density {
+            *o = Px::rgb(pal[(h >> 9) as usize % pal.len()], 1.0);
         }
     }
 }
@@ -884,5 +927,36 @@ mod tests {
         assert_eq!(hash(1, 2, 3), hash(1, 2, 3));
         assert_ne!(hash(1, 2, 3), hash(1, 3, 2));
         assert!((0.0..1.0).contains(&unit(hash(9, 9, 9))));
+    }
+
+    #[test]
+    fn glitch_is_deterministic_sparse_in_time_and_transparent_elsewhere() {
+        let n = 40;
+        let params = json!({"interval": 4.0, "duration": 0.3, "density": 0.5, "size": 0.1, "colors": [[0, 240, 255], [255, 42, 109]]});
+        let mut active = 0;
+        let mut total = 0;
+        let mut t = 0.0;
+        while t < 40.0 {
+            let a = run("glitch", params.clone(), t, n);
+            assert_eq!(a, run("glitch", params.clone(), t, n), "deterministic at t={t}");
+            total += 1;
+            if a.iter().any(|p| p.a > 0.0) {
+                active += 1;
+                // Only palette colours are ever drawn.
+                for px in a.iter().filter(|p| p.a > 0.0) {
+                    assert!([[0.0, 240.0, 255.0], [255.0, 42.0, 109.0]].contains(&[px.r, px.g, px.b]));
+                }
+            }
+            t += 0.02;
+        }
+        // 0.3 s of every 4 s: about 7.5 % of the time, never all of it and never none.
+        let share = active as f32 / total as f32;
+        assert!((0.03..0.15).contains(&share), "glitch visible {share:.3} of the time");
+        // A glitch happens once in every interval.
+        for k in 0..10 {
+            let found = (0..200).any(|i| run("glitch", params.clone(), k as f32 * 4.0 + i as f32 * 0.02, n).iter().any(|p| p.a > 0.0));
+            assert!(found, "interval {k} had no glitch");
+        }
+        assert!(run("glitch", json!({"colors": []}), 3.0, n).iter().all(|p| p.a == 0.0));
     }
 }

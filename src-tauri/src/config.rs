@@ -27,6 +27,32 @@ pub struct Settings {
     /// Show phantom duplicate devices OpenRGB reports (hidden by default).
     #[serde(default)]
     pub show_phantom_devices: bool,
+    /// Built-in profiles switched on or off by the user (Omarchy ships off).
+    #[serde(default)]
+    pub builtin_enabled: BTreeMap<String, bool>,
+    /// "When the Omarchy theme becomes X, apply profile Y".
+    #[serde(default)]
+    pub theme_rules: Vec<ThemeRule>,
+    /// Notifications available in every profile (a profile's own notification with the same name wins).
+    #[serde(default)]
+    pub global_notifications: BTreeMap<String, crate::profiles::NamedTrigger>,
+    /// Listen to desktop notifications (session D-Bus) to fire notifications. Off until the user opts in.
+    #[serde(default)]
+    pub desktop_notifications: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ThemeRule {
+    /// Omarchy theme name (as in `theme.name`, e.g. `tokyo-night`).
+    pub theme: String,
+    pub profile: String,
+}
+
+impl Settings {
+    /// Whether built-in profile `p` is switched on.
+    pub fn builtin_on(&self, p: &crate::profiles::Profile) -> bool {
+        self.builtin_enabled.get(&p.name).copied().unwrap_or(p.enabled)
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

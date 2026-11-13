@@ -3,7 +3,9 @@
 use crate::engine::runner::Emit;
 use crate::engine::{Scene, SceneMode};
 use crate::error::{ApiError, Res};
-use crate::profiles;
+use crate::builtin;
+use crate::engine::Engine;
+use crate::profiles::{self, Profile};
 use crate::sdk::{self, Rgb};
 use crate::state::AppState;
 use std::sync::Arc;
@@ -73,9 +75,39 @@ impl AppState {
     }
 }
 
+/// Makes the profile's theme and named triggers the live ones.
+pub fn adopt_theme(engine: &Engine, profile: &Profile) {
+    engine.themes.set_theme(profile.theme.clone());
+    *engine.profile_triggers.lock().unwrap() = profile.triggers.clone();
+}
+
+/// Applies the profile a theme rule asks for when the Omarchy theme becomes `theme`.
+pub async fn apply_theme_rule(state: &AppState, emit: &Emit, theme: &str) {
+    let rule = state.config.lock().unwrap().settings.theme_rules.iter().find(|r| r.theme.eq_ignore_ascii_case(theme)).cloned();
+    let Some(rule) = rule else { return };
+    if state.config.lock().unwrap().settings.current_profile.as_deref() == Some(rule.profile.as_str()) {
+        return;
+    }
+    match apply_profile(state, emit, &rule.profile).await {
+        Ok(_) => emit("profile-applied", serde_json::json!({ "name": rule.profile, "reason": "theme_rule", "theme": theme })),
+        Err(e) => emit("startup-error", serde_json::json!({ "code": e.code, "detail": e.detail })),
+    }
+}
+
 /// Applies profile `name`: OpenRGB profile (if any), zone sizes, scene and native modes.
 pub async fn apply_profile(state: &AppState, emit: &Emit, name: &str) -> Res<Scene> {
-    let profile = profiles::load(&profiles::profiles_dir(), name)?;
+    let mut profile = match builtin::find(name) {
+        Some(b) => {
+            if !builtin::available(&b, &state.engine.themes) {
+                return Err(ApiError::new("profile_unavailable", &b.name));
+            }
+            if !state.config.lock().unwrap().settings.builtin_on(&b) {
+                return Err(ApiError::new("profile_disabled", &b.name));
+            }
+            b
+        }
+        None => profiles::load(&profiles::profiles_dir(), name)?,
+    };
     if let Some(orgb) = &profile.openrgb_profile {
         let guard = state.conn.lock().await;
         let conn = guard.as_ref().ok_or_else(ApiError::no_connection)?;
@@ -92,6 +124,11 @@ pub async fn apply_profile(state: &AppState, emit: &Emit, name: &str) -> Res<Sce
         emit("devices-changed", serde_json::Value::Null);
     }
     state.devices().await?;
+    if profile.builtin {
+        let devs = state.engine.devs.lock().unwrap().clone();
+        profile.scene = builtin::scene_for(&profile.name, &devs);
+    }
+    adopt_theme(&state.engine, &profile);
     *state.engine.scene.lock().unwrap() = profile.scene.clone();
     state.engine.blackout.store(false, Ordering::Relaxed);
     state.apply_hardware_modes().await?;
@@ -105,6 +142,12 @@ pub async fn apply_profile(state: &AppState, emit: &Emit, name: &str) -> Res<Sce
 pub async fn startup(state: AppState, emit: Emit, requested: Option<String>) -> Option<Scene> {
     let fps = state.config.lock().unwrap().settings.fps_by_type.clone();
     *state.engine.fps_by_type.lock().unwrap() = fps;
+    {
+        let cfg = state.config.lock().unwrap();
+        state.engine.themes.set_name_watch(!cfg.settings.theme_rules.is_empty());
+        *state.engine.global_triggers.lock().unwrap() = cfg.settings.global_notifications.clone();
+        state.engine.desktop_enabled.store(cfg.settings.desktop_notifications, Ordering::Relaxed);
+    }
     let mut applied = None;
     match state.connect_all().await {
         Ok(()) => {

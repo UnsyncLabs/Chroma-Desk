@@ -717,6 +717,46 @@ pub fn builtins() -> Vec<Animation> {
             TargetKind::Keyboard,
             &["path"],
         ),
+        // ---- themed presets: their colours are palette slots, so they follow the active theme ----
+        effect("accent-breathing", "Accent breathing", "breathing", json!({"colors": [{"slot": "accent"}], "period": 4.0}), &["themed", "calm"]),
+        effect("theme-wave", "Theme wave", "color_wave", json!({"colors": [{"slot": "accent"}, {"slot": "secondary"}, {"slot": "accent"}], "speed": 0.2, "angle": 0, "scale": 1.0}), &["themed", "classic"]),
+        effect("theme-chase", "Theme chase", "chase", json!({"colors": [{"slot": "primary"}], "speed": 0.6, "length": 0.25, "gap": 0.35}), &["themed", "classic"]),
+        effect("flash", "Flash", "strobe", json!({"colors": [{"slot": "info"}], "rate": 3.0, "duty": 0.35}), &["themed", "notification"]),
+        effect("pulse", "Pulse", "breathing", json!({"colors": [{"slot": "ok"}], "period": 1.0}), &["themed", "notification"]),
+        effect("blink", "Blink", "strobe", json!({"colors": [{"slot": "alert"}], "rate": 2.0, "duty": 0.5}), &["themed", "notification"]),
+        effect("fill", "Fill", "solid", json!({"color": {"slot": "accent"}}), &["themed", "notification"]),
+        effect("glitch", "Glitch", "glitch", json!({"colors": [{"slot": "primary"}, {"slot": "secondary"}, {"slot": "accent"}], "interval": 5.0, "duration": 0.3, "density": 0.3, "size": 0.16}), &["themed", "cyberpunk"]),
+        builtin(
+            "neon-scan",
+            "Neon Scan",
+            AnimKind::Path {
+                path: KEY_ROWS[..4].iter().flat_map(|r| r.iter()).map(|k| key_ref(k)).collect(),
+                palette: vec![Stop { pos: 0.0, color: Color::slot("primary") }, Stop { pos: 0.5, color: Color::slot("secondary") }, Stop { pos: 1.0, color: Color::slot("tertiary") }],
+                speed: 0.55,
+                length: 0.22,
+                gap: 0.3,
+                reverse: false,
+                tail_fade: 0.8,
+            },
+            TargetKind::Keyboard,
+            &["themed", "path", "cyberpunk"],
+        ),
+        builtin(
+            "breach-alert",
+            "Breach Alert",
+            {
+                let flash = |c: Color, ms: u32| Frame { leds: all_keys.iter().map(|k| (k.clone(), c.clone())).collect(), duration_ms: Some(ms) };
+                let dim = Color::Slot(crate::themes::SlotRef { slot: "alert".into(), lighten: Some(-0.8) });
+                AnimKind::Frames {
+                    frames: vec![flash(Color::slot("alert"), 90), flash(dim.clone(), 70), flash(Color::slot("accent"), 60), flash(Color::slot("alert"), 110), flash(dim, 80), flash(Color::slot("secondary"), 50), flash(Color::slot("alert"), 400)],
+                    frame_ms: 100,
+                    loop_mode: LoopMode::Loop,
+                    crossfade: 0.0,
+                }
+            },
+            TargetKind::Keyboard,
+            &["themed", "frames", "cyberpunk"],
+        ),
         builtin(
             "soft-fire",
             "Soft fire",
@@ -752,6 +792,30 @@ pub fn layer_for(anim: &Animation) -> crate::engine::compositor::Layer {
     }
 }
 
+/// A copy of `a` playing `k` times faster (`k` > 1) or slower.
+pub fn with_speed(a: &Animation, k: f32) -> Animation {
+    let k = k.clamp(0.1, 10.0);
+    let mut out = a.clone();
+    match &mut out.kind {
+        AnimKind::Frames { frames, frame_ms, .. } => {
+            *frame_ms = ((*frame_ms as f32 / k).round() as u32).clamp(10, 60_000);
+            frames.iter_mut().for_each(|f| f.duration_ms = f.duration_ms.map(|d| ((d as f32 / k).round() as u32).clamp(10, 600_000)));
+        }
+        AnimKind::Path { speed, .. } | AnimKind::Palette { speed, .. } => *speed *= k,
+        AnimKind::Effect { params, .. } => {
+            for key in ["speed", "rate"] {
+                if let Some(v) = params.0.get(key).and_then(Value::as_f64) {
+                    params.0.insert(key.into(), json!(v * k as f64));
+                }
+            }
+            if let Some(v) = params.0.get("period").and_then(Value::as_f64) {
+                params.0.insert("period".into(), json!(v / k as f64));
+            }
+        }
+    }
+    out
+}
+
 /// Seconds one pass of the animation takes (used to turn `repeat` into a duration).
 pub fn cycle_secs(a: &Animation) -> f32 {
     match &a.kind {
@@ -763,7 +827,15 @@ pub fn cycle_secs(a: &Animation) -> f32 {
         }
         AnimKind::Path { speed, length, gap, .. } => ((length + gap).max(0.02) / speed.abs().max(0.01)).clamp(0.2, 60.0),
         AnimKind::Palette { speed, .. } => (1.0 / speed.abs().max(0.01)).clamp(0.2, 60.0),
-        AnimKind::Effect { .. } => 1.0,
+        // One strobe pulse / one breath, else a nominal second.
+        AnimKind::Effect { effect, params } => {
+            let n = |k: &str| params.0.get(k).and_then(Value::as_f64).map(|v| v as f32);
+            match effect.as_str() {
+                "strobe" => (1.0 / n("rate").unwrap_or(4.0).max(0.1)).max(0.05),
+                "breathing" => n("period").unwrap_or(4.0).max(0.05),
+                _ => 1.0,
+            }
+        }
     }
 }
 
@@ -783,7 +855,12 @@ pub fn recolor(a: &Animation, c: Rgb3, pal: &Palette) -> Animation {
                 params.0.insert("color".into(), json!(c));
             }
             if let Some(Value::Array(list)) = params.0.get_mut("colors") {
-                list.iter_mut().for_each(|v| *v = json!(c));
+                // Several colours (a wave) keep some variation: lighter and darker shades of `c`.
+                let multi = list.len() > 1;
+                for (i, v) in list.iter_mut().enumerate() {
+                    let shade = if !multi || i % 3 == 0 { 0.0 } else if i % 3 == 1 { 0.45 } else { -0.35 };
+                    *v = json!(crate::themes::lighten(c, shade));
+                }
             }
             // Effects with random colours use their palette once told to.
             if params.0.contains_key("random") {
@@ -1000,7 +1077,7 @@ mod tests {
     #[test]
     fn builtins_are_valid_and_render() {
         let all = builtins();
-        assert_eq!(all.len(), 9);
+        assert_eq!(all.len(), 19);
         let mut seen = std::collections::HashSet::new();
         // A keyboard that has every key the presets use.
         let kb: Vec<String> = KEY_ROWS.iter().flat_map(|r| r.iter()).map(|k| format!("Key: {k}")).collect();
@@ -1010,12 +1087,14 @@ mod tests {
             validate(a).unwrap_or_else(|e| panic!("{}: {e}", a.name));
             let g = geo("kb", &kb, &pos);
             let mut out = vec![Px::CLEAR; kb.len()];
-            render_animation(a, 0.3, &g, 1, &mut out);
-            assert!(out.iter().any(|p| p.a > 0.0), "{} draws nothing at t=0.3", a.name);
+            // The glitch flickers only now and then: look for a moment where it shows.
+            let t = if a.id == "builtin:glitch" { (0..500).map(|i| i as f32 * 0.01).find(|t| { render_animation(a, *t, &g, 1, &mut out); out.iter().any(|p| p.a > 0.0) }).unwrap_or(0.3) } else { 0.3 };
+            render_animation(a, t, &g, 1, &mut out);
+            assert!(out.iter().any(|p| p.a > 0.0), "{} draws nothing at t={t}", a.name);
             let (ok, total) = compatibility(a, &kb);
             assert_eq!(ok, total, "{} should fully match a standard keyboard", a.name);
         }
-        assert_eq!(list_all(&test_dir("anim-none")).animations.len(), 9);
+        assert_eq!(list_all(&test_dir("anim-none")).animations.len(), 19);
     }
 
     /// The mock backend and the TS tests read the presets from this file; regenerate it with
@@ -1049,7 +1128,8 @@ mod tests {
         assert_eq!(frames[0].leds["name:Key: W"], Color::Rgb([0, 0, 200]));
         let alert = builtins().into_iter().find(|b| b.id == "builtin:alert").unwrap();
         let AnimKind::Effect { params, .. } = recolor(&alert, [1, 2, 3], crate::themes::default_palette()).kind else { panic!() };
-        assert_eq!(params.0["colors"], json!([[1, 2, 3], [1, 2, 3]]));
+        assert_eq!(params.0["colors"][0], json!([1, 2, 3]));
+        assert_ne!(params.0["colors"][1], json!([1, 2, 3]), "a multi-colour effect keeps some variation");
         assert!((cycle_secs(&a) - 0.2).abs() < 1e-3, "{}", cycle_secs(&a));
     }
 

@@ -8,6 +8,18 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+pub mod ctl;
+pub mod gtk;
+pub mod hook;
+pub mod kde;
+pub mod omarchy;
+pub mod pywal;
+pub mod sources;
+pub mod watch;
+
+#[cfg(test)]
+mod theme_tests;
+
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -90,7 +102,8 @@ fn next_generation() -> u64 {
     N.fetch_add(1, Ordering::Relaxed)
 }
 
-fn lighten(c: Rgb3, k: f32) -> Rgb3 {
+/// `c` mixed towards white (`k` > 0) or black (`k` < 0).
+pub fn lighten(c: Rgb3, k: f32) -> Rgb3 {
     let target = if k >= 0.0 { 255.0 } else { 0.0 };
     let k = k.abs().clamp(0.0, 1.0);
     c.map(|v| (v as f32 + (target - v as f32) * k).round().clamp(0.0, 255.0) as u8)
@@ -239,7 +252,7 @@ pub fn contains_slot(v: &Value) -> bool {
 
 // ---------- the theme of a profile ----------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeSource {
     /// The profile's own palette.

@@ -5,7 +5,7 @@ use crate::config::config_dir;
 use crate::engine::Scene;
 use crate::error::{ApiError, Res};
 use crate::fsutil::write_atomic;
-use crate::themes::{Color, ProfileTheme};
+use crate::themes::{Color, ProfileTheme, ThemeSource};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -31,8 +31,42 @@ pub struct AnimRef {
     pub name: String,
 }
 
-/// A trigger name a game or script can fire (`chroma-desk trigger low_health`); each profile
-/// decides what it looks like, so the same command looks different under another theme.
+/// When a desktop notification (org.freedesktop.Notifications) should fire a notification.
+/// Only the app name, the urgency and the summary are looked at; nothing is stored.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct DesktopMatch {
+    /// Case-insensitive part of the application name (`discord`); empty = any application.
+    #[serde(default)]
+    pub app: String,
+    /// `low`, `normal` or `critical`; absent = any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub urgency: Option<String>,
+    /// Case-insensitive text the summary must contain; empty = anything.
+    #[serde(default)]
+    pub contains: String,
+}
+
+/// What can fire a notification besides the command line / socket (which always can).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Sources {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<DesktopMatch>,
+    /// Omarchy events: `omarchy:battery-low`, `omarchy:theme-set`, `omarchy:post-update`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub omarchy: Vec<String>,
+}
+
+impl Sources {
+    pub fn is_empty(&self) -> bool {
+        self.desktop.is_none() && self.omarchy.is_empty()
+    }
+}
+
+pub const OMARCHY_EVENTS: [&str; 3] = ["omarchy:battery-low", "omarchy:theme-set", "omarchy:post-update"];
+
+/// A notification: a name a game, script, desktop event or Omarchy hook can fire
+/// (`chroma-desk trigger low_health`). Each profile decides what it looks like, so the same name
+/// looks different under another theme.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NamedTrigger {
     /// Animation id or name.
@@ -45,8 +79,39 @@ pub struct NamedTrigger {
     /// Seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    /// A device key or name fragment (legacy single device; see `devices`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// Switched off notifications never fire, from any source.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+    /// Device keys that show it; empty = every device.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub devices: Vec<String>,
+    /// Number of passes of the animation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<u32>,
+    /// Playback speed multiplier (1 = as designed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f32>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub priority: i32,
+    /// Firing again replaces the previous one of this notification instead of stacking on it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub replace: bool,
+    #[serde(default, skip_serializing_if = "Sources::is_empty")]
+    pub sources: Sources,
+}
+
+fn is_zero(n: &i32) -> bool {
+    *n == 0
+}
+
+impl NamedTrigger {
+    /// A notification with just an animation (everything else default).
+    pub fn new(anim: &str) -> NamedTrigger {
+        NamedTrigger { anim: anim.into(), keys: vec![], color: None, duration: None, device: None, enabled: true, devices: vec![], repeat: None, speed: None, priority: 0, replace: false, sources: Sources::default() }
+    }
 }
 
 pub const MAX_PRESETS: usize = 64;
@@ -112,7 +177,18 @@ impl Profile {
         if self.presets.len() > MAX_PRESETS || self.triggers.len() > MAX_TRIGGERS {
             return Err(ApiError::new("profile_invalid", "too many presets or triggers"));
         }
-        for (n, t) in &self.triggers {
+        validate_triggers(&self.triggers)?;
+        Ok(())
+    }
+}
+
+/// Checks names and fields of a set of notifications (profile or global).
+pub fn validate_triggers(triggers: &BTreeMap<String, NamedTrigger>) -> Res<()> {
+    {
+        if triggers.len() > MAX_TRIGGERS {
+            return Err(ApiError::new("profile_invalid", "too many notifications"));
+        }
+        for (n, t) in triggers {
             if !valid_trigger_name(n) {
                 return Err(ApiError::new("profile_invalid", format!("bad trigger name {n:?}")));
             }
@@ -121,6 +197,13 @@ impl Profile {
                 || t.keys.len() > 64
                 || t.color.as_deref().is_some_and(|c| Color::parse(c).is_none())
                 || t.duration.is_some_and(|d| !d.is_finite() || !(0.05..=3600.0).contains(&d))
+                || t.devices.len() > 64
+                || t.devices.iter().any(|d| d.trim().is_empty() || d.chars().count() > 128)
+                || t.repeat.is_some_and(|r| !(1..=1000).contains(&r))
+                || t.speed.is_some_and(|v| !v.is_finite() || !(0.1..=10.0).contains(&v))
+                || !(-1000..=1000).contains(&t.priority)
+                || t.sources.omarchy.iter().any(|e| !OMARCHY_EVENTS.contains(&e.as_str()))
+                || t.sources.desktop.as_ref().is_some_and(|d| d.app.chars().count() > 64 || d.contains.chars().count() > 128 || d.urgency.as_deref().is_some_and(|u| !["low", "normal", "critical"].contains(&u)))
             {
                 return Err(ApiError::new("profile_invalid", format!("bad trigger {n:?}")));
             }
@@ -134,6 +217,27 @@ pub struct ProfileInfo {
     pub name: String,
     pub file: String,
     pub openrgb: bool,
+    /// Shipped in the binary (read-only).
+    pub builtin: bool,
+    /// Built-ins can be switched off; user profiles are always enabled.
+    pub enabled: bool,
+    pub requires: Option<String>,
+    pub source: ThemeSource,
+    /// A few palette colours for the card (empty when the source is dynamic).
+    pub strip: Vec<[u8; 3]>,
+    pub triggers: usize,
+}
+
+impl ProfileInfo {
+    pub fn of(pr: &Profile, file: String) -> ProfileInfo {
+        let strip = if pr.theme.source == ThemeSource::Manual {
+            let pal = pr.theme.manual();
+            ["background", "accent", "primary", "secondary", "tertiary", "alert", "ok"].iter().map(|k| pal.get(k)).collect()
+        } else {
+            vec![]
+        };
+        ProfileInfo { name: pr.name.clone(), file, openrgb: pr.openrgb_profile.is_some(), builtin: pr.builtin, enabled: pr.enabled, requires: pr.requires.clone(), source: pr.theme.source, strip, triggers: pr.triggers.len() }
+    }
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -158,6 +262,9 @@ pub fn validate_name(name: &str) -> Res<String> {
     let n = name.trim();
     if n.is_empty() || n.chars().count() > 64 {
         return Err(ApiError::new("profile_name_invalid", n));
+    }
+    if crate::builtin::is_builtin(n) {
+        return Err(ApiError::new("profile_exists", n));
     }
     Ok(n.to_string())
 }
@@ -201,7 +308,7 @@ pub fn list(dir: &Path) -> ProfileList {
     for p in files {
         let file = p.file_name().unwrap_or_default().to_string_lossy().into_owned();
         match read_file(&p) {
-            Ok(pr) => out.profiles.push(ProfileInfo { name: pr.name, file, openrgb: pr.openrgb_profile.is_some() }),
+            Ok(pr) => out.profiles.push(ProfileInfo::of(&pr, file)),
             Err(_) => out.corrupt.push(file),
         }
     }
@@ -243,7 +350,7 @@ pub fn save(dir: &Path, profile: &Profile) -> Res<ProfileInfo> {
     pr.builtin = false;
     let json = serde_json::to_vec_pretty(&pr).map_err(ApiError::io)?;
     write_atomic(&path, &json).map_err(ApiError::io)?;
-    Ok(ProfileInfo { name: pr.name, file: path.file_name().unwrap_or_default().to_string_lossy().into_owned(), openrgb: pr.openrgb_profile.is_some() })
+    Ok(ProfileInfo::of(&pr, path.file_name().unwrap_or_default().to_string_lossy().into_owned()))
 }
 
 pub fn delete(dir: &Path, name: &str) -> Res<()> {
@@ -273,7 +380,7 @@ fn save_as_new_file(dir: &Path, pr: &Profile, old: &str) -> Res<ProfileInfo> {
     {
         std::fs::remove_file(o).map_err(ApiError::io)?;
     }
-    Ok(ProfileInfo { name: pr.name.clone(), file: path.file_name().unwrap_or_default().to_string_lossy().into_owned(), openrgb: pr.openrgb_profile.is_some() })
+    Ok(ProfileInfo::of(pr, path.file_name().unwrap_or_default().to_string_lossy().into_owned()))
 }
 
 pub fn duplicate(dir: &Path, name: &str, new: &str) -> Res<ProfileInfo> {
@@ -442,11 +549,11 @@ mod tests {
         p.theme.source = crate::themes::ThemeSource::Omarchy;
         p.theme.overrides.insert("alert".into(), [255, 0, 0]);
         p.presets.push(AnimRef { id: "builtin:rainbow".into(), name: "Rainbow".into() });
-        p.triggers.insert("low_health".into(), NamedTrigger { anim: "Alert".into(), keys: vec!["W".into()], color: Some("@alert".into()), duration: Some(2.0), device: None });
+        p.triggers.insert("low_health".into(), NamedTrigger { anim: "Alert".into(), keys: vec!["W".into()], color: Some("@alert".into()), duration: Some(2.0), device: None, ..NamedTrigger::new("") });
         save(&d, &p).unwrap();
         assert_eq!(load(&d, "Themed").unwrap(), p);
         let mut bad = p.clone();
-        bad.triggers.insert("bad name!".into(), NamedTrigger { anim: "x".into(), keys: vec![], color: None, duration: None, device: None });
+        bad.triggers.insert("bad name!".into(), NamedTrigger { anim: "x".into(), keys: vec![], color: None, duration: None, device: None, ..NamedTrigger::new("") });
         assert_eq!(save(&d, &bad).unwrap_err().code, "profile_invalid");
         let mut bad = p.clone();
         bad.theme.overrides.insert("nope".into(), [0, 0, 0]);
@@ -454,5 +561,22 @@ mod tests {
         let mut bad = p;
         bad.triggers.get_mut("low_health").unwrap().color = Some("@nope".into());
         assert!(save(&d, &bad).is_err());
+    }
+
+    #[test]
+    fn users_cannot_take_a_builtin_name() {
+        let d = test_dir("prof-builtin-name");
+        assert_eq!(save(&d, &sample("Cyberpunk")).unwrap_err().code, "profile_exists");
+        assert_eq!(save(&d, &sample(" cyberpunk ")).unwrap_err().code, "profile_exists");
+        save(&d, &sample("Mine")).unwrap();
+        assert_eq!(rename(&d, "Mine", "Omarchy (follow theme)").unwrap_err().code, "profile_exists");
+        // Cards carry the palette strip of manual themes.
+        let mut p = sample("Neon");
+        p.theme.manual_palette = Some([("accent".to_string(), [1, 2, 3])].into());
+        save(&d, &p).unwrap();
+        let l = list(&d);
+        let neon = l.profiles.iter().find(|c| c.name == "Neon").unwrap();
+        assert_eq!(neon.strip[1], [1, 2, 3]);
+        assert!(!neon.builtin && neon.enabled);
     }
 }

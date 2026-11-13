@@ -137,8 +137,113 @@ pub async fn set_blackout(state: State<'_, AppState>, on: bool) -> Res<()> {
 // ---------- profiles and settings ----------
 
 #[tauri::command]
-pub fn list_profiles() -> ProfileList {
-    profiles::list(&profiles::profiles_dir())
+pub fn list_profiles(state: State<'_, AppState>) -> ProfileList {
+    list_with_builtins(&state)
+}
+
+/// Built-ins this machine offers, then the user's profiles.
+pub fn list_with_builtins(state: &AppState) -> ProfileList {
+    let mut l = profiles::list(&profiles::profiles_dir());
+    let mut all = crate::builtin::infos(&state.config.lock().unwrap().settings, &state.engine.themes);
+    all.append(&mut l.profiles);
+    l.profiles = all;
+    l
+}
+
+/// One profile with its theme, presets and triggers (the scene of a built-in is generated when applied).
+#[tauri::command]
+pub fn profile_get(state: State<'_, AppState>, name: String) -> Res<Profile> {
+    match crate::builtin::find(&name) {
+        Some(mut b) => {
+            b.enabled = state.config.lock().unwrap().settings.builtin_on(&b);
+            Ok(b)
+        }
+        None => profiles::load(&profiles::profiles_dir(), name.trim()),
+    }
+}
+
+/// Replaces the theme, presets and triggers of a user profile (built-ins are read-only). When it is
+/// the active profile the change is live at once.
+#[tauri::command]
+pub fn profile_update(state: State<'_, AppState>, name: String, theme: crate::themes::ProfileTheme, presets: Vec<profiles::AnimRef>, triggers: std::collections::BTreeMap<String, profiles::NamedTrigger>) -> Res<()> {
+    if crate::builtin::is_builtin(&name) {
+        return Err(ApiError::new("profile_builtin", name));
+    }
+    let dir = profiles::profiles_dir();
+    let mut p = profiles::load(&dir, name.trim())?;
+    p.theme = theme;
+    p.presets = presets;
+    p.triggers = triggers;
+    profiles::save(&dir, &p)?;
+    if state.config.lock().unwrap().settings.current_profile.as_deref() == Some(p.name.as_str()) {
+        state.engine.themes.update_theme(p.theme.clone());
+        *state.engine.profile_triggers.lock().unwrap() = p.triggers.clone();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_builtin_enabled(state: State<'_, AppState>, name: String, on: bool) -> Res<()> {
+    let b = crate::builtin::find(&name).ok_or_else(|| ApiError::new("profile_not_found", &name))?;
+    let mut cfg = state.config.lock().unwrap();
+    cfg.settings.builtin_enabled.insert(b.name, on);
+    cfg.save()
+}
+
+// ---------- themes ----------
+
+#[tauri::command]
+pub fn get_palette(state: State<'_, AppState>) -> crate::themes::ctl::PaletteEvent {
+    state.engine.themes.event()
+}
+
+#[tauri::command]
+pub fn theme_status(state: State<'_, AppState>) -> crate::themes::ctl::ThemeStatus {
+    state.engine.themes.status()
+}
+
+#[tauri::command]
+pub fn palette_reload(state: State<'_, AppState>) -> bool {
+    state.engine.themes.reload()
+}
+
+#[tauri::command]
+pub fn desktop_status(state: State<'_, AppState>) -> String {
+    state.engine.desktop_status.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn omarchy_event_hooks(state: State<'_, AppState>) -> Vec<crate::themes::hook::EventHookStatus> {
+    crate::themes::hook::event_status(&state.engine.themes.env)
+}
+
+#[tauri::command]
+pub fn omarchy_event_hook_install(state: State<'_, AppState>, kind: String) -> Res<Vec<crate::themes::hook::EventHookStatus>> {
+    crate::themes::hook::install_event(&state.engine.themes.env, &kind)?;
+    Ok(crate::themes::hook::event_status(&state.engine.themes.env))
+}
+
+#[tauri::command]
+pub fn omarchy_event_hook_remove(state: State<'_, AppState>, kind: String) -> Res<Vec<crate::themes::hook::EventHookStatus>> {
+    crate::themes::hook::remove_event(&state.engine.themes.env, &kind)?;
+    Ok(crate::themes::hook::event_status(&state.engine.themes.env))
+}
+
+#[tauri::command]
+pub fn omarchy_hook_status(state: State<'_, AppState>) -> crate::themes::hook::HookStatus {
+    crate::themes::hook::status(&state.engine.themes.env)
+}
+
+#[tauri::command]
+pub fn omarchy_hook_install(state: State<'_, AppState>) -> Res<crate::themes::hook::HookStatus> {
+    crate::themes::hook::install(&state.engine.themes.env)?;
+    Ok(crate::themes::hook::status(&state.engine.themes.env))
+}
+
+#[tauri::command]
+pub fn omarchy_hook_remove(state: State<'_, AppState>) -> Res<crate::themes::hook::HookStatus> {
+    crate::themes::hook::remove(&state.engine.themes.env)?;
+    Ok(crate::themes::hook::status(&state.engine.themes.env))
 }
 
 #[tauri::command]
@@ -152,7 +257,13 @@ pub async fn save_profile(state: State<'_, AppState>, name: String) -> Res<Profi
     let zone_sizes = state.resizable_zone_sizes().await.unwrap_or_default();
     let scene = state.engine.scene.lock().unwrap().clone();
     // Saving the scene keeps what the profile already has besides it (theme, presets, triggers).
-    let mut profile = profiles::load(&profiles::profiles_dir(), name.trim()).unwrap_or_else(|_| Profile::new(&name, Scene::default()));
+    let mut profile = profiles::load(&profiles::profiles_dir(), name.trim()).unwrap_or_else(|_| {
+        // A new profile keeps the live theme and triggers: its scene is made of slots of that theme.
+        let mut p = Profile::new(&name, Scene::default());
+        p.theme = state.engine.themes.theme();
+        p.triggers = state.engine.profile_triggers.lock().unwrap().clone();
+        p
+    });
     profile.name = name;
     profile.zone_sizes = zone_sizes;
     profile.scene = scene;
@@ -168,24 +279,41 @@ pub async fn apply_profile(app: tauri::AppHandle, state: State<'_, AppState>, na
 
 #[tauri::command]
 pub fn delete_profile(state: State<'_, AppState>, name: String) -> Res<()> {
+    if crate::builtin::is_builtin(&name) {
+        return Err(ApiError::new("profile_builtin", name));
+    }
     profiles::delete(&profiles::profiles_dir(), &name)?;
     state.forget_profile(&name)
 }
 
 #[tauri::command]
 pub fn rename_profile(state: State<'_, AppState>, old: String, new: String) -> Res<ProfileInfo> {
+    if crate::builtin::is_builtin(&old) {
+        return Err(ApiError::new("profile_builtin", old));
+    }
     let info = profiles::rename(&profiles::profiles_dir(), &old, &new)?;
     state.rename_profile_refs(&old, &info.name)?;
     Ok(info)
 }
 
 #[tauri::command]
-pub fn duplicate_profile(name: String, new: String) -> Res<ProfileInfo> {
-    profiles::duplicate(&profiles::profiles_dir(), &name, &new)
+pub fn duplicate_profile(state: State<'_, AppState>, name: String, new: String) -> Res<ProfileInfo> {
+    let dir = profiles::profiles_dir();
+    if crate::builtin::find(&name).is_some() {
+        // "Duplicate to edit": freeze the generated scene for the connected devices.
+        let new = profiles::validate_name(&new)?;
+        let devs = state.engine.devs.lock().unwrap().clone();
+        let p = crate::builtin::materialize(&name, &devs, &new).ok_or_else(|| ApiError::new("profile_not_found", &name))?;
+        return profiles::save(&dir, &p);
+    }
+    profiles::duplicate(&dir, &name, &new)
 }
 
 #[tauri::command]
 pub fn export_profile(name: String, path: String) -> Res<()> {
+    if crate::builtin::is_builtin(&name) {
+        return Err(ApiError::new("profile_builtin", name));
+    }
     profiles::export(&profiles::profiles_dir(), &name, std::path::Path::new(&path))
 }
 
@@ -218,7 +346,11 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 
 #[tauri::command]
 pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Res<()> {
+    profiles::validate_triggers(&settings.global_notifications)?;
     *state.engine.fps_by_type.lock().unwrap() = settings.fps_by_type.clone();
+    state.engine.themes.set_name_watch(!settings.theme_rules.is_empty());
+    *state.engine.global_triggers.lock().unwrap() = settings.global_notifications.clone();
+    state.engine.desktop_enabled.store(settings.desktop_notifications, std::sync::atomic::Ordering::Relaxed);
     let mut cfg = state.config.lock().unwrap();
     // The UI's copy of `current_profile` can be stale (the tray applies profiles too); only the
     // apply/save paths own that field.

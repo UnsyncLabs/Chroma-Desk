@@ -294,11 +294,36 @@ pub struct Engine {
     pub fps_by_type: Mutex<HashMap<String, u32>>,
     /// Temporary animations drawn over the scene (triggers).
     pub overlays: Mutex<overlay::Overlays>,
-    /// The active palette (slot colours resolve against it).
-    pub palette: Mutex<std::sync::Arc<Palette>>,
+    /// The active palette and where it comes from (slot colours resolve against it).
+    pub themes: std::sync::Arc<themes::ctl::ThemeCtl>,
+    /// Named triggers of the active profile (`chroma-desk trigger low_health`).
+    pub profile_triggers: Mutex<BTreeMap<String, crate::profiles::NamedTrigger>>,
+    /// Notifications available in every profile (Settings).
+    pub global_triggers: Mutex<BTreeMap<String, crate::profiles::NamedTrigger>>,
+    /// The desktop-notification source is switched on (Settings).
+    pub desktop_enabled: std::sync::Arc<AtomicBool>,
+    /// `off`, `listening` or `error: ...` (desktop notification source).
+    pub desktop_status: Mutex<String>,
     /// Everything off until cleared (tray "Lights off").
     pub blackout: AtomicBool,
     pub start: Instant,
+}
+
+impl Engine {
+    /// The notification called `name`: the active profile's own, else a global one.
+    pub fn notification(&self, name: &str) -> Option<crate::profiles::NamedTrigger> {
+        if let Some(n) = self.profile_triggers.lock().unwrap().get(name) {
+            return Some(n.clone());
+        }
+        self.global_triggers.lock().unwrap().get(name).cloned()
+    }
+
+    /// Every notification in effect (global ones, overridden by the profile's).
+    pub fn notifications(&self) -> BTreeMap<String, crate::profiles::NamedTrigger> {
+        let mut all = self.global_triggers.lock().unwrap().clone();
+        all.extend(self.profile_triggers.lock().unwrap().clone());
+        all
+    }
 }
 
 impl Default for Engine {
@@ -310,7 +335,11 @@ impl Default for Engine {
             visible: Mutex::default(),
             fps_by_type: Mutex::default(),
             overlays: Mutex::default(),
-            palette: Mutex::new(std::sync::Arc::new(Palette::default_manual())),
+            themes: std::sync::Arc::default(),
+            profile_triggers: Mutex::default(),
+            global_triggers: Mutex::default(),
+            desktop_status: Mutex::new("off".into()),
+            desktop_enabled: std::sync::Arc::default(),
             blackout: AtomicBool::new(false),
             start: Instant::now(),
         }

@@ -62,6 +62,11 @@ impl Overlays {
         v
     }
 
+    /// Removes the overlays whose animation id starts with `prefix` (replace-on-refire).
+    pub fn remove_prefix(&mut self, prefix: &str) {
+        self.list.retain(|o| !o.anim.id.starts_with(prefix));
+    }
+
     /// Removes everything; returns how many were active.
     pub fn clear(&mut self) -> usize {
         std::mem::take(&mut self.list).len()

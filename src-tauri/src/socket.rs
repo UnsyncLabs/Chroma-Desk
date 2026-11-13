@@ -39,8 +39,11 @@ pub async fn bind(path: &Path) -> std::io::Result<UnixListener> {
     Ok(listener)
 }
 
-/// Accepts connections forever.
-pub async fn serve(listener: UnixListener, engine: Arc<Engine>, dir: PathBuf) {
+/// Applies a profile by name (the application provides it); returns the profile's name.
+pub type ProfileFn = Arc<dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = crate::error::Res<String>> + Send>> + Send + Sync>;
+
+/// Accepts connections forever. `profiles` handles `{"cmd":"set_profile","name":...}`.
+pub async fn serve(listener: UnixListener, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
     let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     loop {
         let Ok((stream, _)) = listener.accept().await else {
@@ -48,15 +51,15 @@ pub async fn serve(listener: UnixListener, engine: Arc<Engine>, dir: PathBuf) {
             continue;
         };
         let Ok(permit) = slots.clone().try_acquire_owned() else { continue };
-        let (engine, dir) = (engine.clone(), dir.clone());
+        let (engine, dir, profiles) = (engine.clone(), dir.clone(), profiles.clone());
         tokio::spawn(async move {
             let _permit = permit;
-            let _ = tokio::time::timeout(Duration::from_secs(60), connection(stream, engine, dir)).await;
+            let _ = tokio::time::timeout(Duration::from_secs(60), connection(stream, engine, dir, profiles)).await;
         });
     }
 }
 
-async fn connection(stream: UnixStream, engine: Arc<Engine>, dir: PathBuf) {
+async fn connection(stream: UnixStream, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
     let (r, mut w) = stream.into_split();
     let mut r = BufReader::new(r);
     for _ in 0..MAX_LINES_PER_CONNECTION {
@@ -72,7 +75,10 @@ async fn connection(stream: UnixStream, engine: Arc<Engine>, dir: PathBuf) {
         } else {
             match std::str::from_utf8(&buf) {
                 Ok(s) if s.trim().is_empty() => continue,
-                Ok(s) => triggers::handle_line(&engine, &dir, s.trim(), Instant::now()),
+                Ok(s) => match set_profile_name(s.trim()) {
+                    Some(name) => set_profile(profiles.as_ref(), name).await,
+                    None => triggers::handle_line(&engine, &dir, s.trim(), Instant::now()),
+                },
                 Err(_) => serde_json::json!({ "ok": false, "error": "bad_utf8" }),
             }
         };
@@ -82,6 +88,29 @@ async fn connection(stream: UnixStream, engine: Arc<Engine>, dir: PathBuf) {
         if w.write_all(out.as_bytes()).await.is_err() || fatal {
             return;
         }
+    }
+}
+
+/// The requested name when `line` is a `set_profile` command.
+fn set_profile_name(line: &str) -> Option<Result<String, String>> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    (v["cmd"] == "set_profile").then(|| match v["name"].as_str().map(str::trim) {
+        Some(n) if !n.is_empty() && n.chars().count() <= 64 => Ok(n.to_string()),
+        _ => Err("name must be a profile name (1 to 64 characters)".to_string()),
+    })
+}
+
+async fn set_profile(hook: Option<&ProfileFn>, name: Result<String, String>) -> serde_json::Value {
+    let name = match name {
+        Ok(n) => n,
+        Err(why) => return serde_json::json!({ "ok": false, "error": "bad_request", "detail": why }),
+    };
+    let Some(hook) = hook else {
+        return serde_json::json!({ "ok": false, "error": "unsupported", "detail": "profiles are not available here" });
+    };
+    match hook(name).await {
+        Ok(applied) => serde_json::json!({ "ok": true, "profile": applied }),
+        Err(e) => serde_json::json!({ "ok": false, "error": e.code, "detail": e.detail }),
     }
 }
 
@@ -128,7 +157,7 @@ mod tests {
         let path = d.join("c.sock");
         let e = engine();
         let l = bind(&path).await.unwrap();
-        tokio::spawn(serve(l, e.clone(), d.join("animations")));
+        tokio::spawn(serve(l, e.clone(), d.join("animations"), None));
         (path, e)
     }
 
@@ -185,7 +214,7 @@ mod tests {
         std::fs::write(&path, "stale").unwrap();
         let l = bind(&path).await.unwrap();
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-        let _keep = tokio::spawn(serve(l, engine(), d.clone()));
+        let _keep = tokio::spawn(serve(l, engine(), d.clone(), None));
         assert_eq!(bind(&path).await.unwrap_err().kind(), std::io::ErrorKind::AddrInUse);
         let _ = animations::animations_dir; // keep the import used in all cfgs
     }
@@ -227,5 +256,26 @@ mod tests {
         let reply = send(&path, r#"{"cmd":"ping"}"#).unwrap();
         assert_eq!(reply, r#"{"ok":true}"#);
         assert!(send(&path.with_extension("nope"), "{}").is_err());
+    }
+
+    #[tokio::test]
+    async fn set_profile_goes_through_the_application_hook() {
+        let d = test_dir("sock-prof");
+        let path = d.join("c.sock");
+        let l = bind(&path).await.unwrap();
+        let hook: ProfileFn = Arc::new(|name: String| {
+            Box::pin(async move { if name == "Known" { Ok(name) } else { Err(crate::error::ApiError::new("profile_not_found", name)) } })
+        });
+        tokio::spawn(serve(l, engine(), d.clone(), Some(hook)));
+        let r: serde_json::Value = serde_json::from_str(&ask(&path, b"{\"cmd\":\"set_profile\",\"name\":\"Known\"}\n").await).unwrap();
+        assert_eq!((r["ok"].as_bool(), r["profile"].as_str()), (Some(true), Some("Known")), "{r}");
+        let r: serde_json::Value = serde_json::from_str(&ask(&path, b"{\"cmd\":\"set_profile\",\"name\":\"Nope\"}\n").await).unwrap();
+        assert_eq!(r["error"], "profile_not_found");
+        let r: serde_json::Value = serde_json::from_str(&ask(&path, b"{\"cmd\":\"set_profile\"}\n").await).unwrap();
+        assert_eq!(r["error"], "bad_request");
+        // Without a hook (tests, examples) the command is refused clearly.
+        let (p2, _e) = start().await;
+        let r: serde_json::Value = serde_json::from_str(&ask(&p2, b"{\"cmd\":\"set_profile\",\"name\":\"x\"}\n").await).unwrap();
+        assert_eq!(r["error"], "unsupported");
     }
 }

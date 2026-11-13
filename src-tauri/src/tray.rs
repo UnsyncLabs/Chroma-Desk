@@ -1,7 +1,6 @@
 //! System tray: Show, Profiles >, Lights off, Quit; plus close-to-tray behaviour.
 
 use crate::apply;
-use crate::profiles;
 use crate::state::AppState;
 use serde::Deserialize;
 use std::sync::Mutex;
@@ -58,7 +57,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::new(app)?;
     menu.append(&MenuItem::with_id(app, "show", &l.show, true, None::<&str>)?)?;
     let sub = Submenu::with_id(app, "profiles", &l.profiles, true)?;
-    let list = profiles::list(&profiles::profiles_dir()).profiles;
+    let list: Vec<_> = crate::commands::list_with_builtins(&state).profiles.into_iter().filter(|p| p.enabled).collect();
     if list.is_empty() {
         sub.append(&MenuItem::with_id(app, "none", &l.no_profiles, false, None::<&str>)?)?;
     }

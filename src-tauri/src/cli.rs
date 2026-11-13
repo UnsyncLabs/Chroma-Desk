@@ -1,5 +1,6 @@
 //! Command-line options: `--hidden`, `--apply-profile <name>` and the `trigger` subcommand.
 
+use std::collections::BTreeMap;
 use crate::triggers::{DurationSpec, TriggerSpec, parse_color, parse_duration};
 
 #[derive(Debug, Default, PartialEq)]
@@ -9,6 +10,86 @@ pub struct Cli {
     pub apply_profile: Option<String>,
     /// `chroma-desk trigger ...`: talk to the running instance and exit.
     pub trigger: Option<Result<TriggerCmd, String>>,
+    /// `chroma-desk palette ...` / `chroma-desk profile <name>`: talk to the running instance and exit.
+    pub control: Option<Result<ControlCmd, String>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ControlCmd {
+    PaletteShow,
+    PaletteReload,
+    PaletteClear,
+    PaletteSet(BTreeMap<String, [u8; 3]>),
+    PaletteSource(String),
+    Profile(String),
+    /// `chroma-desk event omarchy:battery-low` (what the Omarchy hooks call).
+    Event(String),
+}
+
+pub const CONTROL_USAGE: &str = "usage: chroma-desk palette show|reload|clear\n       chroma-desk palette set <slot>=<#hex> [<slot>=<#hex> ...]\n       chroma-desk palette source manual|omarchy|kde|pywal|gtk|external\n       chroma-desk profile <name>\n       chroma-desk event omarchy:battery-low|omarchy:theme-set|omarchy:post-update";
+
+/// Parses the arguments after `palette` or `profile`.
+pub fn parse_control(kind: &str, args: Vec<String>) -> Result<ControlCmd, String> {
+    if kind == "event" {
+        return match args.as_slice() {
+            [e] if crate::profiles::OMARCHY_EVENTS.contains(&e.as_str()) => Ok(ControlCmd::Event(e.clone())),
+            _ => Err("event needs one of omarchy:battery-low, omarchy:theme-set, omarchy:post-update".into()),
+        };
+    }
+    if kind == "profile" {
+        let name = args.join(" ");
+        return if name.trim().is_empty() { Err("missing profile name".into()) } else { Ok(ControlCmd::Profile(name.trim().to_string())) };
+    }
+    let mut it = args.into_iter();
+    match it.next().as_deref() {
+        Some("show") | None => Ok(ControlCmd::PaletteShow),
+        Some("reload") => Ok(ControlCmd::PaletteReload),
+        Some("clear") => Ok(ControlCmd::PaletteClear),
+        Some("source") => {
+            let id = it.next().ok_or("palette source needs an id")?;
+            crate::themes::ThemeSource::parse(&id).map(|s| ControlCmd::PaletteSource(s.id().into())).ok_or_else(|| format!("unknown source {id:?}"))
+        }
+        Some("set") => {
+            let mut slots = BTreeMap::new();
+            for a in it {
+                let (k, v) = a.split_once('=').ok_or_else(|| format!("expected <slot>=<#hex>, got {a:?}"))?;
+                if !crate::themes::is_slot(k) {
+                    return Err(format!("unknown slot {k:?} (slots: {})", crate::themes::SLOTS.join(", ")));
+                }
+                let c = crate::themes::parse_hex(v).ok_or_else(|| format!("bad colour {v:?} (try #ff0000)"))?;
+                slots.insert(k.to_string(), c);
+            }
+            if slots.is_empty() {
+                return Err("palette set needs at least one <slot>=<#hex>".into());
+            }
+            Ok(ControlCmd::PaletteSet(slots))
+        }
+        Some(other) => Err(format!("unknown palette command {other:?}")),
+    }
+}
+
+/// Sends a control command to the running instance; returns the process exit code.
+pub fn run_control(cmd: &Result<ControlCmd, String>) -> i32 {
+    let cmd = match cmd {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("chroma-desk: {e}\n{CONTROL_USAGE}");
+            return 2;
+        }
+    };
+    let line = match cmd {
+        ControlCmd::PaletteShow => serde_json::json!({ "cmd": "palette" }),
+        ControlCmd::PaletteReload => serde_json::json!({ "cmd": "palette_reload" }),
+        ControlCmd::PaletteClear => serde_json::json!({ "cmd": "clear_palette" }),
+        ControlCmd::PaletteSet(slots) => {
+            let m: serde_json::Map<String, serde_json::Value> = slots.iter().map(|(k, c)| (k.clone(), crate::themes::to_hex(*c).into())).collect();
+            serde_json::json!({ "cmd": "set_palette", "slots": m })
+        }
+        ControlCmd::PaletteSource(s) => serde_json::json!({ "cmd": "palette_source", "source": s }),
+        ControlCmd::Profile(n) => serde_json::json!({ "cmd": "set_profile", "name": n }),
+        ControlCmd::Event(e) => serde_json::json!({ "cmd": "event", "event": e }),
+    };
+    send_line(&line.to_string())
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,11 +165,16 @@ pub fn run_trigger(cmd: &Result<TriggerCmd, String>) -> i32 {
             v
         }
     };
+    send_line(&line.to_string())
+}
+
+/// Sends one request line and prints the reply; exit code 0 when `ok`.
+fn send_line(line: &str) -> i32 {
     let Some(path) = crate::socket::socket_path() else {
         eprintln!("chroma-desk: XDG_RUNTIME_DIR is not set; cannot find the running instance");
         return 1;
     };
-    match crate::socket::send(&path, &line.to_string()) {
+    match crate::socket::send(&path, line) {
         Ok(reply) => {
             println!("{reply}");
             let ok = serde_json::from_str::<serde_json::Value>(&reply).is_ok_and(|v| v["ok"] == true);
@@ -109,6 +195,10 @@ impl Cli {
         if it.peek().is_some_and(|a| a == "trigger") {
             it.next();
             cli.trigger = Some(parse_trigger(it));
+            return cli;
+        }
+        if let Some(kind) = it.next_if(|a| a == "palette" || a == "profile" || a == "event") {
+            cli.control = Some(parse_control(&kind, it.collect()));
             return cli;
         }
         while let Some(a) = it.next() {
@@ -142,13 +232,13 @@ mod tests {
         assert_eq!(p(&[]), Cli::default());
         assert!(p(&["--hidden"]).hidden);
         assert_eq!(p(&["--apply-profile", "Night mode"]).apply_profile.as_deref(), Some("Night mode"));
-        assert_eq!(p(&["--apply-profile=Gaming", "--hidden"]), Cli { hidden: true, apply_profile: Some("Gaming".into()), trigger: None });
+        assert_eq!(p(&["--apply-profile=Gaming", "--hidden"]), Cli { hidden: true, apply_profile: Some("Gaming".into()), ..Default::default() });
     }
 
     #[test]
     fn missing_value_and_unknown_args() {
         assert_eq!(p(&["--apply-profile"]).apply_profile, None);
-        assert_eq!(p(&["--apply-profile", "--hidden"]), Cli { hidden: true, apply_profile: None, trigger: None });
+        assert_eq!(p(&["--apply-profile", "--hidden"]), Cli { hidden: true, ..Default::default() });
         assert_eq!(p(&["--whatever", "x"]), Cli::default());
     }
 
@@ -206,5 +296,31 @@ mod tests {
         assert!(matches!(p(&["trigger", "X"]).trigger, Some(Ok(TriggerCmd::Fire(_)))));
         assert!(matches!(p(&["trigger"]).trigger, Some(Err(_))));
         assert!(p(&["--hidden"]).trigger.is_none());
+    }
+
+    fn ctl(a: &[&str]) -> Result<ControlCmd, String> {
+        match p(a).control {
+            Some(r) => r,
+            None => Err("not a control command".into()),
+        }
+    }
+
+    #[test]
+    fn palette_and_profile_commands() {
+        assert_eq!(ctl(&["palette", "show"]), Ok(ControlCmd::PaletteShow));
+        assert_eq!(ctl(&["palette"]), Ok(ControlCmd::PaletteShow));
+        assert_eq!(ctl(&["palette", "reload"]), Ok(ControlCmd::PaletteReload));
+        assert_eq!(ctl(&["palette", "source", "Omarchy"]), Ok(ControlCmd::PaletteSource("omarchy".into())));
+        let Ok(ControlCmd::PaletteSet(m)) = ctl(&["palette", "set", "accent=#ff0000", "alert=0f0"]) else { panic!() };
+        assert_eq!(m["accent"], [255, 0, 0]);
+        assert_eq!(m["alert"], [0, 255, 0]);
+        assert_eq!(ctl(&["event", "omarchy:battery-low"]), Ok(ControlCmd::Event("omarchy:battery-low".into())));
+        assert!(ctl(&["event", "nope"]).is_err() && ctl(&["event"]).is_err());
+        assert_eq!(ctl(&["profile", "Cyber", "punk"]), Ok(ControlCmd::Profile("Cyber punk".into())));
+        for bad in [&["palette", "set"][..], &["palette", "set", "nope=#fff"], &["palette", "set", "accent=red"], &["palette", "set", "accent"], &["palette", "source", "x"], &["palette", "wat"], &["profile"]] {
+            assert!(ctl(bad).is_err(), "{bad:?}");
+        }
+        // `--apply-profile` is unrelated to the `profile` subcommand.
+        assert!(p(&["--apply-profile", "x"]).control.is_none());
     }
 }

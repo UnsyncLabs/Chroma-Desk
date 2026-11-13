@@ -98,7 +98,7 @@ impl Runner {
 
     fn plan(&mut self, engine: &Engine, now: Instant) -> Plan {
         let t = now.saturating_duration_since(engine.start).as_secs_f32();
-        let pal = engine.palette.lock().unwrap().clone();
+        let pal = engine.themes.palette();
         let scene = self.scene_for(engine, &pal);
         let devs: Vec<DevInfo> = engine.devs.lock().unwrap().clone();
         let positions = engine.positions.lock().unwrap().clone();
@@ -206,9 +206,20 @@ pub async fn run(emit: Emit, state: AppState) {
     let mut tick = tokio::time::interval(TICK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut r = Runner::default();
+    let mut palette_epoch = state.engine.themes.epoch();
     loop {
         tick.tick().await;
         let now = Instant::now();
+        let epoch = state.engine.themes.epoch();
+        if epoch != palette_epoch {
+            palette_epoch = epoch;
+            emit("palette-changed", serde_json::json!(state.engine.themes.event()));
+        }
+        if let Some(theme) = state.engine.themes.take_theme_change() {
+            // "When the Omarchy theme becomes X, use profile Y" (off the 60 Hz loop).
+            let (st, em) = (state.clone(), emit.clone());
+            tokio::spawn(async move { crate::apply::apply_theme_rule(&st, &em, &theme).await });
+        }
         if let Some(at) = r.retry_at {
             if now < at {
                 continue;
@@ -381,5 +392,28 @@ mod tests {
             count += r.plan(&e, e.start + TICK * i).previews.len();
         }
         assert!((29..=31).contains(&count), "{count} preview frames/s");
+    }
+
+    #[test]
+    fn palette_change_recolours_a_running_scene() {
+        let e = engine_with("Keyboard", "solid");
+        e.scene.lock().unwrap().devices.get_mut("k").unwrap().layers[0].params = effects::params(json!({"color": {"slot": "accent"}}));
+        let mut r = Runner::default();
+        let frame = |r: &mut Runner, i: u32| {
+            let now = e.start + TICK * i;
+            let job = r.plan(&e, now).jobs.into_iter().next();
+            job.map(|j| {
+                r.sent.insert(j.key.clone(), Sent { at: now, frame: j.frame.clone() });
+                j.frame
+            })
+        };
+        let accent = e.themes.palette().get("accent");
+        assert_eq!(frame(&mut r, 0).unwrap()[0], accent);
+        // Nothing changes: nothing is re-sent.
+        assert!(frame(&mut r, 1).is_none());
+        e.themes.set_external([("accent".to_string(), [9, 8, 7])].into()).unwrap();
+        assert_eq!(frame(&mut r, 2).unwrap()[0], [9, 8, 7], "the very next frame uses the new palette");
+        // The stored scene still holds the slot, not a colour.
+        assert!(crate::themes::contains_slot(&serde_json::to_value(&*e.scene.lock().unwrap()).unwrap()));
     }
 }

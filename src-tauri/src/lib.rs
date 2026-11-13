@@ -1,8 +1,10 @@
 pub mod animations;
 pub mod apply;
+pub mod builtin;
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod desktop;
 pub mod engine;
 pub mod error;
 pub mod fsutil;
@@ -26,6 +28,9 @@ pub fn run() {
     // `chroma-desk trigger ...` only talks to the running instance: no window, no Tauri.
     if let Some(t) = &cli.trigger {
         std::process::exit(cli::run_trigger(t));
+    }
+    if let Some(c) = &cli.control {
+        std::process::exit(cli::run_control(c));
     }
     let state = AppState::new(Config::load());
     let runner_state = state.clone();
@@ -65,11 +70,22 @@ pub fn run() {
                 tray::show_main(&handle);
             }
             tauri::async_runtime::spawn(engine::runner::run(emit.clone(), runner_state.clone()));
+            tauri::async_runtime::spawn(desktop::run(runner_state.engine.clone(), animations::animations_dir(), runner_state.engine.desktop_enabled.clone()));
+            themes::watch::spawn(runner_state.engine.themes.clone(), std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
             if let Some(path) = socket::socket_path() {
                 let engine = runner_state.engine.clone();
+                let (st, em, app) = (runner_state.clone(), emit.clone(), handle.clone());
+                let profiles: socket::ProfileFn = std::sync::Arc::new(move |name: String| {
+                    let (st, em, app) = (st.clone(), em.clone(), app.clone());
+                    Box::pin(async move {
+                        apply::apply_profile(&st, &em, &name).await?;
+                        tray::refresh(&app);
+                        Ok(name)
+                    })
+                });
                 tauri::async_runtime::spawn(async move {
                     match socket::bind(&path).await {
-                        Ok(listener) => socket::serve(listener, engine, animations::animations_dir()).await,
+                        Ok(listener) => socket::serve(listener, engine, animations::animations_dir(), Some(profiles)).await,
                         Err(e) => eprintln!("trigger socket not available ({}): {e}", path.display()),
                     }
                 });
@@ -137,6 +153,19 @@ pub fn run() {
             commands::trigger,
             commands::stop_triggers,
             commands::trigger_socket_path,
+            commands::profile_get,
+            commands::profile_update,
+            commands::set_builtin_enabled,
+            commands::get_palette,
+            commands::theme_status,
+            commands::palette_reload,
+            commands::desktop_status,
+            commands::omarchy_event_hooks,
+            commands::omarchy_event_hook_install,
+            commands::omarchy_event_hook_remove,
+            commands::omarchy_hook_status,
+            commands::omarchy_hook_install,
+            commands::omarchy_hook_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
