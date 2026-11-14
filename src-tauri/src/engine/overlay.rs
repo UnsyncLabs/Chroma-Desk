@@ -193,6 +193,7 @@ mod tests {
             updated: 1,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Frames {
                 frames: vec![Frame { leds: (0..4).map(|i| (format!("idx:{i}"), crate::themes::Color::Rgb(c))).collect(), duration_ms: Some(1000) }],
                 frame_ms: 1000,

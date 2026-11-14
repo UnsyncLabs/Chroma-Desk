@@ -19,30 +19,26 @@ export default async function (t, url) {
   await t.shot("quick", 1200, 800);
   await t.shot("quick", 400, 400);
 
-  // One click on "Rainbow" applies it: layer is an animation layer with a snapshot.
-  // The mock devices start with layers of their own (profile scene): "Only this" replaces them all.
-  await t.page.click('[data-anim="builtin:rainbow"] button.only');
+  // One click on "Rainbow" swaps the theme: its layer is an animation layer with a snapshot. The mock
+  // keyboard starts with a legacy rainbow + paint scene (no roles stored): both count as the old theme.
+  await t.clickText("[data-anim] button.face", "Rainbow");
   await sleep(400);
   let ds = (await t.scene()).devices[kb];
   assert.equal(ds.mode, "effects");
-  assert.equal(ds.layers.length, 1);
+  assert.deepEqual(ds.layers.map((l) => l.role), ["theme"], "the old theme layers (rainbow + paint) were replaced");
   assert.equal(ds.layers[0].effect, "animation");
   assert.equal(ds.layers[0].params.anim_id, "builtin:rainbow");
   assert.equal(ds.layers[0].params.snapshot.name, "Rainbow", "snapshot travels with the layer");
   assert.equal(await t.page.$eval('[data-anim="builtin:rainbow"]', (e) => e.classList.contains("active")), true, "the card shows it is active");
 
-  // The device preview in the sidebar/engine produced frames: LED colours are not all the same.
-  // Cards are toggles: Snake is stacked on top, then "Only this" replaces everything.
+  // Themes are one at a time: Snake replaces Rainbow (nothing to stack, no "Only this" needed).
   await t.clickText("[data-anim] button.face", "Snake");
-  await sleep(300);
-  ds = (await t.scene()).devices[kb];
-  assert.equal(ds.layers.length, 2);
-  assert.equal(ds.layers[1].params.anim_id, "builtin:snake");
-  await t.page.click('[data-anim="builtin:snake"] button.only');
   await sleep(300);
   ds = (await t.scene()).devices[kb];
   assert.equal(ds.layers.length, 1);
   assert.equal(ds.layers[0].params.anim_id, "builtin:snake");
+  assert.equal(ds.layers[0].role, "theme");
+  assert.equal(await t.page.$eval('[data-anim="builtin:rainbow"]', (e) => e.classList.contains("active")), false, "the old theme is no longer active");
 
   // Solid colour.
   await t.setColor("#00ff88", ".solid");

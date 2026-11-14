@@ -47,6 +47,7 @@ fn sequence(name: &str, steps: Vec<Step>, looped: bool) -> Animation {
         updated: 1,
         target: Target { kind: crate::animations::TargetKind::Keyboard, hint: None },
         builtin: false,
+        role: Some(crate::engine::compositor::Role::Effect),
         kind: AnimKind::Sequence { steps, looped },
     }
 }

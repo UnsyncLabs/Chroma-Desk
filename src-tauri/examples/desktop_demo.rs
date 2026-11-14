@@ -24,7 +24,7 @@ async fn main() {
     let devs = state.devices().await.unwrap();
     let kb = devs.iter().find(|d| d.device_type == "Keyboard" && d.led_names.iter().any(|n| n == "Key: W")).expect("keyboard").clone();
     println!("keyboard: {} ({} LEDs)", kb.name, kb.colors.len());
-    let layer = Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": SCENE}).as_object().unwrap().clone()) };
+    let layer = Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": SCENE}).as_object().unwrap().clone()), role: None };
     state.engine.scene.lock().unwrap().devices.insert(kb.key.clone(), DeviceScene { mode: SceneMode::Effects, layers: vec![layer], fps: Some(60), ..Default::default() });
     for id in ["discord", "telegram", "slack", "matrix"] {
         state.engine.global_triggers.lock().unwrap().insert(id.into(), templates::templates().into_iter().find(|t| t.id == id).unwrap().notification);

@@ -378,6 +378,7 @@ mod tests {
             mask: Mask::All,
             effect: effect.into(),
             params: effects::params(params),
+            role: None,
         }
     }
 
@@ -511,6 +512,7 @@ mod tests {
             updated: 1,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), crate::themes::Color::Rgb([255, 0, 0]))].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
         };
         let mut ov = overlay::Overlays::default();
@@ -588,6 +590,7 @@ mod tests {
             updated: 1,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Frames { frames: vec![Frame { leds: [("idx:0".to_string(), Color::slot("alert"))].into(), duration_ms: None }], frame_ms: 100, loop_mode: LoopMode::Loop, crossfade: 0.0 },
         };
         let mut ov = overlay::Overlays::default();

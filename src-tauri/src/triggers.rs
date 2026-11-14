@@ -485,6 +485,7 @@ mod tests {
             updated: 0,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Frames { frames: vec![Frame { leds: [("name:Key: W".to_string(), Color::Rgb([255, 0, 0]))].into(), duration_ms: Some(500) }], frame_ms: 500, loop_mode: LoopMode::Loop, crossfade: 0.0 },
         };
         animations::save(&d, &a).unwrap();
@@ -756,6 +757,7 @@ mod tests {
             updated: 0,
             target: crate::animations::Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Sequence { steps: vec![Step { effect: "blink".into(), params: crate::engine::effects::params(json!({"color": [0, 0, 255]})), keys: vec!["name:Key: W".into()], duration_ms: secs * 1000, anim: None }], looped: false },
         }
     }

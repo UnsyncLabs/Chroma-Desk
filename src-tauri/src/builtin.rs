@@ -4,7 +4,7 @@
 //! the scene of a built-in is *generated* for the devices that are connected when it is applied
 //! (`scene_for`). Duplicating one freezes that scene into an ordinary, editable profile.
 
-use crate::engine::compositor::{Blend, Layer, Mask};
+use crate::engine::compositor::{Blend, Layer, Mask, Role};
 use crate::engine::{DevInfo, DeviceScene, Scene, SceneMode, effects, overlay};
 use crate::profiles::{AnimRef, NamedTrigger, Profile};
 use crate::themes::{ProfileTheme, SlotRef, ThemeSource};
@@ -65,7 +65,7 @@ pub fn all() -> Vec<Profile> {
     let mut cyber = Profile::new(CYBERPUNK, Scene::default());
     cyber.builtin = true;
     cyber.theme = ProfileTheme { source: ThemeSource::Manual, manual_palette: Some(neon), overrides: BTreeMap::new() };
-    cyber.presets = presets(&[("neon-scan", "Neon Scan"), ("breach-alert", "Breach Alert"), ("glitch", "Glitch"), ("theme-wave", "Theme wave"), ("theme-chase", "Theme chase")]);
+    cyber.presets = presets(&[("cyberpunk", "Cyberpunk"), ("neon-scan", "Neon Scan"), ("breach-alert", "Breach Alert"), ("glitch", "Glitch"), ("theme-wave", "Theme wave"), ("theme-chase", "Theme chase")]);
     cyber.triggers = [("notify", tr("Neon Scan", None, 2.5)), ("alert", tr("Breach Alert", None, 3.0)), ("success", tr("Pulse", Some("@ok"), 1.5))].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
 
     vec![omarchy, cyber]
@@ -104,8 +104,9 @@ fn lit(name: &str, lighten: f32) -> Value {
     serde_json::to_value(SlotRef { slot: name.into(), lighten: Some(lighten) }).unwrap_or(Value::Null)
 }
 
-fn layer(id: &str, effect: &str, params: Value, opacity: f32, mask: Mask) -> Layer {
-    Layer { id: id.into(), name: String::new(), enabled: true, opacity, blend: Blend::Normal, mask, effect: effect.into(), params: effects::Params(params.as_object().cloned().unwrap_or_default()) }
+/// A layer of a built-in look; `name` and `role` are what Quick shows as "Theme: X" / "Effect: X".
+fn layer(id: &str, name: &str, role: Role, effect: &str, params: Value, opacity: f32, mask: Mask) -> Layer {
+    Layer { id: id.into(), name: name.into(), enabled: true, opacity, blend: Blend::Normal, mask, effect: effect.into(), params: effects::Params(params.as_object().cloned().unwrap_or_default()), role: Some(role) }
 }
 
 /// Keys that get the accent colour (gaming cluster and arrows).
@@ -125,7 +126,7 @@ fn glitch(led_count: usize) -> Layer {
         9..=32 => (6.0, 0.25, 0.4, 0.3),
         _ => (6.0, 0.25, 0.3, 0.14),
     };
-    layer("glitch", "glitch", json!({ "colors": [slot("primary"), slot("secondary"), slot("accent")], "interval": interval, "duration": duration, "density": density, "size": size }), 1.0, Mask::All)
+    layer("glitch", "Glitch", Role::Effect, "glitch", json!({ "colors": [slot("primary"), slot("secondary"), slot("accent")], "interval": interval, "duration": duration, "density": density, "size": size }), 1.0, Mask::All)
 }
 
 fn layers_for(profile: &str, dev: &DevInfo) -> Vec<Layer> {
@@ -137,24 +138,31 @@ fn layers_for(profile: &str, dev: &DevInfo) -> Vec<Layer> {
     layers
 }
 
+/// The layers of built-in theme `name` for one device (`None` if `name` is not a layered theme).
+/// Only the base look: effects such as the glitch are separate and stay on top when it is swapped.
+pub fn theme_layers(name: &str, dev: &DevInfo) -> Option<Vec<Layer>> {
+    name.eq_ignore_ascii_case(CYBERPUNK).then(|| base_layers(true, dev))
+}
+
 fn base_layers(cyber: bool, dev: &DevInfo) -> Vec<Layer> {
+    let name = if cyber { CYBERPUNK } else { "Omarchy" };
     match dev.device_type.as_str() {
         "Keyboard" if cyber => vec![
-            layer("bg", "solid", json!({ "color": lit("tertiary", -0.78) }), 1.0, Mask::All),
-            layer("scan", "color_wave", json!({ "colors": [slot("primary"), slot("secondary"), slot("primary")], "speed": 0.35, "angle": 90, "scale": 1.5 }), 0.8, Mask::All),
-            layer("keys", "solid", json!({ "color": slot("accent") }), 1.0, key_mask(dev)),
+            layer("bg", name, Role::Theme, "solid", json!({ "color": lit("tertiary", -0.78) }), 1.0, Mask::All),
+            layer("scan", name, Role::Theme, "color_wave", json!({ "colors": [slot("primary"), slot("secondary"), slot("primary")], "speed": 0.35, "angle": 90, "scale": 1.5 }), 0.8, Mask::All),
+            layer("keys", name, Role::Theme, "solid", json!({ "color": slot("accent") }), 1.0, key_mask(dev)),
         ],
         "Keyboard" => vec![
-            layer("bg", "solid", json!({ "color": lit("background", 0.14) }), 1.0, Mask::All),
-            layer("wave", "color_wave", json!({ "colors": [slot("accent"), slot("secondary"), slot("accent")], "speed": 0.12, "angle": 0, "scale": 1.0 }), 0.7, Mask::All),
-            layer("keys", "solid", json!({ "color": slot("accent") }), 1.0, key_mask(dev)),
+            layer("bg", name, Role::Theme, "solid", json!({ "color": lit("background", 0.14) }), 1.0, Mask::All),
+            layer("wave", name, Role::Theme, "color_wave", json!({ "colors": [slot("accent"), slot("secondary"), slot("accent")], "speed": 0.12, "angle": 0, "scale": 1.0 }), 0.7, Mask::All),
+            layer("keys", name, Role::Theme, "solid", json!({ "color": slot("accent") }), 1.0, key_mask(dev)),
         ],
-        "LEDStrip" | "Cooler" | "Light" | "Unknown" if cyber => vec![layer("chase", "chase", json!({ "colors": [slot("primary"), slot("secondary")], "speed": 0.5, "length": 0.3, "gap": 0.35 }), 1.0, Mask::All)],
-        "LEDStrip" | "Cooler" | "Light" | "Unknown" => vec![layer("chase", "chase", json!({ "colors": [slot("primary")], "speed": 0.5, "length": 0.3, "gap": 0.4 }), 1.0, Mask::All)],
-        "DRam" | "Motherboard" if cyber => vec![layer("wave", "color_wave", json!({ "colors": [slot("primary"), slot("secondary"), slot("tertiary")], "speed": 0.3, "angle": 0, "scale": 1.0 }), 1.0, Mask::All)],
-        "Gpu" if cyber => vec![layer("wave", "color_wave", json!({ "colors": [slot("secondary"), slot("tertiary"), slot("primary")], "speed": 0.25, "angle": 0, "scale": 1.0 }), 1.0, Mask::All)],
-        _ if cyber => vec![layer("breath", "breathing", json!({ "colors": [slot("accent"), slot("secondary")], "period": 5.0 }), 1.0, Mask::All)],
-        _ => vec![layer("breath", "breathing", json!({ "colors": [slot("accent")], "period": 5.0 }), 1.0, Mask::All)],
+        "LEDStrip" | "Cooler" | "Light" | "Unknown" if cyber => vec![layer("chase", name, Role::Theme, "chase", json!({ "colors": [slot("primary"), slot("secondary")], "speed": 0.5, "length": 0.3, "gap": 0.35 }), 1.0, Mask::All)],
+        "LEDStrip" | "Cooler" | "Light" | "Unknown" => vec![layer("chase", name, Role::Theme, "chase", json!({ "colors": [slot("primary")], "speed": 0.5, "length": 0.3, "gap": 0.4 }), 1.0, Mask::All)],
+        "DRam" | "Motherboard" if cyber => vec![layer("wave", name, Role::Theme, "color_wave", json!({ "colors": [slot("primary"), slot("secondary"), slot("tertiary")], "speed": 0.3, "angle": 0, "scale": 1.0 }), 1.0, Mask::All)],
+        "Gpu" if cyber => vec![layer("wave", name, Role::Theme, "color_wave", json!({ "colors": [slot("secondary"), slot("tertiary"), slot("primary")], "speed": 0.25, "angle": 0, "scale": 1.0 }), 1.0, Mask::All)],
+        _ if cyber => vec![layer("breath", name, Role::Theme, "breathing", json!({ "colors": [slot("accent"), slot("secondary")], "period": 5.0 }), 1.0, Mask::All)],
+        _ => vec![layer("breath", name, Role::Theme, "breathing", json!({ "colors": [slot("accent")], "period": 5.0 }), 1.0, Mask::All)],
     }
 }
 
@@ -216,6 +224,9 @@ mod tests {
         assert!(is_builtin("cyberpunk") && !is_builtin("Gaming"));
         for p in &all {
             p.validate_extras().unwrap();
+            // Presets are split by role: the Cyberpunk profile offers a theme and its effects.
+            let roles = |want: Role| p.presets.iter().filter(|a| crate::animations::get(&crate::fsutil::test_dir("bp-anim3"), &a.id).unwrap().role == Some(want)).count();
+            assert!(roles(Role::Theme) >= 3 && roles(Role::Effect) >= 1, "{}", p.name);
             assert!(p.triggers.contains_key("alert") && p.triggers.contains_key("notify") && p.triggers.contains_key("success"));
             for t in p.triggers.values() {
                 assert!(crate::animations::lookup(&crate::fsutil::test_dir("bp-anim"), &t.anim).is_ok(), "trigger animation {} exists", t.anim);
@@ -258,6 +269,17 @@ mod tests {
         let small = glitch(4).params.0["size"].as_f64().unwrap();
         let big = glitch(100).params.0["size"].as_f64().unwrap();
         assert!(small > big);
+        // The base look and the glitch are separate: roles and names read "Theme: Cyberpunk" / "Effect: Glitch".
+        for d in &devs {
+            let ls = &scene_for(CYBERPUNK, &devs).devices[&d.key].layers;
+            let (g, base) = ls.split_last().unwrap();
+            assert!(g.role == Some(Role::Effect) && g.name == "Glitch", "{}", d.key);
+            assert!(base.iter().all(|l| l.role == Some(Role::Theme) && l.name == CYBERPUNK), "{}", d.key);
+            assert_eq!(theme_layers("cyberpunk", d).unwrap(), base.to_vec(), "{} theme layers", d.key);
+        }
+        assert!(theme_layers("nope", &devs[0]).is_none());
+        // Swapping to another look keeps what is on top: base layers never contain an effect.
+        assert!(layers_for(OMARCHY, &devs[0]).iter().all(|l| l.role() == Role::Theme));
         assert_eq!(kb.layers[2].mask, Mask::Leds { leds: vec![1, 2, 3, 4, 5] });
         let o = &scene_for(OMARCHY, &devs).devices["fans"];
         assert_eq!(o.layers[0].effect, "chase");

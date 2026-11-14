@@ -5,6 +5,7 @@
   import type { Layout } from "./layout/buildLayout";
   import { compat } from "./anim/ref";
   import { animName, kindLabel } from "./animationsStore.svelte";
+  import { animRole } from "./roles";
   import { t } from "./i18n/index.svelte";
   import AnimThumb from "./AnimThumb.svelte";
 
@@ -49,6 +50,7 @@
     <b class="name" title={name}>{name}</b>
     <span class="meta">
       <span class="chip">{kindLabel(anim)}</span>
+      <span class="chip role" data-role={animRole(anim)} title={t(`quick.role${animRole(anim) === "theme" ? "Theme" : "Effect"}Hint`)}>{t(`anim.role.${animRole(anim)}`)}</span>
       {#if anim.builtin}<span class="chip builtin">{t("anim.builtin")}</span>{/if}
       {#if c.total > 0}
         <span class="chip" class:warn={c.ok < c.total} title={t("anim.compatHint")}>{t("anim.compat", { ok: c.ok, total: c.total })}</span>
@@ -72,6 +74,7 @@
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { display: flex; flex-wrap: wrap; gap: 0.25rem; }
   .chip { font-size: 0.72rem; border: 1px solid var(--border); border-radius: 999px; padding: 0.03rem 0.5rem; color: var(--muted); white-space: nowrap; }
+  .chip.role { color: var(--text); }
   .chip.builtin { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
   .chip.warn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
   .chip.tag { color: var(--muted); }

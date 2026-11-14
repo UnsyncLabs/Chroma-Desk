@@ -322,6 +322,7 @@ mod tests {
             mask: Mask::All,
             effect: effect.into(),
             params: effects::params(json!({})),
+            role: None,
         };
         e.scene.lock().unwrap().devices.insert("k".into(), DeviceScene { mode: SceneMode::Effects, layers: vec![layer], ..Default::default() });
         e

@@ -4,6 +4,7 @@ import { buildLayout } from "./layout/buildLayout";
 import { app, copyText, toast, toastError } from "./state.svelte";
 import { commit, ensureDev, newLayer } from "./scene.svelte";
 import { t } from "./i18n/index.svelte";
+import { animRole } from "./roles";
 
 export const lib = $state({
   list: [] as Animation[],
@@ -45,7 +46,7 @@ export function applyAnimation(keys: string[], anim: Animation) {
   for (const k of keys) {
     const d = ensureDev(k);
     d.mode = "effects";
-    d.layers = [newLayer("animation", { params: { anim_id: snap.id, snapshot: snap as unknown as Record<string, unknown> } })];
+    d.layers = [newLayer("animation", { role: animRole(snap), params: { anim_id: snap.id, snapshot: snap as unknown as Record<string, unknown> } })];
   }
   commit();
 }

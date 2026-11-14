@@ -120,10 +120,10 @@ export default async function (t, url) {
   await t.level("Quick");
   await t.waitFor(() => t.page.$(`[data-anim="${saved.id}"]`), "in Quick > My animations");
   assert.match(await t.page.$eval(`[data-anim="${saved.id}"]`, (e) => e.textContent), /3\/3 LEDs|WAD blink/);
-  await t.page.click(`[data-anim="${saved.id}"] button.only`);
+  await t.page.click(`[data-anim="${saved.id}"] button.face`);
   await sleep(300);
   const ds = (await t.scene()).devices[KB];
-  assert.equal(ds.layers.length, 1);
+  assert.equal(ds.layers.filter((l) => l.role === "theme").length, 1, "one theme (the profile effects stay on top)");
   assert.equal(ds.layers[0].params.anim_id, saved.id);
   assert.equal(ds.layers[0].params.snapshot.kind.frames.length, 3, "snapshot embedded in the layer");
   // Leaving the editor removed the preview: this is the real applied layer (not a draft).

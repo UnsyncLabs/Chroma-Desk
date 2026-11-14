@@ -21,7 +21,7 @@ export default async function (t, url) {
     assert.ok(lit.filter((n) => n > 0).length >= Math.min(3, lit.length), `${tag}: thumbnails show something (${lit})`);
     await t.shot(`dev-${tag}-quick`, 1200, 800);
     await t.shot(`dev-${tag}-quick`, 400, 400);
-    await t.page.click('[data-anim="builtin:rainbow"] button.only');
+    await t.page.click('[data-anim="builtin:rainbow"] button.face');
     await sleep(300);
     const sc = await t.scene();
     const ds = Object.entries(sc.devices).find(([k]) => k.toLowerCase().includes(re.split(" ").pop().toLowerCase()))?.[1];

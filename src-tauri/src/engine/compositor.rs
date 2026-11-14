@@ -13,6 +13,26 @@ pub enum Blend {
     Screen,
 }
 
+/// What a layer is for in the Quick tab: the base look of a device (one at a time) or an overlay
+/// that stacks on top of any theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    #[default]
+    Theme,
+    Effect,
+}
+
+impl Role {
+    /// Role of a plain engine effect: transparent overlays are effects, everything else a base look.
+    pub fn of_effect(effect: &str) -> Role {
+        match effect {
+            "glitch" | "starlight" | "strobe" | "ripple" | "blink" | "orbit" | "sequence" | "meter" => Role::Effect,
+            _ => Role::Theme,
+        }
+    }
+}
+
 /// Which LEDs a layer affects.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -46,6 +66,15 @@ pub struct Layer {
     pub effect: String,
     #[serde(default)]
     pub params: Params,
+    /// Theme or effect; `None` (older scenes) is inferred from the effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+}
+
+impl Layer {
+    pub fn role(&self) -> Role {
+        self.role.unwrap_or_else(|| Role::of_effect(&self.effect))
+    }
 }
 
 /// What the compositor needs to know about a device.
@@ -158,6 +187,7 @@ mod tests {
             mask: Mask::All,
             effect: "solid".into(),
             params: effects::params(json!({ "color": c })),
+            role: None,
         }
     }
 

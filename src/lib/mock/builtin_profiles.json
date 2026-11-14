@@ -162,6 +162,10 @@
     },
     "presets": [
       {
+        "id": "builtin:cyberpunk",
+        "name": "Cyberpunk"
+      },
+      {
         "id": "builtin:neon-scan",
         "name": "Neon Scan"
       },

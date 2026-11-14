@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn anim(name: &str, kind: AnimKind) -> Animation {
-    Animation { schema_version: 1, id: name.into(), name: name.into(), description: None, tags: vec![], created: 0, updated: 1, target: Target::default(), builtin: false, kind }
+    Animation { schema_version: 1, id: name.into(), name: name.into(), description: None, tags: vec![], created: 0, updated: 1, target: Target::default(), builtin: false, role: None, kind }
 }
 
 fn key(k: &str) -> String {
@@ -23,7 +23,7 @@ fn key(k: &str) -> String {
 }
 
 fn solid_blue() -> Layer {
-    Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": [0, 0, 255]}).as_object().unwrap().clone()) }
+    Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": [0, 0, 255]}).as_object().unwrap().clone()), role: None }
 }
 
 async fn colors(state: &AppState, keys: &[&str]) -> Vec<(String, [u8; 3])> {

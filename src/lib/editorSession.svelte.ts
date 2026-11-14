@@ -2,7 +2,7 @@
  * What the three animation editors share: the live preview on the hardware, the unsaved-changes
  * guard, saving to the library and applying to the device.
  */
-import { api, type Animation, type Device } from "./api";
+import { api, type Animation, type Device, type Role } from "./api";
 import { applyAnimation, loadAnimations } from "./animationsStore.svelte";
 import { t } from "./i18n/index.svelte";
 import { buildLayout } from "./layout/buildLayout";
@@ -84,12 +84,12 @@ export class EditorSession {
   }
 
   /** Saves to the library: overwrite the entry being edited, or create a new one. */
-  async save(name: string, tags: string[], asNew: boolean) {
+  async save(name: string, tags: string[], asNew: boolean, role: Role = "theme") {
     this.busy = true;
     try {
       const draft = this.#build();
       const overwrite = !asNew && this.savedId;
-      const saved = await api.animSave({ ...draft, id: overwrite ? this.savedId : "", name, tags, created: 0, updated: 0, target: this.target });
+      const saved = await api.animSave({ ...draft, id: overwrite ? this.savedId : "", name, tags, role, created: 0, updated: 0, target: this.target });
       this.savedId = saved.id;
       this.savedName = saved.name;
       this.dirty = false;

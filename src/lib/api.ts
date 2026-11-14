@@ -84,6 +84,9 @@ export interface SlotRef {
 export type Color = Rgb | SlotRef;
 export type ParamValue = number | boolean | string | Color | Color[] | Record<string, Color> | Record<string, unknown> | unknown[] | null;
 
+/** What a layer or animation is for: the base look of a device (one at a time) or a stackable overlay. */
+export type Role = "theme" | "effect";
+
 export interface Layer {
   id: string;
   name: string;
@@ -93,6 +96,8 @@ export interface Layer {
   mask: Mask;
   effect: string;
   params: Record<string, ParamValue>;
+  /** Absent in older scenes: inferred from the effect (see roles.ts). */
+  role?: Role;
 }
 
 export interface HardwareMode {
@@ -335,6 +340,8 @@ export interface Animation {
   updated: number;
   target: { kind: "keyboard" | "linear" | "any"; hint?: string | null };
   builtin: boolean;
+  /** Absent in older files: inferred (see roles.ts). */
+  role?: Role;
   kind: AnimKind;
 }
 export interface AnimList {
@@ -440,6 +447,8 @@ export const api = {
   getBlackout: () => invoke<boolean>("get_blackout"),
   setBlackout: (on: boolean) => invoke<void>("set_blackout", { on }),
   animList: () => invoke<AnimList>("anim_list"),
+  /** Layers of a built-in layered theme (e.g. "Cyberpunk") for one device: base look only, no effects. */
+  themeLayers: (name: string, deviceKey: string) => invoke<Layer[]>("theme_layers", { name, deviceKey }),
   animGet: (id: string) => invoke<Animation>("anim_get", { id }),
   animSave: (anim: Animation) => invoke<Animation>("anim_save", { anim }),
   animDelete: (id: string) => invoke<void>("anim_delete", { id }),

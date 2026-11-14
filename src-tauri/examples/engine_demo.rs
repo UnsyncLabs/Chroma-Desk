@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn layer(id: &str, effect: &str) -> Layer {
-    Layer { id: id.into(), name: id.into(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: effect.into(), params: default_params(effect) }
+    Layer { id: id.into(), name: id.into(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: effect.into(), params: default_params(effect), role: None }
 }
 
 #[tokio::main]

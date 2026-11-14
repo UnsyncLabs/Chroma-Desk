@@ -8,6 +8,7 @@
 import type { Animation, Color, Device, EffectDef, ParamDef, Scene } from "../api";
 import { resolveColor } from "../palette.svelte";
 import * as TM from "./themes";
+import { animRole } from "../roles";
 import { recolorAnim } from "../anim/recolor";
 import builtinsJson from "./builtins.json";
 import { renderAnimation, renderEffect, flatten, cycleSecs, type Px } from "../anim/render";
@@ -231,7 +232,7 @@ function saveAnim(a: Animation): Animation {
   if (!a.id || a.id.startsWith("builtin:")) a.id = `u-${++M.counter}`;
   if (allAnims().some((x) => x.id !== a.id && x.name.toLowerCase() === name.toLowerCase())) fail("anim_exists", name);
   const prev = M.animations.find((x) => x.id === a.id);
-  const out: Animation = { ...clone(a), name, builtin: false, created: prev?.created ?? Date.now(), updated: Math.max(Date.now(), (prev?.updated ?? 0) + 1) };
+  const out: Animation = { ...clone(a), role: a.role ?? animRole(a), name, builtin: false, created: prev?.created ?? Date.now(), updated: Math.max(Date.now(), (prev?.updated ?? 0) + 1) };
   M.animations = prev ? M.animations.map((x) => (x.id === a.id ? out : x)) : [...M.animations, out];
   return clone(out);
 }
@@ -407,6 +408,11 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "server_status": return { running: true, version: "mock", gui_open: false, service_installed: false, service_active: false };
     // animation library
     case "anim_list": return { animations: clone(allAnims()), corrupt: [] };
+    case "theme_layers": {
+      const d = devices.find((x) => x.key === String(args.deviceKey)) ?? fail("device_not_found", String(args.deviceKey));
+      if (String(args.name).toLowerCase() !== "cyberpunk") fail("anim_not_found", String(args.name));
+      return clone(TM.baseLayers(d, true));
+    }
     case "anim_get": return clone(lookup(String(args.id)));
     case "anim_save": return saveAnim(clone(args.anim as Animation));
     case "anim_delete": {

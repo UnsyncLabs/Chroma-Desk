@@ -115,24 +115,33 @@ function layer(id: string, effect: string, params: Record<string, unknown>, opac
   return { id, name: "", enabled: true, opacity, blend: "normal", mask, effect, params } as Scene["devices"][string]["layers"][number];
 }
 
+type SceneLayer = Scene["devices"][string]["layers"][number];
+
+/** `builtin::base_layers` for one mock device: the base look only, tagged `theme`. */
+export function baseLayers(d: (typeof C.devices)[number], cyber: boolean): SceneLayer[] {
+  const keyLeds = d.led_names.flatMap((n, i) => (["W", "A", "S", "D", "Up Arrow", "Down Arrow", "Left Arrow", "Right Arrow"].some((k) => n === `Key: ${k}`) ? [i] : []));
+  let layers;
+  if (d.device_type === "Keyboard") {
+    layers = cyber
+      ? [layer("bg", "solid", { color: slot("tertiary", -0.78) }), layer("scan", "color_wave", { colors: [slot("primary"), slot("secondary"), slot("primary")], speed: 0.35, angle: 90, scale: 1.5 }, 0.8), layer("keys", "solid", { color: slot("accent") }, 1, { type: "leds", leds: keyLeds })]
+      : [layer("bg", "solid", { color: slot("background", 0.14) }), layer("wave", "color_wave", { colors: [slot("accent"), slot("secondary"), slot("accent")], speed: 0.12, angle: 0, scale: 1 }, 0.7), layer("keys", "solid", { color: slot("accent") }, 1, { type: "leds", leds: keyLeds })];
+  } else if (["LEDStrip", "Cooler", "Light"].includes(d.device_type)) {
+    layers = [layer("chase", "chase", { colors: cyber ? [slot("primary"), slot("secondary")] : [slot("primary")], speed: 0.5, length: 0.3, gap: 0.4 })];
+  } else if (cyber && ["DRam", "Motherboard", "Gpu"].includes(d.device_type)) {
+    layers = [layer("wave", "color_wave", { colors: [slot("primary"), slot("secondary"), slot("tertiary")], speed: 0.3, angle: 0, scale: 1 })];
+  } else {
+    layers = [layer("breath", "breathing", { colors: cyber ? [slot("accent"), slot("secondary")] : [slot("accent")], period: 5 })];
+  }
+  return layers.map((l) => ({ ...l, name: cyber ? "Cyberpunk" : "Omarchy", role: "theme" }));
+}
+
 /** `builtin::scene_for` for the mock devices. */
 export function builtinScene(name: string): Scene {
   const cyber = name === "Cyberpunk";
   const scene: Scene = { master_brightness: 1, sync: false, order: [], global_layers: [], devices: {} };
   for (const d of C.devices) {
-    const keyLeds = d.led_names.flatMap((n, i) => (["W", "A", "S", "D", "Up Arrow", "Down Arrow", "Left Arrow", "Right Arrow"].some((k) => n === `Key: ${k}`) ? [i] : []));
-    let layers;
-    if (d.device_type === "Keyboard") {
-      layers = cyber
-        ? [layer("bg", "solid", { color: slot("tertiary", -0.78) }), layer("scan", "color_wave", { colors: [slot("primary"), slot("secondary"), slot("primary")], speed: 0.35, angle: 90, scale: 1.5 }, 0.8), layer("keys", "solid", { color: slot("accent") }, 1, { type: "leds", leds: keyLeds }), layer("glitch", "glitch", { colors: [slot("primary"), slot("secondary"), slot("accent")], interval: 6, duration: 0.25, density: 0.3, size: 0.14 })]
-        : [layer("bg", "solid", { color: slot("background", 0.14) }), layer("wave", "color_wave", { colors: [slot("accent"), slot("secondary"), slot("accent")], speed: 0.12, angle: 0, scale: 1 }, 0.7), layer("keys", "solid", { color: slot("accent") }, 1, { type: "leds", leds: keyLeds })];
-    } else if (["LEDStrip", "Cooler", "Light"].includes(d.device_type)) {
-      layers = [layer("chase", "chase", { colors: cyber ? [slot("primary"), slot("secondary")] : [slot("primary")], speed: 0.5, length: 0.3, gap: 0.4 })];
-    } else if (cyber && ["DRam", "Motherboard", "Gpu"].includes(d.device_type)) {
-      layers = [layer("wave", "color_wave", { colors: [slot("primary"), slot("secondary"), slot("tertiary")], speed: 0.3, angle: 0, scale: 1 })];
-    } else {
-      layers = [layer("breath", "breathing", { colors: cyber ? [slot("accent"), slot("secondary")] : [slot("accent")], period: 5 })];
-    }
+    const layers = baseLayers(d, cyber);
+    if (cyber) layers.push({ ...layer("glitch", "glitch", { colors: [slot("primary"), slot("secondary"), slot("accent")], interval: 6, duration: 0.25, density: 0.3, size: 0.14 }), name: "Glitch", role: "effect" });
     scene.devices[d.key] = { mode: "effects", layers, brightness: 1, fps: null, follow_global: true, fan_leds: {}, hardware: null };
   }
   return scene;

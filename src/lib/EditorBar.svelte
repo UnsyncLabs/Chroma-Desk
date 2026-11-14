@@ -1,10 +1,11 @@
 <script lang="ts">
   /** Footer shared by the editors: live preview switch, Apply, unsaved marker and Save as animation. */
+  import type { Role } from "./api";
   import type { EditorSession } from "./editorSession.svelte";
   import { t } from "./i18n/index.svelte";
   import SaveBar from "./SaveBar.svelte";
 
-  let { session, empty = false, defaultName = "", defaultTags = [] }: { session: EditorSession; empty?: boolean; defaultName?: string; defaultTags?: string[] } = $props();
+  let { session, empty = false, defaultName = "", defaultTags = [], defaultRole = "theme" }: { session: EditorSession; empty?: boolean; defaultName?: string; defaultTags?: string[]; defaultRole?: Role } = $props();
 </script>
 
 <div class="bar">
@@ -20,7 +21,7 @@
   </div>
   {#if empty}<p class="muted hint">{t("draw.emptyHint")}</p>{/if}
   <h4>{t("save.title")}</h4>
-  <SaveBar onsave={(name, tags, asNew) => session.save(name, tags, asNew)} {defaultName} {defaultTags} canOverwrite={!!session.savedId} busy={session.busy || empty} overwriteName={session.savedName} />
+  <SaveBar onsave={(name, tags, asNew, role) => session.save(name, tags, asNew, role)} {defaultName} {defaultRole} {defaultTags} canOverwrite={!!session.savedId} busy={session.busy || empty} overwriteName={session.savedName} />
 </div>
 
 <style>

@@ -9,7 +9,7 @@
 //! Built-in presets ship in the binary (`builtins`), are read-only and can be duplicated.
 
 use crate::config::config_dir;
-use crate::engine::compositor::Geometry;
+use crate::engine::compositor::{Geometry, Role};
 use crate::engine::effects::{self, Params, Px};
 use crate::error::{ApiError, Res};
 use crate::fsutil::write_atomic;
@@ -197,7 +197,32 @@ pub struct Animation {
     /// Built-in (read-only) preset; never stored in files.
     #[serde(default)]
     pub builtin: bool,
+    /// Quick-tab role: a base look ("theme", one at a time) or an overlay ("effect", stackable).
+    /// Absent in older files; `normalize` infers it from the kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
     pub kind: AnimKind,
+}
+
+/// Role of an animation that does not state one: sequences and overlay-like engine effects (or
+/// anything tagged `notification`) are effects, the rest is a base look.
+pub fn infer_role(kind: &AnimKind, tags: &[String]) -> Role {
+    match kind {
+        AnimKind::Sequence { .. } => Role::Effect,
+        _ if tags.iter().any(|t| t == "notification") => Role::Effect,
+        AnimKind::Effect { effect, .. } => Role::of_effect(effect),
+        _ if tags.iter().any(|t| t == "notification") => Role::Effect,
+        _ => Role::Theme,
+    }
+}
+
+impl Animation {
+    /// Fills in the role when missing so every animation handed out has one.
+    pub fn normalize(&mut self) {
+        if self.role.is_none() {
+            self.role = Some(infer_role(&self.kind, &self.tags));
+        }
+    }
 }
 
 fn d_schema() -> u32 {
@@ -562,7 +587,8 @@ pub fn parse(text: &str) -> Res<Animation> {
     if version > SCHEMA_VERSION as u64 {
         return Err(ApiError::new("anim_too_new", version));
     }
-    let a: Animation = serde_json::from_value(v).map_err(|e| ApiError::new("anim_corrupt", e))?;
+    let mut a: Animation = serde_json::from_value(v).map_err(|e| ApiError::new("anim_corrupt", e))?;
+    a.normalize();
     validate(&a)?;
     Ok(a)
 }
@@ -684,6 +710,7 @@ pub fn save(dir: &Path, anim: &Animation) -> Res<Animation> {
     a.name = validate_name(&a.name)?;
     a.schema_version = SCHEMA_VERSION;
     a.builtin = false;
+    a.normalize();
     if a.id.is_empty() || a.id.starts_with("builtin:") {
         a.id = new_id();
     }
@@ -758,12 +785,20 @@ fn key_ref(k: &str) -> String {
 }
 
 fn builtin(slug: &str, name: &str, kind: AnimKind, target: TargetKind, tags: &[&str]) -> Animation {
+    let tags: Vec<String> = tags.iter().map(|s| s.to_string()).collect();
+    // Built-ins whose role is not what their kind suggests.
+    let role = match slug {
+        "breach-alert" => Role::Effect,
+        "fill" | "neon-scan" => Role::Theme,
+        _ => infer_role(&kind, &tags),
+    };
     Animation {
+        role: Some(role),
         schema_version: SCHEMA_VERSION,
         id: format!("builtin:{slug}"),
         name: name.into(),
         description: None,
-        tags: tags.iter().map(|s| s.to_string()).collect(),
+        tags,
         created: 0,
         updated: 1,
         target: Target { kind: target, hint: None },
@@ -837,6 +872,9 @@ pub fn builtins() -> Vec<Animation> {
         effect("blink", "Blink", "strobe", json!({"colors": [{"slot": "alert"}], "rate": 2.0, "duty": 0.5}), &["themed", "notification"]),
         effect("fill", "Fill", "solid", json!({"color": {"slot": "accent"}}), &["themed", "notification"]),
         effect("glitch", "Glitch", "glitch", json!({"colors": [{"slot": "primary"}, {"slot": "secondary"}, {"slot": "accent"}], "interval": 5.0, "duration": 0.3, "density": 0.3, "size": 0.16}), &["themed", "cyberpunk"]),
+        // The Cyberpunk base look as one effect; on a device Quick lays down its per-device layers
+        // instead (`builtin::theme_layers`), hence the `layers` tag.
+        effect("cyberpunk", "Cyberpunk", "color_wave", json!({"colors": [{"slot": "primary"}, {"slot": "secondary"}, {"slot": "tertiary"}], "speed": 0.3, "angle": 0, "scale": 1.0}), &["themed", "cyberpunk", "layers"]),
         builtin(
             "neon-scan",
             "Neon Scan",
@@ -900,6 +938,7 @@ pub fn layer_for(anim: &Animation) -> crate::engine::compositor::Layer {
         mask: Mask::All,
         effect: "animation".into(),
         params: Params(m),
+        role: anim.role,
     }
 }
 
@@ -1018,6 +1057,7 @@ mod tests {
             updated: 0,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Frames {
                 frames: vec![
                     Frame { leds: [("name:Key: W".to_string(), Color::Rgb([255, 0, 0]))].into(), duration_ms: Some(100) },
@@ -1080,6 +1120,38 @@ mod tests {
         // Missing snapshot draws nothing.
         render_layer(&Params::default(), 0.0, &g, 1, &mut out);
         assert!(out.iter().all(|p| p.a == 0.0));
+    }
+
+    #[test]
+    fn roles_are_inferred_stored_and_backward_compatible() {
+        let b = |id: &str| builtins().into_iter().find(|a| a.id == format!("builtin:{id}")).unwrap().role;
+        for id in ["glitch", "starlight", "breach-alert", "alert", "flash", "pulse", "blink"] {
+            assert_eq!(b(id), Some(Role::Effect), "{id}");
+        }
+        for id in ["cyberpunk", "neon-scan", "theme-wave", "theme-chase", "accent-breathing", "rainbow", "breathing", "wave", "chase", "fill", "heartbeat", "snake"] {
+            assert_eq!(b(id), Some(Role::Theme), "{id}");
+        }
+        assert!(builtins().iter().all(|a| a.role.is_some()));
+        // Old files have no role: it is inferred on load; a stored one wins.
+        let old = parse(r#"{"name": "o", "kind": {"type": "effect", "effect": "glitch"}}"#).unwrap();
+        assert_eq!(old.role, Some(Role::Effect));
+        let plain = parse(r#"{"name": "o2", "kind": {"type": "effect", "effect": "rainbow"}}"#).unwrap();
+        assert_eq!(plain.role, Some(Role::Theme));
+        let marked = parse(r#"{"name": "o3", "role": "effect", "kind": {"type": "effect", "effect": "rainbow"}}"#).unwrap();
+        assert_eq!(marked.role, Some(Role::Effect));
+        let d = crate::fsutil::test_dir("anim-role");
+        let mut a = frames_anim("Marked");
+        assert_eq!(save(&d, &a).unwrap().role, Some(Role::Theme));
+        a.role = Some(Role::Effect);
+        a.name = "Marked fx".into();
+        assert_eq!(get(&d, &save(&d, &a).unwrap().id).unwrap().role, Some(Role::Effect));
+        // Layers of animations carry the role; scene layers without one are inferred from the effect.
+        assert_eq!(layer_for(&builtins().into_iter().find(|a| a.id == "builtin:glitch").unwrap()).role(), Role::Effect);
+        let l: crate::engine::compositor::Layer = serde_json::from_value(json!({"id": "x", "name": "", "effect": "starlight"})).unwrap();
+        assert!(l.role.is_none() && l.role() == Role::Effect);
+        let l: crate::engine::compositor::Layer = serde_json::from_value(json!({"id": "x", "name": "", "effect": "chase"})).unwrap();
+        assert_eq!(l.role(), Role::Theme);
+        assert!(!serde_json::to_string(&l).unwrap().contains("role"));
     }
 
     #[test]
@@ -1201,7 +1273,7 @@ mod tests {
     #[test]
     fn builtins_are_valid_and_render() {
         let all = builtins();
-        assert_eq!(all.len(), 19);
+        assert_eq!(all.len(), 20);
         let mut seen = std::collections::HashSet::new();
         // A keyboard that has every key the presets use.
         let kb: Vec<String> = KEY_ROWS.iter().flat_map(|r| r.iter()).map(|k| format!("Key: {k}")).collect();
@@ -1218,7 +1290,7 @@ mod tests {
             let (ok, total) = compatibility(a, &kb);
             assert_eq!(ok, total, "{} should fully match a standard keyboard", a.name);
         }
-        assert_eq!(list_all(&test_dir("anim-none")).animations.len(), 19);
+        assert_eq!(list_all(&test_dir("anim-none")).animations.len(), 20);
     }
 
     /// The mock backend and the TS tests read the presets from this file; regenerate it with

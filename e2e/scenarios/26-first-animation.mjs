@@ -22,9 +22,9 @@ export default async function (t, url) {
   await t.waitFor(async () => (await t.mockState("animations")).length === 1, "saved with Enter");
   await t.shot("first-saved", 1200, 800);
   const a = (await t.mockState("animations"))[0];
-  // Quick shows it under "My animations" and one click applies it.
+  // Quick shows it under Themes (the default role) and one click applies it.
   await t.level("Quick");
-  await t.page.click(`[data-anim="${a.id}"] button.only`);
+  await t.page.click(`[data-anim="${a.id}"] button.face`);
   await sleep(300);
   const ds = (await t.scene()).devices["Razer Huntsman V3 Pro TKL@0"];
   assert.equal(ds.layers[0].params.anim_id, a.id);

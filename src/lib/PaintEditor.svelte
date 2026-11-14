@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Draw > Paint: static LED painting into a Paint layer, savable as a one-frame animation. */
-  import { api, type Animation, type Color, type Device } from "./api";
+  import { api, type Animation, type Color, type Device, type Role } from "./api";
   import { cloneColor } from "./palette.svelte";
   import { refMaker } from "./anim/ref";
   import { loadAnimations } from "./animationsStore.svelte";
@@ -31,7 +31,7 @@
     commit();
   }
 
-  async function saveAs(name: string, tags: string[]) {
+  async function saveAs(name: string, tags: string[], role: Role) {
     const names = Array.from({ length: n }, (_, i) => device.led_names[i] ?? "");
     const ref = refMaker(names);
     const leds: Record<string, Color> = {};
@@ -48,6 +48,7 @@
       id: "",
       name,
       tags,
+      role,
       created: 0,
       updated: 0,
       builtin: false,
@@ -68,7 +69,7 @@
 <LedCanvas {layout} colors={canvasColors} {display} transparent={!!layer} bind:selected resetKey={layer?.id ?? ""} onchange={onPaint} />
 <div class="save">
   <h4>{t("save.title")}</h4>
-  <SaveBar onsave={(name, tags) => saveAs(name, tags)} />
+  <SaveBar onsave={(name, tags, _asNew, role) => saveAs(name, tags, role)} />
 </div>
 
 <style>

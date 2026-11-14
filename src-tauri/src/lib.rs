@@ -167,6 +167,7 @@ pub fn run() {
             commands::default_fps,
             commands::anim_list,
             commands::anim_get,
+            commands::theme_layers,
             commands::anim_save,
             commands::anim_delete,
             commands::anim_duplicate,

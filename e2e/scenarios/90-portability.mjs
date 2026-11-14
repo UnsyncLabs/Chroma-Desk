@@ -17,7 +17,7 @@ export default async function (t, url) {
   });
   await t.nav("^Animations");
   await t.clickText(".headBtns button", "^Import");
-  await t.waitFor(async () => (await t.page.$$("[data-anim]")).length === 20, "imported");
+  await t.waitFor(async () => (await t.page.$$("[data-anim]")).length === 21, "imported");
   const id = await t.page.$$eval("[data-anim]", (els) => els.map((e) => e.getAttribute("data-anim")).find((i) => i.startsWith("u-")));
   const chip = await t.page.$eval(`[data-anim="${id}"] .chip.warn`, (e) => e.textContent);
   assert.equal(chip, "2/5 LEDs", "compatibility chip: 2 of 5 referenced LEDs exist here");

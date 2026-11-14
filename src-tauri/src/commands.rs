@@ -469,6 +469,14 @@ pub fn anim_list() -> AnimList {
     animations::list_all(&animations::animations_dir())
 }
 
+/// Layers of a built-in layered theme (e.g. "Cyberpunk") for one device, base look only.
+#[tauri::command]
+pub fn theme_layers(state: State<'_, AppState>, name: String, device_key: String) -> Res<Vec<crate::engine::compositor::Layer>> {
+    let devs = state.engine.devs.lock().unwrap();
+    let dev = devs.iter().find(|d| d.key == device_key).ok_or_else(|| ApiError::new("device_not_found", &device_key))?;
+    crate::builtin::theme_layers(&name, dev).ok_or_else(|| ApiError::new("anim_not_found", &name))
+}
+
 #[tauri::command]
 pub fn anim_get(id: String) -> Res<Animation> {
     animations::get(&animations::animations_dir(), &id)

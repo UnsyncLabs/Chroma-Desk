@@ -238,6 +238,7 @@ mod tests {
             updated: 0,
             target: Target::default(),
             builtin: false,
+            role: None,
             kind: AnimKind::Sequence { steps: vec![Step { effect: "blink".into(), params: crate::engine::effects::params(json!({"color": [255, 0, 0]})), keys: vec!["name:Key: W".into()], duration_ms: 1000, anim: None }], looped: false },
         };
         NamedTrigger { sequence: Some(Box::new(seq)), sources, ..NamedTrigger::new("") }

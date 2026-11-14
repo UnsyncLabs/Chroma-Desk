@@ -18,7 +18,7 @@ const SCENE: [u8; 3] = [20, 0, 80];
 type Counts = (usize, usize, usize, usize, f32);
 
 fn scene_layer() -> Layer {
-    Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": SCENE}).as_object().unwrap().clone()) }
+    Layer { id: "bg".into(), name: String::new(), enabled: true, opacity: 1.0, blend: Blend::Normal, mask: Mask::All, effect: "solid".into(), params: Params(json!({"color": SCENE}).as_object().unwrap().clone()), role: None }
 }
 
 async fn keys(state: &AppState, names: &[&str]) -> Vec<[u8; 3]> {

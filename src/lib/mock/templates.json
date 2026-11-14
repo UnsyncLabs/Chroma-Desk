@@ -17,6 +17,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -124,6 +125,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -231,6 +233,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -339,6 +342,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -452,6 +456,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -565,6 +570,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [
@@ -678,6 +684,7 @@
           "hint": null
         },
         "builtin": false,
+        "role": "effect",
         "kind": {
           "type": "sequence",
           "steps": [

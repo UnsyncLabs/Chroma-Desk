@@ -80,7 +80,8 @@ export default async function (t, url) {
   assert.deepEqual(saved.theme.manual_palette.accent, [0, 255, 0]);
   assert.deepEqual(saved.theme.overrides.alert, [255, 0, 0]);
   assert.equal(saved.presets.at(-1).id, "builtin:starlight", "pinned after the ones it inherited");
-  assert.equal(saved.presets[0].id, "builtin:neon-scan", "kept the Cyberpunk presets");
+  assert.equal(saved.presets[0].id, "builtin:cyberpunk", "kept the Cyberpunk presets (theme first)");
+  assert.ok(saved.presets.some((p) => p.id === "builtin:glitch"), "and its effects");
 
   // Apply it; Quick shows the profile's presets first.
   await t.clickText(`${card(mine)} button`, "^Apply$");
@@ -88,8 +89,10 @@ export default async function (t, url) {
   await t.openDevice("Huntsman");
   await t.waitFor(() => t.page.$("[data-pinned]"), "profile presets heading");
   const pinned = await t.page.$$eval("[data-pinned] + ul [data-anim]", (els) => els.map((e) => e.getAttribute("data-anim")));
-  assert.equal(pinned[0], "builtin:neon-scan", "the profile's presets come first");
-  assert.ok(pinned.includes("builtin:starlight"), "including the one just pinned");
+  assert.equal(pinned[0], "builtin:cyberpunk", "the profile's themes come first");
+  assert.ok(pinned.includes("builtin:neon-scan") && !pinned.includes("builtin:glitch"), "only themes under Themes");
+  const pinnedFx = await t.page.$$eval("[data-pinned-effects] + ul [data-anim]", (els) => els.map((e) => e.getAttribute("data-anim")));
+  assert.ok(pinnedFx.includes("builtin:glitch") && pinnedFx.includes("builtin:starlight"), "the profile's effects (including the one just pinned) sit under Effects");
   await t.shot("quick-profile-presets", 1200, 800);
   await t.shot("quick-profile-presets", 400, 400);
   await sleep(100);

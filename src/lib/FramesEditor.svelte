@@ -11,6 +11,7 @@
   import { devScene, frames as liveFrames } from "./scene.svelte";
   import { toast } from "./state.svelte";
   import EditorBar from "./EditorBar.svelte";
+  import { animRole } from "./roles";
   import FrameThumb from "./FrameThumb.svelte";
   import LedCanvas, { type Paint } from "./LedCanvas.svelte";
 
@@ -220,7 +221,7 @@
   </label>
 </div>
 
-<EditorBar {session} {empty} defaultName={init && !init.builtin ? init.name : ""} defaultTags={init?.tags ?? []} />
+<EditorBar {session} {empty} defaultName={init && !init.builtin ? init.name : ""} defaultTags={init?.tags ?? []} defaultRole={init ? animRole(init) : "theme"} />
 
 <style>
   .help { margin: 0 0 0.6rem; }

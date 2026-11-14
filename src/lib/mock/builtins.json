@@ -14,6 +14,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "rainbow",
@@ -39,6 +40,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "breathing",
@@ -69,6 +71,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "starlight",
@@ -106,6 +109,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "color_wave",
@@ -148,6 +152,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "chase",
@@ -180,6 +185,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "strobe",
@@ -216,6 +222,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "frames",
       "frames": [
@@ -1440,6 +1447,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "path",
       "path": [
@@ -1523,6 +1531,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "breathing",
@@ -1552,6 +1561,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "color_wave",
@@ -1589,6 +1599,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "chase",
@@ -1620,6 +1631,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "strobe",
@@ -1650,6 +1662,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "breathing",
@@ -1679,6 +1692,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "strobe",
@@ -1709,6 +1723,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "effect",
       "effect": "solid",
@@ -1735,6 +1750,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "effect",
       "effect": "glitch",
@@ -1759,6 +1775,45 @@
   },
   {
     "schema_version": 1,
+    "id": "builtin:cyberpunk",
+    "name": "Cyberpunk",
+    "description": null,
+    "tags": [
+      "themed",
+      "cyberpunk",
+      "layers"
+    ],
+    "created": 0,
+    "updated": 1,
+    "target": {
+      "kind": "any",
+      "hint": null
+    },
+    "builtin": true,
+    "role": "theme",
+    "kind": {
+      "type": "effect",
+      "effect": "color_wave",
+      "params": {
+        "colors": [
+          {
+            "slot": "primary"
+          },
+          {
+            "slot": "secondary"
+          },
+          {
+            "slot": "tertiary"
+          }
+        ],
+        "speed": 0.3,
+        "angle": 0,
+        "scale": 1.0
+      }
+    }
+  },
+  {
+    "schema_version": 1,
     "id": "builtin:neon-scan",
     "name": "Neon Scan",
     "description": null,
@@ -1774,6 +1829,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "path",
       "path": [
@@ -1868,6 +1924,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "effect",
     "kind": {
       "type": "frames",
       "frames": [
@@ -3008,6 +3065,7 @@
       "hint": null
     },
     "builtin": true,
+    "role": "theme",
     "kind": {
       "type": "palette",
       "cells": {
