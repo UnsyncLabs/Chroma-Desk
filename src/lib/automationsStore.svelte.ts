@@ -1,5 +1,5 @@
 /** Automations (notifications and monitors): named triggers of the active profile plus the global ones, and what the UI does with them. */
-import { api, type AutomationTemplate, type NamedTrigger, type Profile, type ProfileTheme } from "./api";
+import { api, type Animation, type AutomationTemplate, type NamedTrigger, type Profile, type ProfileTheme } from "./api";
 import { metricLabel, unitOf } from "./sysmon.svelte";
 import { activeProfile, profiles, refreshActiveProfile, saveSettings } from "./profilesStore.svelte";
 import { t } from "./i18n/index.svelte";
@@ -69,6 +69,40 @@ export async function setEnabled(item: NotifItem, on: boolean) {
   await saveNotification({ ...item, n: { ...item.n, enabled: on } });
 }
 
+// ---------- monitors: display mode (always / periodic) and metrics ----------
+
+/** The sequence has at least one meter step: this automation is a system monitor. */
+export const hasMeter = (seq: Animation | null | undefined): boolean => seq?.kind.type === "sequence" && seq.kind.steps.some((s) => s.effect === "meter");
+
+/** Metrics a monitor's meters show, in step order. */
+export const meterMetrics = (seq: Animation | null | undefined): string[] => (seq?.kind.type === "sequence" ? seq.kind.steps.filter((s) => s.effect === "meter").map((s) => String(s.params.metric ?? "")) : []);
+
+/** "Always" and "Every N for M" exclude each other: choosing one drops the other. */
+export function setDisplayMode(n: NamedTrigger, mode: "always" | "periodic") {
+  const so = { ...(n.sources ?? {}) };
+  if (mode === "always") {
+    so.always = true;
+    so.every = null;
+  } else {
+    so.always = false;
+    so.every = so.every ?? { every_secs: 10, for_secs: 7 };
+  }
+  n.sources = so;
+}
+
+/** An `Every` rule must show the overlay for no longer than its period. */
+export const timingInvalid = (n: NamedTrigger): boolean => !!n.sources?.every && (!(n.sources.every.every_secs >= 1) || !(n.sources.every.for_secs > 0) || n.sources.every.for_secs > n.sources.every.every_secs);
+
+/** "GPU memory + GPU usage" for meters, "Blink · Orbit · Off" for other steps: what a sequence shows. */
+export function sequenceSummary(seq: Animation): string {
+  if (seq.kind.type !== "sequence") return "";
+  const steps = seq.kind.steps;
+  const meters = steps.filter((s) => s.effect === "meter").map((s) => metricLabel(String(s.params.metric ?? "")));
+  if (meters.length) return `${[...new Set(meters)].join(" + ")} · ${t("auto.keysCount", { n: Math.max(...steps.map((s) => s.keys?.length ?? 0)) })}`;
+  const names = steps.map((s) => (t(`seq.style.${s.effect}`) !== `seq.style.${s.effect}` ? t(`seq.style.${s.effect}`) : s.effect));
+  return [...new Set(names)].join(" · ");
+}
+
 // ---------- categories and the "When" chip ----------
 
 export type Category = "monitor" | "timer" | "notification";
@@ -76,6 +110,8 @@ export type Category = "monitor" | "timer" | "notification";
 /** Monitors run all the time or on a measurement, timers on a clock, everything else reacts to an event. */
 export function categoryOf(n: NamedTrigger): Category {
   if (n.sources?.always || n.sources?.threshold) return "monitor";
+  // A meter that shows up periodically is still a monitor, not a generic timer.
+  if (n.sources?.every && hasMeter(n.sequence)) return "monitor";
   if (n.sources?.every) return "timer";
   return "notification";
 }

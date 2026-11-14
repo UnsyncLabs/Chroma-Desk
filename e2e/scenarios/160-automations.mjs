@@ -132,14 +132,13 @@ export default async function (t, url) {
   await t.pickSlot("warn", "[data-step-params]");
 
   // ---- every "When" trigger type
+  // A meter automation is a monitor: always / periodic live in Display mode (exclusive).
+  await t.clickText('[data-dm="always"]', ".*");
+  await t.clickText('[data-dm="periodic"]', ".*");
+  await t.page.select("[data-dm-every-unit]", "min");
+  await t.page.$eval("[data-dm-every]", (e) => (e.value = ""));
+  await t.page.type("[data-dm-every]", "2");
   await t.page.$eval("[data-when-picker]", (e) => e.scrollIntoView({ block: "start" }));
-  await t.page.click("[data-when-always]");
-  await t.page.click("[data-when-every]");
-  await t.page.$eval("[data-every-value]", (e) => (e.value = ""));
-  await t.page.type("[data-every-value]", "2");
-  await t.page.select("[data-every-unit]", "min");
-  await t.page.$eval("[data-every-for]", (e) => (e.value = ""));
-  await t.page.type("[data-every-for]", "7");
   await t.page.click("[data-when-threshold]");
   await t.waitFor(() => t.page.$("[data-th-metric]"), "threshold fields");
   await t.page.select("[data-th-metric]", "cpu.temp");
@@ -167,7 +166,7 @@ export default async function (t, url) {
   assert.deepEqual(m.sequence.kind.steps[0].keys.map((k) => k.replace("name:Key: ", "")), ["F3", "F1", "F4"], "keys kept in picking order (F2 undone)");
   assert.equal(m.sequence.kind.steps[0].params.metric, "cpu.temp");
   assert.deepEqual(m.sequence.kind.steps[0].params.color, { slot: "warn" });
-  assert.equal(m.sources.always, true);
+  assert.ok(!m.sources.always, "periodic replaces always");
   assert.deepEqual(m.sources.every, { every_secs: 120, for_secs: 7 });
   assert.deepEqual({ ...m.sources.threshold }, { metric: "cpu.temp", op: "gt", value: 80, for_secs: 0, hysteresis: 2, cooldown_secs: 60 });
   assert.equal(m.sources.desktop.app, "myapp, other");

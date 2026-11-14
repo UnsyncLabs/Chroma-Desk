@@ -11,7 +11,7 @@
   import AnimThumb from "./AnimThumb.svelte";
   import AutomationEditor from "./AutomationEditor.svelte";
   import { metricLabel, watchMetrics } from "./sysmon.svelte";
-  import { allTemplates, canEditProfile, categoryOf, deleteNotification, describeKeys, listNotifications, loadTemplates, plain, saveNotification, setEnabled, slugName, templateName, tplStore, whenChips, type Category, type NotifItem, type Scope, type Template } from "./automationsStore.svelte";
+  import { allTemplates, sequenceSummary, canEditProfile, categoryOf, deleteNotification, describeKeys, listNotifications, loadTemplates, plain, saveNotification, setEnabled, slugName, templateName, tplStore, whenChips, type Category, type NotifItem, type Scope, type Template } from "./automationsStore.svelte";
 
   let editing: { item: NotifItem; isNew: boolean } | null = $state(null);
 
@@ -21,6 +21,15 @@
   const names = $derived(keyboard ? Array.from({ length: keyboard.colors.length }, (_, i) => keyboard.led_names[i] ?? "") : []);
   const defaultScope = $derived<Scope>(canEditProfile() ? "profile" : "global");
   const templates = $derived(allTemplates());
+
+  // "Edit" in the Animations library page lands here with the automation to open.
+  $effect(() => {
+    const want = app.pendingAutomation;
+    if (!want) return;
+    app.pendingAutomation = null;
+    const it = items.find((i) => i.name === want.name && i.scope === want.scope) ?? items.find((i) => i.name === want.name);
+    if (it) editing = { item: plain(it), isNew: false };
+  });
 
   $effect(() => {
     if (!lib.loaded) loadAnimations();
@@ -115,15 +124,6 @@
     }
   }
 
-  /** "GPU memory + GPU usage" for meters, "Blink · Orbit · Off" for other steps: what the card actually shows. */
-  function sequenceSummary(seq: Animation): string {
-    if (seq.kind.type !== "sequence") return "";
-    const steps = seq.kind.steps;
-    const meters = steps.filter((s) => s.effect === "meter").map((s) => metricLabel(String(s.params.metric ?? "")));
-    if (meters.length) return `${[...new Set(meters)].join(" + ")} · ${t("auto.keysCount", { n: Math.max(...steps.map((s) => s.keys?.length ?? 0)) })}`;
-    const names = steps.map((s) => (t(`seq.style.${s.effect}`) !== `seq.style.${s.effect}` ? t(`seq.style.${s.effect}`) : s.effect));
-    return [...new Set(names)].join(" · ");
-  }
   const doesLabel = (n: NamedTrigger) => (n.sequence ? sequenceSummary(n.sequence) || t("auto.sequenceOf", { n: 0 }) : (animOf(n) ? animName(animOf(n) as Animation) : n.anim));
 </script>
 

@@ -9,7 +9,7 @@
   import { copyText, toast, toastError } from "./state.svelte";
   import { METRICS, defaultRange, describeLive, metricLabel, sysmon, unitOf, watchMetrics } from "./sysmon.svelte";
 
-  let { n = $bindable(), name }: { n: NamedTrigger; name: string } = $props();
+  let { n = $bindable(), name, hideTiming = false }: { n: NamedTrigger; name: string; hideTiming?: boolean } = $props();
 
   const src = $derived<NotifSources>(n.sources ?? {});
   const patch = (p: Partial<NotifSources>) => (n.sources = { ...(n.sources ?? {}), ...p });
@@ -61,7 +61,8 @@
   function setEvery(val: number, unit: Unit = everyUnit) {
     everyUnit = unit;
     const secs = Math.min(86400, Math.max(1, Math.round(val * MULT[unit])));
-    patch({ every: { every_secs: secs, for_secs: src.every?.for_secs ?? 5 } });
+    // "Always" and "Every" exclude each other; the visible time never exceeds the period.
+    patch({ every: { every_secs: secs, for_secs: Math.min(src.every?.for_secs ?? 5, secs) }, always: false });
   }
 
   // ---------- threshold ----------
@@ -89,8 +90,9 @@
 <div class="when" data-when-picker>
   <p class="muted small">{t("auto.when.lead")}</p>
 
+  {#if !hideTiming}
   <div class="card" class:on={!!src.always} data-when="always">
-    <label class="head"><input type="checkbox" checked={!!src.always} onchange={(e) => patch({ always: e.currentTarget.checked })} data-when-always /> <b>{t("auto.when.always")}</b></label>
+    <label class="head"><input type="checkbox" checked={!!src.always} onchange={(e) => patch(e.currentTarget.checked ? { always: true, every: null } : { always: false })} data-when-always /> <b>{t("auto.when.always")}</b></label>
     <p class="muted small">{t("auto.when.alwaysHint")}</p>
   </div>
 
@@ -108,11 +110,12 @@
           </span>
         </label>
         <label>{t("auto.when.forLabel")}
-          <span class="inline"><input type="number" min="1" max="3600" value={src.every.for_secs} oninput={(e) => patch({ every: { every_secs: src.every?.every_secs ?? 300, for_secs: Math.max(1, Number(e.currentTarget.value) || 1) } })} data-every-for /> {t("auto.u.s")}</span>
+          <span class="inline"><input type="number" min="1" max={Math.min(3600, src.every.every_secs)} value={src.every.for_secs} oninput={(e) => patch({ every: { every_secs: src.every?.every_secs ?? 300, for_secs: Math.min(src.every?.every_secs ?? 300, Math.max(1, Number(e.currentTarget.value) || 1)) } })} data-every-for /> {t("auto.u.s")}</span>
         </label>
       </div>
     {/if}
   </div>
+  {/if}
 
   <div class="card on" data-when="command" data-source="command">
     <div class="head"><b>{t("notif.src.command")}</b></div>

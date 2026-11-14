@@ -11,7 +11,7 @@ export default async function (t, url) {
   // Without a saved profile notifications are global; save one so they can live inside it.
   await t.nav("^Automations");
   await t.waitFor(() => t.page.$("[data-empty]"), "empty state");
-  assert.equal((await t.page.$$("[data-template]")).length, 13, "thirteen one-click templates");
+  assert.equal((await t.page.$$("[data-template]")).length, 14, "fourteen one-click templates");
   assert.match(await t.page.evaluate(() => document.body.innerText), /no editable profile/i);
   await t.shot("notifications-empty", 1200, 800);
   await t.shot("notifications-empty", 400, 400);

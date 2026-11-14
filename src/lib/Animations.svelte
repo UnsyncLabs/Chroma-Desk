@@ -9,6 +9,10 @@
   import { devScene } from "./scene.svelte";
   import { app, confirmDialog, navigate, toast, toastError } from "./state.svelte";
   import AnimCard from "./AnimCard.svelte";
+  import AnimThumb from "./AnimThumb.svelte";
+  import { listNotifications, sequenceSummary, whenChips, type NotifItem } from "./automationsStore.svelte";
+  import { recolorAnim } from "./anim/recolor";
+  import { palette, resolveColor } from "./palette.svelte";
 
   type Filter = "all" | "builtin" | "mine" | "compatible";
   const FILTERS: Filter[] = ["all", "builtin", "mine", "compatible"];
@@ -145,6 +149,40 @@
     }
   }
 
+  // ---------- the user's notifications and monitors, with the sequences they embed ----------
+  const autos = $derived(listNotifications());
+  const rgbOf = (c: string) => (c.startsWith("@") ? resolveColor({ slot: c.slice(1) }) : ([1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) as [number, number, number]));
+  function autoAnim(n: NotifItem["n"]): Animation | null {
+    const a = n.sequence ?? lib.list.find((x) => x.id === n.anim || x.name === n.anim) ?? null;
+    if (!a) return null;
+    palette.generation;
+    return n.color && !n.sequence ? recolorAnim(a, rgbOf(n.color)) : a;
+  }
+  const autoDoes = (n: NotifItem["n"]) => (n.sequence ? sequenceSummary(n.sequence) : (lib.list.find((x) => x.id === n.anim || x.name === n.anim) ? animName(lib.list.find((x) => x.id === n.anim || x.name === n.anim) as Animation) : n.anim));
+
+  async function testAuto(i: NotifItem) {
+    try {
+      const r = await api.trigger({ animation: i.name });
+      toast(t("notif.tested", { n: r.devices }), "ok", 2200);
+    } catch (e) {
+      toastError(e);
+    }
+  }
+  async function editAuto(i: NotifItem) {
+    app.pendingAutomation = { name: i.name, scope: i.scope };
+    await navigate({ kind: "notifications" });
+  }
+  async function saveSequence(i: NotifItem) {
+    if (!i.n.sequence) return;
+    try {
+      const saved = await api.animSave({ ...JSON.parse(JSON.stringify(i.n.sequence)), id: "", name: uniqueName(i.name) });
+      await loadAnimations();
+      toast(t("anim.autosSeqSaved", { name: saved.name }), "ok");
+    } catch (e) {
+      toastError(e);
+    }
+  }
+
   $effect(() => {
     loadAnimations();
   });
@@ -229,7 +267,46 @@
   </ul>
 {/if}
 
+<section class="autos" data-library-automations>
+  <h3>{t("anim.autos")} <span class="count">{autos.length}</span></h3>
+  <p class="muted small">{t("anim.autosLead")}</p>
+  {#if !autos.length}
+    <p class="muted" data-autos-empty>{t("anim.autosEmpty")} <button onclick={() => navigate({ kind: "notifications" })}>{t("anim.autosGo")}</button></p>
+  {:else}
+    <ul class="autolist">
+      {#each autos as i (i.scope + i.name)}
+        {@const a = autoAnim(i.n)}
+        <li class="auto" data-lib-auto={i.name}>
+          <div class="aprev">{#if a && layout}<AnimThumb anim={a} {layout} {names} />{/if}</div>
+          <div class="abody">
+            <div class="atitle"><code>{i.name}</code> <span class="badge">{i.scope === "global" ? t("notif.allProfiles") : t("notif.thisProfile")}</span>{#if i.n.sequence}<span class="badge" data-lib-auto-seq>{t("anim.autosSeq")}</span>{/if}</div>
+            <p class="chips2" data-lib-auto-when>{#each whenChips(i.n) as c (c)}<span class="chip">{c}</span>{/each}</p>
+            <p class="muted small">{autoDoes(i.n)}</p>
+            <div class="actions">
+              <button onclick={() => testAuto(i)} data-lib-auto-test>{t("notif.test")}</button>
+              <button onclick={() => editAuto(i)} data-lib-auto-edit>{t("anim.autosEdit")}</button>
+              {#if i.n.sequence}<button onclick={() => saveSequence(i)} data-lib-auto-saveseq>{t("anim.autosSaveSeq")}</button>{/if}
+            </div>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</section>
+
 <style>
+  .autos { margin-top: 1.6rem; }
+  .autos h3 { margin: 0 0 0.2rem; display: flex; gap: 0.5rem; align-items: center; }
+  .count { font-size: 0.72rem; background: var(--panel-2); border-radius: 999px; padding: 0.05rem 0.5rem; color: var(--muted); }
+  .small { font-size: 0.82rem; margin: 0 0 0.6rem; }
+  .autolist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 0.8rem; }
+  .auto { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.8rem; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem; }
+  .aprev { align-self: start; border-radius: 8px; overflow: hidden; background: var(--canvas-bg); min-height: 3rem; }
+  .atitle { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .badge { font-size: 0.7rem; border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.5rem; color: var(--muted); }
+  .chips2 { margin: 0.3rem 0; display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .chip { font-size: 0.72rem; background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 999px; padding: 0.1rem 0.55rem; font-weight: 600; }
+  @media (max-width: 520px) { .auto { grid-template-columns: minmax(0, 1fr); } }
   .head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
   .lead { margin: 0 0 0.8rem; max-width: 40rem; }
   .headBtns { display: flex; gap: 0.5rem; }

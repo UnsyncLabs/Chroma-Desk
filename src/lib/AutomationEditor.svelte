@@ -5,11 +5,12 @@
   import DeviceIcon from "./DeviceIcon.svelte";
   import LedCanvas, { type Paint } from "./LedCanvas.svelte";
   import SequenceEditor from "./SequenceEditor.svelte";
+  import MonitorOptions from "./MonitorOptions.svelte";
   import WhenPicker from "./WhenPicker.svelte";
   import { animName, lib } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import { buildLayout } from "./layout/buildLayout";
-  import { canEditProfile, nameTaken, plain, saveNotification, slugName, validName, type NotifItem, type Scope } from "./automationsStore.svelte";
+  import { canEditProfile, hasMeter, nameTaken, timingInvalid, plain, saveNotification, slugName, validName, type NotifItem, type Scope } from "./automationsStore.svelte";
   import { activeProfile } from "./profilesStore.svelte";
   import { app, toast, toastError } from "./state.svelte";
 
@@ -113,6 +114,9 @@
   const speed = $derived(n.speed ?? 1);
   const auto = $derived(n.duration == null);
 
+  // A sequence with meters is a system monitor: it gets the display-mode control at the top.
+  const isMonitor = $derived(mode === "sequence" && hasMeter(seq));
+
   // ---------- actions ----------
   const clean = (): NamedTrigger => {
     const out = plain(n) as NamedTrigger;
@@ -161,6 +165,10 @@
       toast(t("notif.badName"), "error");
       return;
     }
+    if (timingInvalid(n)) {
+      toast(t("mon.timingError"), "error");
+      return;
+    }
     if (scope === "profile" && !canEditProfile()) {
       toast(t("notif.needProfile"), "error");
       return;
@@ -186,6 +194,13 @@
 </div>
 
 <div class="form" data-notif-editor>
+  {#if isMonitor}
+    <section data-monitor-section>
+      <h3>{t("mon.title")}</h3>
+      <MonitorOptions bind:n bind:seq />
+    </section>
+  {/if}
+
   <section>
     <h3>{t("notif.name")}</h3>
     <input type="text" bind:value={name} maxlength="32" aria-label={t("notif.name")} data-name onblur={() => (name = slugName(name) || name)} />
@@ -272,7 +287,7 @@
 
   <section>
     <h3>{t("auto.whenTitle")}</h3>
-    <WhenPicker bind:n {name} />
+    <WhenPicker bind:n {name} hideTiming={isMonitor} />
   </section>
 
   <div class="foot">

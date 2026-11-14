@@ -11,6 +11,7 @@ export const app = $state({
   error: "",
   view: { kind: "all" } as View,
   /** An animation the library asked to edit on a device (consumed by that device's Draw tab). */
+  pendingAutomation: null as { name: string; scope: "profile" | "global" } | null,
   pendingEdit: null as import("./api").Animation | "new" | null,
 });
 
