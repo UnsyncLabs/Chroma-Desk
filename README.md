@@ -297,6 +297,8 @@ To keep the OpenRGB server alive, enable *Keep OpenRGB running with a systemd us
 
 ## Troubleshooting
 
+- **The window closes right after opening (NVIDIA + Wayland, `Error 71 (Protocol error) dispatching to Wayland display`)**: a WebKitGTK renderer bug. chroma-desk sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` itself; if you still see it, also try `WEBKIT_DISABLE_COMPOSITING_MODE=1 chroma-desk`.
+
 - **Omarchy events or `chroma-desk trigger` do nothing**: the app must be running (tray is fine) and `chroma-desk` must be on `PATH` — install the package with `makepkg -si`. `chroma-desk trigger …` exits with code 1 and says so when it cannot reach the app.
 
 - **“Cannot reach OpenRGB”**: chroma-desk starts `openrgb --server --startminimized` if nothing listens on port 6742. Check that `openrgb` is installed and in `PATH`, or run it yourself with `--server`.
@@ -536,6 +538,8 @@ Ajustes → *Iniciar al iniciar sesión* crea `~/.config/autostart/chroma-desk.d
 Para mantener vivo el servidor de OpenRGB, activa *Mantener OpenRGB en marcha con un servicio de usuario de systemd* en Ajustes (instala `chroma-desk-openrgb.service`, `openrgb --server --startminimized`). Cierra antes cualquier OpenRGB lanzado a mano.
 
 ## Solución de problemas
+
+- **La ventana se cierra nada más abrirse (NVIDIA + Wayland, `Error 71 (Protocol error) dispatching to Wayland display`)**: es un fallo del renderizador de WebKitGTK. chroma-desk ya define `WEBKIT_DISABLE_DMABUF_RENDERER=1`; si aún pasa, prueba también `WEBKIT_DISABLE_COMPOSITING_MODE=1 chroma-desk`.
 
 - **Los eventos de Omarchy o `chroma-desk trigger` no hacen nada**: la app tiene que estar abierta (en la bandeja vale) y `chroma-desk` tiene que estar en el `PATH`: instala el paquete con `makepkg -si`. Si no puede contactar con la app, `chroma-desk trigger …` sale con código 1 y lo indica.
 
