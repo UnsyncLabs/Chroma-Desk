@@ -254,6 +254,7 @@ jobs:
       - name: Compute SHA256SUMS over every asset
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RID: ${{ needs.prepare.outputs.release_id }}
         run: |
           mkdir assets && cd assets

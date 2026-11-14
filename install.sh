@@ -206,6 +206,15 @@ if [ "$OS" = Linux ] && [ -r /etc/os-release ]; then
   done
 fi
 
+# The openrgb-razer .deb is built on Debian 13 and the .rpm on Fedora 44: other derivatives (Ubuntu,
+# openSUSE...) have different library versions and get the AppImage instead. Arch is built on Arch.
+RAZER_NATIVE=0
+case "$FAMILY:${os_id:-}" in
+  arch:*) RAZER_NATIVE=1 ;;
+  deb:debian | deb:raspbian) RAZER_NATIVE=1 ;;
+  rpm:fedora | rpm:nobara) RAZER_NATIVE=1 ;;
+esac
+
 RPM_TOOL=""
 if [ "$FAMILY" = rpm ]; then
   if have dnf; then
@@ -237,7 +246,7 @@ latest_tag() {
 release_assets() {
   local json
   json="$(http_get "${API}/releases/tags/$1")" || die "$(t "release $1 not found" "no se encontró el release $1")"
-  printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/^[^:]*: *"//; s/"$//' |
+  printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/^[^:]*: *"//; s/"$//; s/%2[Bb]/+/g' |
     grep -E "^${DL_PREFIX//./\\.}[A-Za-z0-9._-]+/[A-Za-z0-9._+-]+$" || true
 }
 
@@ -408,7 +417,7 @@ install_udev_rules() { # TAG URLS
     return 0
   }
   fetch_verified "$1" "$url"
-  run_sudo install -m 644 "$FETCHED" /etc/udev/rules.d/60-openrgb.rules
+  run_sudo install -D -m 644 "$FETCHED" /etc/udev/rules.d/60-openrgb.rules
 }
 
 reload_udev() {
@@ -431,7 +440,7 @@ install_openrgb_razer() {
   urls="$(release_assets "$tag")"
   [ -n "$urls" ] || die "$(t "release $tag has no downloadable files" "el release $tag no tiene archivos")"
   re="$(razer_pkg_re || true)"
-  if [ "$FAMILY" != appimage ] && [ -n "$re" ] && url="$(pick_asset "$urls" "$re")"; then
+  if [ "$FAMILY" != appimage ] && [ "$RAZER_NATIVE" = 1 ] && [ -n "$re" ] && url="$(pick_asset "$urls" "$re")"; then
     fetch_verified "$tag" "$url"
     pm_install_local "$FETCHED"
     state_set razer native
@@ -459,11 +468,13 @@ install_openrgb_official() {
     fi
     return 0
   fi
-  if [ "$FAMILY" != appimage ]; then
-    pm_install_repo openrgb
+  if [ "$FAMILY" != appimage ] && pm_install_repo openrgb; then
     state_set official native
   else
-    warn "$(t "Unknown distribution: install OpenRGB from your package manager or https://openrgb.org, then run this script again." "Distribución desconocida: instala OpenRGB con tu gestor de paquetes o desde https://openrgb.org y vuelve a ejecutar este script.")"
+    # Not packaged for this distribution (Debian and Ubuntu do not ship it): the openrgb-razer
+    # builds are upstream OpenRGB plus the Razer fix, and come from the same trusted release page.
+    warn "$(t "The official OpenRGB is not available from your package manager. Installing the openrgb-razer build instead (identical to upstream OpenRGB apart from the Razer fix)." "El OpenRGB oficial no está en los repositorios de tu distribución. Instalo en su lugar la build openrgb-razer (idéntica a OpenRGB salvo por el arreglo Razer).")"
+    install_openrgb_razer
   fi
 }
 
