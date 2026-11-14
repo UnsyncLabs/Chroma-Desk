@@ -2,8 +2,8 @@
 # Builds chroma-desk from the checkout this PKGBUILD lives in (packaging/arch/ inside the repo):
 #   cd packaging/arch && makepkg -si
 pkgname=chroma-desk
-pkgver=0.1.0
-pkgrel=2
+pkgver=0.2.0
+pkgrel=1
 pkgdesc='Modern UI for OpenRGB: per-LED painting, effect layers, profiles and tray'
 arch=(x86_64)
 url='https://github.com/UnsyncLabs/Chroma-Desk'
