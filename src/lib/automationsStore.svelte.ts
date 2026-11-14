@@ -1,7 +1,7 @@
 /** Automations (notifications and monitors): named triggers of the active profile plus the global ones, and what the UI does with them. */
 import { api, type AutomationTemplate, type NamedTrigger, type Profile, type ProfileTheme } from "./api";
 import { metricLabel, unitOf } from "./sysmon.svelte";
-import { activeProfile, profiles, refreshActiveProfile, saveSettings } from "./profiles.svelte";
+import { activeProfile, profiles, refreshActiveProfile, saveSettings } from "./profilesStore.svelte";
 import { t } from "./i18n/index.svelte";
 
 /** A deep plain copy (never structuredClone a `$state` proxy). */

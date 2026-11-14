@@ -3,15 +3,15 @@
   import { api, hex, type Animation, type NamedTrigger } from "./api";
   import { t } from "./i18n/index.svelte";
   import { app, confirmDialog, toast, toastError } from "./state.svelte";
-  import { animName, lib, loadAnimations } from "./animations.svelte";
-  import { activeProfile } from "./profiles.svelte";
+  import { animName, lib, loadAnimations } from "./animationsStore.svelte";
+  import { activeProfile } from "./profilesStore.svelte";
   import { palette, resolveColor } from "./palette.svelte";
   import { recolorAnim } from "./anim/recolor";
   import { buildLayout } from "./layout/buildLayout";
   import AnimThumb from "./AnimThumb.svelte";
   import AutomationEditor from "./AutomationEditor.svelte";
   import { metricLabel, watchMetrics } from "./sysmon.svelte";
-  import { allTemplates, canEditProfile, categoryOf, deleteNotification, describeKeys, listNotifications, loadTemplates, plain, saveNotification, setEnabled, slugName, templateName, tplStore, whenChips, type Category, type NotifItem, type Scope, type Template } from "./automations.svelte";
+  import { allTemplates, canEditProfile, categoryOf, deleteNotification, describeKeys, listNotifications, loadTemplates, plain, saveNotification, setEnabled, slugName, templateName, tplStore, whenChips, type Category, type NotifItem, type Scope, type Template } from "./automationsStore.svelte";
 
   let editing: { item: NotifItem; isNew: boolean } | null = $state(null);
 

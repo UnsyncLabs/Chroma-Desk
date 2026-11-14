@@ -3,10 +3,10 @@
   import { api, hex, type AnimRef, type Profile, type ProfileTheme, type Rgb, type SourceStatus, type ThemeSourceId } from "./api";
   import ColorPicker from "./ColorPicker.svelte";
   import { t } from "./i18n/index.svelte";
-  import { lib } from "./animations.svelte";
+  import { lib } from "./animationsStore.svelte";
   import { DEFAULT_SLOTS, MAIN_SLOTS, SLOTS, palette } from "./palette.svelte";
   import { has, SOURCE_CAP } from "./capabilities.svelte";
-  import { refreshActiveProfile } from "./profiles.svelte";
+  import { refreshActiveProfile } from "./profilesStore.svelte";
   import { navigate, toast, toastError } from "./state.svelte";
 
   let { name, onclose }: { name: string; onclose: () => void } = $props();

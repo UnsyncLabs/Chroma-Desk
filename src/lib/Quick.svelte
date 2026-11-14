@@ -2,12 +2,12 @@
   /** Quick tab: one click applies a colour, a preset or one of your animations to this device. */
   import type { Animation, Color, Device } from "./api";
   import ColorPicker from "./ColorPicker.svelte";
-  import { activeProfile } from "./profiles.svelte";
+  import { activeProfile } from "./profilesStore.svelte";
   import { cloneColor, resolveColor } from "./palette.svelte";
   import { hex } from "./api";
   import { isCompatible } from "./anim/ref";
   import { buildLayout } from "./layout/buildLayout";
-  import { applyAnimation, lib } from "./animations.svelte";
+  import { applyAnimation, lib } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import { commit, devScene, ensureDev, newLayer } from "./scene.svelte";
   import { toast } from "./state.svelte";

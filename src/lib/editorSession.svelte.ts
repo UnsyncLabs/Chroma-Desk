@@ -3,7 +3,7 @@
  * guard, saving to the library and applying to the device.
  */
 import { api, type Animation, type Device } from "./api";
-import { applyAnimation, loadAnimations } from "./animations.svelte";
+import { applyAnimation, loadAnimations } from "./animationsStore.svelte";
 import { t } from "./i18n/index.svelte";
 import { buildLayout } from "./layout/buildLayout";
 import { commit, devScene, emptyDevice, newLayer, previewHook, sceneStore } from "./scene.svelte";

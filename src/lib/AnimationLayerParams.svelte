@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Parameters of an "animation" layer: pick from the library, or refresh the layer's saved copy. */
   import type { Animation, Layer } from "./api";
-  import { animName, lib } from "./animations.svelte";
+  import { animName, lib } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
 
   let { layer, oncommit }: { layer: Layer; oncommit: () => void } = $props();

@@ -6,11 +6,11 @@
   import LedCanvas, { type Paint } from "./LedCanvas.svelte";
   import SequenceEditor from "./SequenceEditor.svelte";
   import WhenPicker from "./WhenPicker.svelte";
-  import { animName, lib } from "./animations.svelte";
+  import { animName, lib } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import { buildLayout } from "./layout/buildLayout";
-  import { canEditProfile, nameTaken, plain, saveNotification, slugName, validName, type NotifItem, type Scope } from "./automations.svelte";
-  import { activeProfile } from "./profiles.svelte";
+  import { canEditProfile, nameTaken, plain, saveNotification, slugName, validName, type NotifItem, type Scope } from "./automationsStore.svelte";
+  import { activeProfile } from "./profilesStore.svelte";
   import { app, toast, toastError } from "./state.svelte";
 
   let { initial, isNew, onclose, onsaved }: { initial: NotifItem; isNew: boolean; onclose: () => void; onsaved: () => void } = $props();

@@ -4,8 +4,8 @@
   import { has } from "./capabilities.svelte";
   import ClaudeSetup from "./ClaudeSetup.svelte";
   import { t } from "./i18n/index.svelte";
-  import { snippets } from "./automations.svelte";
-  import { profiles, saveSettings } from "./profiles.svelte";
+  import { snippets } from "./automationsStore.svelte";
+  import { profiles, saveSettings } from "./profilesStore.svelte";
   import { copyText, toast, toastError } from "./state.svelte";
   import { METRICS, defaultRange, describeLive, metricLabel, sysmon, unitOf, watchMetrics } from "./sysmon.svelte";
 

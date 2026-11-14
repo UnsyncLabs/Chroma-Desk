@@ -3,7 +3,7 @@
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { api, type Animation } from "./api";
   import { isCompatible } from "./anim/ref";
-  import { animName, applyAnimation, copyTriggerCommand, kindLabel, lib, loadAnimations, previewDevice, testAnimation } from "./animations.svelte";
+  import { animName, applyAnimation, copyTriggerCommand, kindLabel, lib, loadAnimations, previewDevice, testAnimation } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import { buildLayout } from "./layout/buildLayout";
   import { devScene } from "./scene.svelte";

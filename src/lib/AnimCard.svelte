@@ -4,7 +4,7 @@
   import type { Animation } from "./api";
   import type { Layout } from "./layout/buildLayout";
   import { compat } from "./anim/ref";
-  import { animName, kindLabel } from "./animations.svelte";
+  import { animName, kindLabel } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import AnimThumb from "./AnimThumb.svelte";
 

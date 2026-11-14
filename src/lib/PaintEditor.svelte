@@ -3,7 +3,7 @@
   import { api, type Animation, type Color, type Device } from "./api";
   import { cloneColor } from "./palette.svelte";
   import { refMaker } from "./anim/ref";
-  import { loadAnimations } from "./animations.svelte";
+  import { loadAnimations } from "./animationsStore.svelte";
   import { t } from "./i18n/index.svelte";
   import { buildLayout } from "./layout/buildLayout";
   import { applyStroke, paintTarget, toPaint } from "./paintLayer";

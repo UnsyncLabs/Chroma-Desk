@@ -9,7 +9,7 @@
   import { t, deviceLabel, getLocale, setLocale, LANGUAGES } from "./i18n/index.svelte";
   import { app, copyText, loadDevices, tour, toast, toastError } from "./state.svelte";
   import { commit, sceneStore } from "./scene.svelte";
-  import { profiles, saveSettings } from "./profiles.svelte";
+  import { profiles, saveSettings } from "./profilesStore.svelte";
 
   let autostart = $state(false);
   let server: ServerStatus | null = $state(null);

@@ -7,7 +7,7 @@
   import { hex, type Animation, type Color, type Device, type ParamValue, type Rgb, type SeqStep } from "./api";
   import ColorPicker from "./ColorPicker.svelte";
   import LedCanvas from "./LedCanvas.svelte";
-  import { animName, lib } from "./animations.svelte";
+  import { animName, lib } from "./animationsStore.svelte";
   import { cycleSecs, flatten, renderAnimation } from "./anim/render";
   import { nameIndex, refMaker, resolveRef } from "./anim/ref";
   import { t } from "./i18n/index.svelte";

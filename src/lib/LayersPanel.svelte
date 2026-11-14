@@ -6,7 +6,7 @@
   import { newLayer, sceneStore } from "./scene.svelte";
   import EffectParams from "./EffectParams.svelte";
   import AnimationLayerParams from "./AnimationLayerParams.svelte";
-  import { animName } from "./animations.svelte";
+  import { animName } from "./animationsStore.svelte";
   import type { Animation } from "./api";
 
   let {

@@ -3,11 +3,11 @@
   import { api, hex, on, type Device, type Rgb } from "$lib/api";
   import { t, deviceLabel, getLocale } from "$lib/i18n/index.svelte";
   import { app, loadDevices, maybeStartTour, navigate, rescan } from "$lib/state.svelte";
-  import { loadAnimations } from "$lib/animations.svelte";
+  import { loadAnimations } from "$lib/animationsStore.svelte";
   import Animations from "$lib/Animations.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
   import { loadCapabilities } from "$lib/capabilities.svelte";
-  import { loadProfiles, profiles } from "$lib/profiles.svelte";
+  import { loadProfiles, profiles } from "$lib/profilesStore.svelte";
   import { listenPalette, loadPalette } from "$lib/palette.svelte";
   import { toastError } from "$lib/state.svelte";
   import Profiles from "$lib/Profiles.svelte";

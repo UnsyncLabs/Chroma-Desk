@@ -7,7 +7,7 @@
   import { t } from "./i18n/index.svelte";
   import { confirmDialog, toast, toastError } from "./state.svelte";
   import { isDirty } from "./scene.svelte";
-  import { applyProfile, loadProfiles, profiles, saveProfileAs, saveSettings } from "./profiles.svelte";
+  import { applyProfile, loadProfiles, profiles, saveProfileAs, saveSettings } from "./profilesStore.svelte";
 
   type Edit = { mode: "saveas" | "rename" | "duplicate"; target: string };
   let edit: Edit | null = $state(null);
