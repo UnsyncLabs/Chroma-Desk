@@ -1,0 +1,37 @@
+# OpenRGB 1.1 + soporte para Razer Huntsman V3 Pro TKL en Linux (via hidapi-libusb)
+# Instalar:  cd packaging/arch && makepkg -si
+# Reemplaza al paquete oficial "openrgb".
+
+pkgname=openrgb-razer
+pkgver=1.1
+pkgrel=1
+pkgdesc="OpenRGB with Razer Huntsman V3 Pro TKL support on Linux (control interface via hidapi-libusb)"
+arch=('x86_64')
+url="https://gitlab.com/CalcProgrammer1/OpenRGB"
+license=('GPL-2.0-or-later')
+depends=('glibc' 'gcc-libs' 'qt6-base' 'libusb' 'hidapi' 'mbedtls3' 'hicolor-icon-theme')
+makedepends=('git' 'qt6-tools')
+provides=("openrgb=${pkgver}")
+conflicts=('openrgb')
+# Repositorio local (este mismo fork), rama "openrazer"
+source=("openrgb-razer::git+file://$(realpath "${startdir}/../..")#branch=openrazer")
+sha256sums=('SKIP')
+
+build() {
+    cd "${srcdir}/openrgb-razer"
+    mkdir -p build && cd build
+    qmake6 ../OpenRGB.pro PREFIX=/usr CONFIG+=release
+    make -j"$(nproc)"
+}
+
+package() {
+    cd "${srcdir}/openrgb-razer/build"
+    make INSTALL_ROOT="${pkgdir}" install
+
+    # Reglas udev (acceso sin root a los dispositivos RGB)
+    install -dm755 "${pkgdir}/usr/lib/udev/rules.d"
+    ./openrgb --generate-udev-rules "${pkgdir}/usr/lib/udev/rules.d/60-openrgb.rules"
+
+    # Acceso a SMBus/I2C (RAM, placa base)
+    install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules-load.d/openrgb.conf" <<< "i2c-dev"
+}
