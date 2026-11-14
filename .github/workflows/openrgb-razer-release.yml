@@ -1,0 +1,274 @@
+name: openrgb-razer release
+
+# Builds openrgb-razer (OpenRGB + Razer Huntsman V3 Pro TKL fix) for Linux from the `openrgb-razer`
+# (stable) or `openrgb-razer-master` branch and attaches everything to a GitHub Release with SHA256SUMS.
+# This file lives on `main` (not in the openrgb-razer branches) so that sync-openrgb.yml can rebase
+# those branches freely: the default GITHUB_TOKEN cannot push commits that touch .github/workflows.
+#   - workflow_dispatch (the normal way; sync-openrgb.yml uses it too):
+#       ref      branch/tag/sha of the sources to build (openrgb-razer, openrgb-razer-master)
+#       tag      release tag to create: openrgb-razer-v1.1-r1 or openrgb-razer-master-YYYYMMDD
+#       publish  publish the release (otherwise it stays a draft)
+#   - push of a tag `openrgb-razer-v*` / `test-openrgb-razer-v*` on a main commit: builds the tip of
+#     openrgb-razer (openrgb-razer-master when the tag name contains "master"); test- tags stay drafts.
+# Packages are built for x86_64 and aarch64 (Arch: x86_64 only, there is no official aarch64 image).
+
+on:
+  push:
+    tags: ["openrgb-razer-v*", "test-openrgb-razer-v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to build"
+        required: true
+        default: openrgb-razer
+        type: string
+      tag:
+        description: "Release tag (openrgb-razer-v1.1-r1, openrgb-razer-master-20261114; test- prefix = draft only)"
+        required: true
+        type: string
+      publish:
+        description: "Publish the release (false = leave it as a draft)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openrgb-razer-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  BUILD_REF: ${{ github.event.inputs.ref || (contains(github.ref_name, 'master') && 'openrgb-razer-master' || 'openrgb-razer') }}
+
+jobs:
+  prepare:
+    name: Version and draft release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      ver: ${{ steps.ver.outputs.ver }}
+      rel: ${{ steps.ver.outputs.rel }}
+      release_id: ${{ steps.create.outputs.release_id }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
+      publish: ${{ steps.ver.outputs.publish }}
+    steps:
+      - name: Parse the tag
+        id: ver
+        run: |
+          t="${TAG#test-}"
+          if [[ $t =~ ^openrgb-razer-v([0-9]+(\.[0-9]+)*)-r([0-9]+)$ ]]; then
+            ver="${BASH_REMATCH[1]}"; rel="${BASH_REMATCH[3]}"; pre=false
+          elif [[ $t =~ ^openrgb-razer-master-([0-9]{8})$ ]]; then
+            ver="1.1+master${BASH_REMATCH[1]}"; rel=1; pre=true
+          else
+            echo "::error::unsupported tag $TAG (want openrgb-razer-v<ver>-r<n> or openrgb-razer-master-YYYYMMDD)"; exit 1
+          fi
+          publish=false
+          if [[ $TAG != test-* ]]; then
+            if [ "$GITHUB_EVENT_NAME" = push ] || [ "${{ github.event.inputs.publish }}" = true ]; then publish=true; fi
+          fi
+          {
+            echo "ver=$ver"
+            echo "rel=$rel"
+            echo "prerelease=$pre"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+      - name: Create the draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRE: ${{ steps.ver.outputs.prerelease }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+                 --jq ".[] | select(.tag_name==\"$TAG\" and .draft) | .id" | head -1)
+          if [ -z "$id" ]; then
+            if gh release view "$TAG" >/dev/null 2>&1; then echo "::error::release $TAG already exists and is published"; exit 1; fi
+            pre="$PRE"; case "$TAG" in test-*) pre=true ;; esac
+            sha=$(git rev-parse HEAD)
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" -X POST \
+                   -f tag_name="$TAG" -f target_commitish="$sha" -f name="openrgb-razer ${TAG#test-}" \
+                   -F draft=true -F prerelease="$pre" \
+                   -f body="OpenRGB with the Razer Huntsman V3 Pro TKL fix for Linux. Replaces the official openrgb package. See the openrgb-razer branch README. Verify downloads with SHA256SUMS." \
+                   --jq .id)
+          fi
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  appimage:
+    name: AppImage (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04, ci: amd64 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm, ci: arm64 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Build with OpenRGB's own AppImage script (their CI image)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+            registry.gitlab.com/openrgbdevelopers/openrgb-linux-ci-deb-builder:trixie-${{ matrix.ci }} \
+            bash -euxc 'git config --global --add safe.directory /src; export $(dpkg-architecture); ./scripts/build-appimage.sh qt6'
+          ls -l ./*.AppImage
+          mkdir -p out
+          mv ./OpenRGB-*.AppImage "out/openrgb-razer-${{ needs.prepare.outputs.ver }}-${{ matrix.arch }}.AppImage"
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/* --clobber
+
+  deb:
+    name: .deb Debian trixie (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: dpkg-buildpackage in debian:trixie (system hidapi, no hotplug library needed)
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/src" -e VER="${{ needs.prepare.outputs.ver }}" -e REL="${{ needs.prepare.outputs.rel }}" debian:trixie bash -euxc '
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+              build-essential fakeroot dpkg-dev debhelper pkg-config git ca-certificates \
+              qt6-base-dev qt6-base-dev-tools qt6-tools-dev-tools qmake6 libusb-1.0-0-dev libhidapi-dev libmbedtls-dev
+            git config --global --add safe.directory /src
+            cp -a /src /build && cd /build
+            rm -rf debian && cp -a packaging/debian debian
+            printf "openrgb-razer (%s+r%s) stable; urgency=medium\n\n  * OpenRGB %s with Razer Huntsman V3 Pro TKL support.\n\n -- neokuze <imneokuze@gmail.com>  %s\n" "$VER" "$REL" "$VER" "$(date -R)" > debian/changelog
+            dpkg-buildpackage -us -uc -B
+            rm -f ../openrgb-razer-dbgsym*.deb ../*dbgsym*.ddeb
+            cp ../openrgb-razer_*.deb /src/out/
+          '
+          ls -l out
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.deb --clobber
+
+  rpm:
+    name: .rpm Fedora 44 (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: rpmbuild in fedora:44
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/src" -e VER="${{ needs.prepare.outputs.ver }}" -e REL="${{ needs.prepare.outputs.rel }}" fedora:44 bash -euxc '
+            dnf install -y rpmdevtools gcc-c++ git libusbx-devel libstdc++-devel qt6-qtbase-devel qt6-linguist \
+              desktop-file-utils hidapi-devel mbedtls-devel systemd-rpm-macros
+            git config --global --add safe.directory /src
+            rpmdev-setuptree
+            sed -e "s/__VERSION__/$VER/g" -e "s/__RELEASE__/$REL/g" /src/packaging/fedora/openrgb-razer.spec.in > /root/rpmbuild/SPECS/openrgb-razer.spec
+            cp -a /src /root/rpmbuild/SOURCES/OpenRGB
+            rpmbuild -bb /root/rpmbuild/SPECS/openrgb-razer.spec
+            cp /root/rpmbuild/RPMS/*/openrgb-razer-[0-9]*.rpm /src/out/
+          '
+          ls -l out
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.rpm --clobber
+
+  arch:
+    name: Arch Linux x86_64 (pkg.tar.zst)
+    needs: prepare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: makepkg in archlinux (builds this checkout)
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/work" -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            -e OPENRGB_RAZER_VER="${{ needs.prepare.outputs.ver }}" -e OPENRGB_RAZER_REL="${{ needs.prepare.outputs.rel }}" archlinux:latest bash -euxc '
+            pacman -Syu --noconfirm --needed base-devel git sudo libarchive
+            useradd -m builder
+            echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+            mkdir -p /home/builder/src
+            cp -a /work/. /home/builder/src/
+            chown -R builder:builder /home/builder/src
+            sudo -u builder bash -euxc "git config --global --add safe.directory \"*\"; cd /home/builder/src/packaging/arch && makepkg -sf --noconfirm"
+            cp /home/builder/src/packaging/arch/openrgb-razer-[0-9]*.pkg.tar.zst /work/out/
+            # The udev rules, for the AppImage install route of install.sh.
+            bsdtar -xOf /work/out/openrgb-razer-[0-9]*.pkg.tar.zst usr/lib/udev/rules.d/60-openrgb.rules > /work/out/60-openrgb.rules
+            chown "$HOST_UID:$HOST_GID" /work/out/*
+          '
+          ls -l out
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/* --clobber
+
+  finish:
+    name: SHA256SUMS and publish
+    needs: [prepare, appimage, deb, rpm, arch]
+    if: ${{ !cancelled() && needs.appimage.result == 'success' && needs.deb.result == 'success' && needs.rpm.result == 'success' && needs.arch.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Compute SHA256SUMS over every asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RID: ${{ needs.prepare.outputs.release_id }}
+        run: |
+          mkdir assets && cd assets
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RID/assets?per_page=100" --jq '.[] | select(.name != "SHA256SUMS") | "\(.id) \(.name)"' |
+          while read -r id name; do
+            gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$name"
+          done
+          ls -l
+          sha256sum -- * | tee ../SHA256SUMS
+          cd ..
+          gh release upload "$TAG" SHA256SUMS --clobber
+      - name: Publish
+        if: needs.prepare.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RID: ${{ needs.prepare.outputs.release_id }}
+          PRE: ${{ needs.prepare.outputs.prerelease }}
+        run: gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RID" -F draft=false -F prerelease="$PRE" >/dev/null

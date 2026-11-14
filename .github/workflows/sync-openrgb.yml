@@ -1,0 +1,182 @@
+name: sync-openrgb
+
+# Keeps the OpenRGB copies in this repository current:
+#   master + electron-openrgb  fast-forward to gitlab.com/CalcProgrammer1/OpenRGB master (never forced)
+#   openrgb-razer-master       the Razer fix rebased on the new master; built; pushed; pre-release created.
+#                              A conflict or a failed build opens the issue "openrgb-razer needs manual rebase".
+#   openrgb-razer              when OpenRGB tags a new release_X.Y: fix rebased on it, built, pushed and
+#                              openrgb-razer-vX.Y-r1 released.
+# Manual runs: dry_run=true (default) only reports what would be pushed. The `push` trigger on the dist
+# branch always runs in dry-run mode (used to test this file before it reaches main).
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be pushed"
+        type: boolean
+        default: true
+      simulate_conflict:
+        description: "Pretend the rebase conflicts (tests the issue path)"
+        type: boolean
+        default: false
+  push:
+    branches: [dist]
+    paths:
+      - .github/workflows/sync-openrgb.yml
+      - scripts/sync-openrgb.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-openrgb
+  cancel-in-progress: false
+
+env:
+  DRY_RUN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')) && 'false' || 'true' }}
+
+jobs:
+  plan:
+    name: Mirror and rebase
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+    outputs:
+      master_ready: ${{ steps.sync.outputs.master_ready }}
+      stable_ready: ${{ steps.sync.outputs.stable_ready }}
+      stable_tag: ${{ steps.sync.outputs.stable_tag }}
+      master_old_sha: ${{ steps.sync.outputs.master_old_sha }}
+      stable_old_sha: ${{ steps.sync.outputs.stable_old_sha }}
+      date: ${{ steps.sync.outputs.date }}
+      bundle: ${{ steps.sync.outputs.bundle }}
+      dry_run: ${{ env.DRY_RUN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Sync
+        id: sync
+        env:
+          SIMULATE_CONFLICT: ${{ github.event.inputs.simulate_conflict || 'false' }}
+        run: ./scripts/sync-openrgb.sh
+      - name: Open an issue for conflicts
+        if: steps.sync.outputs.master_conflict == 'true' || steps.sync.outputs.stable_conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="openrgb-razer needs manual rebase"
+          {
+            echo "The scheduled sync could not rebase the Razer fix onto the new OpenRGB sources."
+            echo
+            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            for v in master stable; do
+              if [ -s "/tmp/sync/conflict-$v.log" ]; then
+                echo; echo "### $v"; echo '```'; tail -n 60 "/tmp/sync/conflict-$v.log"; echo '```'
+              fi
+            done
+            echo
+            echo "Rebase \`openrgb-razer-master\` (or \`openrgb-razer\`) by hand, push it, then run the openrgb-razer-release workflow."
+          } > body.md
+          if [ "$DRY_RUN" = true ]; then
+            echo "(dry run) would open/update the issue '$title':"; cat body.md
+          else
+            n=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+            if [ -n "$n" ]; then gh issue comment "$n" --body-file body.md; else gh issue create --title "$title" --body-file body.md; fi
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.sync.outputs.bundle == 'true' && env.DRY_RUN != 'true'
+        with:
+          name: candidates
+          path: /tmp/sync/candidates.bundle
+
+  build:
+    name: Build check (${{ matrix.variant }})
+    needs: plan
+    if: needs.plan.outputs.dry_run != 'true' && (needs.plan.outputs.master_ready == 'true' || needs.plan.outputs.stable_ready == 'true')
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [master, stable]
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Skip variants without a candidate
+        id: want
+        run: |
+          if [ "${{ matrix.variant }}" = master ] && [ "${{ needs.plan.outputs.master_ready }}" = true ]; then echo "go=true" >> "$GITHUB_OUTPUT"; fi
+          if [ "${{ matrix.variant }}" = stable ] && [ "${{ needs.plan.outputs.stable_ready }}" = true ]; then echo "go=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.want.outputs.go == 'true'
+        with:
+          name: candidates
+      - name: Compile the candidate (OpenRGB's CI image)
+        id: compile
+        if: steps.want.outputs.go == 'true'
+        run: |
+          git clone -q candidates.bundle -b "cand-${{ matrix.variant }}" src
+          docker run --rm -v "$PWD/src:/src" -w /src \
+            registry.gitlab.com/openrgbdevelopers/openrgb-linux-ci-deb-builder:trixie-amd64 \
+            bash -euxc 'qmake && make -j"$(nproc)"' > build.log 2>&1 || { tail -n 80 build.log; echo "failed=true" >> "$GITHUB_OUTPUT"; exit 0; }
+      - name: Open an issue if it does not compile
+        if: steps.compile.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { echo "The Razer fix rebased cleanly (${{ matrix.variant }}) but the result does not compile."; echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"; echo '```'; tail -n 60 build.log; echo '```'; } > body.md
+          title="openrgb-razer needs manual rebase"
+          n=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then gh issue comment "$n" --body-file body.md; else gh issue create --title "$title" --body-file body.md; fi
+      - name: Mark the variant as built
+        if: steps.want.outputs.go == 'true' && steps.compile.outputs.failed != 'true'
+        run: mkdir -p ok && echo ok > "ok/${{ matrix.variant }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.want.outputs.go == 'true' && steps.compile.outputs.failed != 'true'
+        with:
+          name: built-${{ matrix.variant }}
+          path: ok/${{ matrix.variant }}
+
+  publish:
+    name: Push and release
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.plan.outputs.dry_run != 'true' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: candidates
+          path: cand
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: built-*
+          path: built
+      - name: Push the rebased branches and start the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATE: ${{ needs.plan.outputs.date }}
+          STABLE_TAG: ${{ needs.plan.outputs.stable_tag }}
+          MASTER_OLD: ${{ needs.plan.outputs.master_old_sha }}
+          STABLE_OLD: ${{ needs.plan.outputs.stable_old_sha }}
+        run: |
+          git fetch -q cand/candidates.bundle 'refs/heads/*:refs/remotes/cand/*'
+          # The rebased branches are replaced (they are rebases), but only if nobody pushed meanwhile.
+          if [ -f built/built-master/master ]; then
+            git push --force-with-lease="refs/heads/openrgb-razer-master:$MASTER_OLD" origin refs/remotes/cand/cand-master:refs/heads/openrgb-razer-master
+            gh workflow run openrgb-razer-release.yml -f ref=openrgb-razer-master -f "tag=openrgb-razer-master-$DATE" -f publish=true
+          fi
+          if [ -f built/built-stable/stable ]; then
+            git push --force-with-lease="refs/heads/openrgb-razer:$STABLE_OLD" origin refs/remotes/cand/cand-stable:refs/heads/openrgb-razer
+            gh workflow run openrgb-razer-release.yml -f ref=openrgb-razer -f "tag=$STABLE_TAG" -f publish=true
+          fi
