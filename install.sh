@@ -22,6 +22,7 @@ UNINSTALL=0
 RAZER=auto # auto | yes | no
 CD_VERSION=""
 RAZER_VERSION=""
+TAG_RE='^[A-Za-z0-9._-]+$'
 
 case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
   es*) LANG_ES=1 ;;
@@ -67,42 +68,43 @@ EOF
   fi
 }
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --razer) RAZER=yes ;;
-    --no-razer) RAZER=no ;;
-    --yes | -y) ASSUME_YES=1 ;;
-    --uninstall) UNINSTALL=1 ;;
-    --dry-run) DRY_RUN=1 ;;
-    --version)
-      [ $# -ge 2 ] || die "--version needs a value"
-      CD_VERSION="$2"
-      shift
-      ;;
-    --version=*) CD_VERSION="${1#*=}" ;;
-    --razer-version)
-      [ $# -ge 2 ] || die "--razer-version needs a value"
-      RAZER_VERSION="$2"
-      shift
-      ;;
-    --razer-version=*) RAZER_VERSION="${1#*=}" ;;
-    --help | -h)
-      usage
-      exit 0
-      ;;
-    *) die "$(t "unknown option: $1 (see --help)" "opción desconocida: $1 (mira --help)")" ;;
-  esac
-  shift
-done
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --razer) RAZER=yes ;;
+      --no-razer) RAZER=no ;;
+      --yes | -y) ASSUME_YES=1 ;;
+      --uninstall) UNINSTALL=1 ;;
+      --dry-run) DRY_RUN=1 ;;
+      --version)
+        [ $# -ge 2 ] || die "--version needs a value"
+        CD_VERSION="$2"
+        shift
+        ;;
+      --version=*) CD_VERSION="${1#*=}" ;;
+      --razer-version)
+        [ $# -ge 2 ] || die "--razer-version needs a value"
+        RAZER_VERSION="$2"
+        shift
+        ;;
+      --razer-version=*) RAZER_VERSION="${1#*=}" ;;
+      --help | -h)
+        usage
+        exit 0
+        ;;
+      *) die "$(t "unknown option: $1 (see --help)" "opción desconocida: $1 (mira --help)")" ;;
+    esac
+    shift
+  done
 
-if [ "$(id -u)" -eq 0 ]; then
-  die "$(t "do not run this as root; it asks for sudo only where needed." "no lo ejecutes como root; pide sudo solo donde hace falta.")"
-fi
+  if [ "$(id -u)" -eq 0 ]; then
+    die "$(t "do not run this as root; it asks for sudo only where needed." "no lo ejecutes como root; pide sudo solo donde hace falta.")"
+  fi
 
-TAG_RE='^[A-Za-z0-9._-]+$'
-for v in "$CD_VERSION" "$RAZER_VERSION"; do
-  if [ -n "$v" ] && ! [[ $v =~ $TAG_RE ]]; then die "invalid version/tag: $v"; fi
-done
+  for v in "$CD_VERSION" "$RAZER_VERSION"; do
+    if [ -n "$v" ] && ! [[ $v =~ $TAG_RE ]]; then die "invalid version/tag: $v"; fi
+  done
+}
 
 # ---------------------------------------------------------------------------------------------
 # helpers
@@ -136,7 +138,8 @@ confirm() {
 # Prints a command, then runs it unless --dry-run.
 run() {
   printf '  + %s\n' "$*"
-  [ "$DRY_RUN" = 1 ] || "$@"
+  # Never let a child read the rest of a piped script from our stdin.
+  [ "$DRY_RUN" = 1 ] || "$@" </dev/null
 }
 
 # Same, through sudo (never when already root: the script refuses to run as root anyway).
@@ -165,69 +168,71 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # platform detection
 # ---------------------------------------------------------------------------------------------
 
-OS="$(uname -s)"
-case "$OS" in
-  Linux | Darwin) ;;
-  *) die "$(t "unsupported system: $OS (on Windows use install.ps1)" "sistema no soportado: $OS (en Windows usa install.ps1)")" ;;
-esac
+detect_platform() {
+  OS="$(uname -s)"
+  case "$OS" in
+    Linux | Darwin) ;;
+    *) die "$(t "unsupported system: $OS (on Windows use install.ps1)" "sistema no soportado: $OS (en Windows usa install.ps1)")" ;;
+  esac
 
-case "$(uname -m)" in
-  x86_64 | amd64) ARCH=x86_64 ;;
-  aarch64 | arm64) ARCH=aarch64 ;;
-  *) die "$(t "unsupported architecture: $(uname -m)" "arquitectura no soportada: $(uname -m)")" ;;
-esac
-case "$ARCH" in
-  x86_64)
-    DEB_ARCH=amd64
-    ;;
-  *)
-    DEB_ARCH=arm64
-    ;;
-esac
+  case "$(uname -m)" in
+    x86_64 | amd64) ARCH=x86_64 ;;
+    aarch64 | arm64) ARCH=aarch64 ;;
+    *) die "$(t "unsupported architecture: $(uname -m)" "arquitectura no soportada: $(uname -m)")" ;;
+  esac
+  case "$ARCH" in
+    x86_64)
+      DEB_ARCH=amd64
+      ;;
+    *)
+      DEB_ARCH=arm64
+      ;;
+  esac
 
-FAMILY=appimage # arch | deb | rpm | appimage
-PRETTY="$OS"
-if [ "$OS" = Linux ] && [ -r /etc/os-release ]; then
-  # shellcheck disable=SC1091
-  osr="$(
-    . /etc/os-release
-    printf '%s|%s|%s' "${ID:-}" "${ID_LIKE:-}" "${PRETTY_NAME:-Linux}"
-  )"
-  os_id="${osr%%|*}"
-  rest="${osr#*|}"
-  os_like="${rest%%|*}"
-  PRETTY="${rest#*|}"
-  for w in $os_id $os_like; do
-    case "$w" in
-      arch | manjaro | cachyos | endeavouros | garuda | archarm) FAMILY=arch && break ;;
-      debian | ubuntu | linuxmint | pop | raspbian | neon | zorin | elementary) FAMILY=deb && break ;;
-      fedora | rhel | centos | rocky | almalinux | nobara | opensuse* | suse | sles) FAMILY=rpm && break ;;
-    esac
-  done
-fi
+  FAMILY=appimage # arch | deb | rpm | appimage
+  PRETTY="$OS"
+  if [ "$OS" = Linux ] && [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    osr="$(
+      . /etc/os-release
+      printf '%s|%s|%s' "${ID:-}" "${ID_LIKE:-}" "${PRETTY_NAME:-Linux}"
+    )"
+    os_id="${osr%%|*}"
+    rest="${osr#*|}"
+    os_like="${rest%%|*}"
+    PRETTY="${rest#*|}"
+    for w in $os_id $os_like; do
+      case "$w" in
+        arch | manjaro | cachyos | endeavouros | garuda | archarm) FAMILY=arch && break ;;
+        debian | ubuntu | linuxmint | pop | raspbian | neon | zorin | elementary) FAMILY=deb && break ;;
+        fedora | rhel | centos | rocky | almalinux | nobara | opensuse* | suse | sles) FAMILY=rpm && break ;;
+      esac
+    done
+  fi
 
-# The openrgb-razer .deb is built on Debian 13 and the .rpm on Fedora 44: other derivatives (Ubuntu,
-# openSUSE...) have different library versions and get the AppImage instead. Arch is built on Arch.
-RAZER_NATIVE=0
-case "$FAMILY:${os_id:-}" in
-  arch:*) RAZER_NATIVE=1 ;;
-  deb:debian | deb:raspbian) RAZER_NATIVE=1 ;;
-  rpm:fedora | rpm:nobara) RAZER_NATIVE=1 ;;
-esac
+  # The openrgb-razer .deb is built on Debian 13 and the .rpm on Fedora 44: other derivatives (Ubuntu,
+  # openSUSE...) have different library versions and get the AppImage instead. Arch is built on Arch.
+  RAZER_NATIVE=0
+  case "$FAMILY:${os_id:-}" in
+    arch:*) RAZER_NATIVE=1 ;;
+    deb:debian | deb:raspbian) RAZER_NATIVE=1 ;;
+    rpm:fedora | rpm:nobara) RAZER_NATIVE=1 ;;
+  esac
 
-RPM_TOOL=""
-if [ "$FAMILY" = rpm ]; then
-  if have dnf; then
-    RPM_TOOL=dnf
-  elif have zypper; then
-    RPM_TOOL=zypper
-  else FAMILY=appimage; fi
-fi
-# Package managers that are not installed cannot be used even if the distro says so.
-case "$FAMILY" in
-  arch) have pacman || FAMILY=appimage ;;
-  deb) have apt-get || FAMILY=appimage ;;
-esac
+  RPM_TOOL=""
+  if [ "$FAMILY" = rpm ]; then
+    if have dnf; then
+      RPM_TOOL=dnf
+    elif have zypper; then
+      RPM_TOOL=zypper
+    else FAMILY=appimage; fi
+  fi
+  # Package managers that are not installed cannot be used even if the distro says so.
+  case "$FAMILY" in
+    arch) have pacman || FAMILY=appimage ;;
+    deb) have apt-get || FAMILY=appimage ;;
+  esac
+}
 
 # ---------------------------------------------------------------------------------------------
 # release lookup (GitHub API, no jq needed)
@@ -239,7 +244,8 @@ latest_tag() {
   json="$(http_get "${API}/releases?per_page=100")" || die "$(t "could not reach the GitHub API" "no se pudo contactar con la API de GitHub")"
   printf '%s\n' "$json" | awk -v re="$re" '
     /^    "tag_name":/ { tag = $2; gsub(/[",]/, "", tag) }
-    /^    "prerelease":/ { pre = $2; gsub(/,/, "", pre); if (!done && tag ~ re && pre == "false") { print tag; done = 1 } tag = "" }'
+    /^    "prerelease":/ { pre = $2; gsub(/,/, "", pre); if (!done && tag ~ re && pre == "false") { print tag; done = 1 } tag = "" }' |
+    grep -E "$TAG_RE" || true
 }
 
 # release_assets TAG: the browser_download_url of every asset.
@@ -564,10 +570,13 @@ uninstall_all() {
   info "$(t "Removing chroma-desk" "Quitando chroma-desk")"
   if [ "$OS" = Darwin ]; then
     if [ -w /Applications ]; then run rm -rf /Applications/chroma-desk.app; else run_sudo rm -rf /Applications/chroma-desk.app; fi
-  elif [ "$cdm" = appimage ] || { [ "$FAMILY" != appimage ] && ! pkg_installed chroma-desk; }; then
+  elif [ "$cdm" = appimage ]; then
+    # Only the AppImage this script put there (recorded in the state file).
     run rm -f "$HOME/.local/bin/chroma-desk"
-  else
+  elif [ "$FAMILY" != appimage ] && pkg_installed chroma-desk; then
     pm_remove chroma-desk
+  else
+    warn "$(t "chroma-desk was not installed by this script or as a package: nothing to remove." "chroma-desk no lo instaló este script ni es un paquete: no hay nada que quitar.")"
   fi
   run rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/chroma-desk.desktop"
   if [ -n "$razer" ]; then
@@ -589,58 +598,65 @@ uninstall_all() {
 # main
 # ---------------------------------------------------------------------------------------------
 
-info "$(t "System: $PRETTY, $ARCH (package type: $FAMILY)" "Sistema: $PRETTY, $ARCH (tipo de paquete: $FAMILY)")"
-[ "$DRY_RUN" = 1 ] && info "$(t "Dry run: nothing will be installed." "Simulación: no se instalará nada.")"
+main() {
+  parse_args "$@"
+  detect_platform
+  info "$(t "System: $PRETTY, $ARCH (package type: $FAMILY)" "Sistema: $PRETTY, $ARCH (tipo de paquete: $FAMILY)")"
+  [ "$DRY_RUN" = 1 ] && info "$(t "Dry run: nothing will be installed." "Simulación: no se instalará nada.")"
 
-if [ "$UNINSTALL" = 1 ]; then
-  confirm "Remove chroma-desk (and revert openrgb-razer if this script installed it)?" "¿Quitar chroma-desk (y revertir openrgb-razer si lo instaló este script)?" y || exit 0
-  uninstall_all
-  exit 0
-fi
-
-USE_RAZER=0
-if [ "$OS" = Linux ]; then
-  detect_razer
-  if [ ${#RAZER_FOUND[@]} -gt 0 ]; then
-    info "$(t "Razer devices detected:" "Dispositivos Razer detectados:")"
-    printf '    - %s\n' "${RAZER_FOUND[@]}"
+  if [ "$UNINSTALL" = 1 ]; then
+    confirm "Remove chroma-desk (and revert openrgb-razer if this script installed it)?" "¿Quitar chroma-desk (y revertir openrgb-razer si lo instaló este script)?" y || exit 0
+    uninstall_all
+    exit 0
   fi
-  case "$RAZER" in
-    yes) USE_RAZER=1 ;;
-    no) USE_RAZER=0 ;;
-    auto)
-      def=n
-      [ ${#RAZER_FOUND[@]} -gt 0 ] && def=y
-      if confirm "Do you have Razer devices?" "¿Tienes dispositivos Razer?" "$def"; then USE_RAZER=1; fi
-      ;;
-  esac
-  if [ "$USE_RAZER" = 1 ]; then
-    t "openrgb-razer is OpenRGB plus a fix that lets Razer keyboards such as the Huntsman V3 Pro TKL work on Linux
+
+  USE_RAZER=0
+  if [ "$OS" = Linux ]; then
+    detect_razer
+    if [ ${#RAZER_FOUND[@]} -gt 0 ]; then
+      info "$(t "Razer devices detected:" "Dispositivos Razer detectados:")"
+      printf '    - %s\n' "${RAZER_FOUND[@]}"
+    fi
+    case "$RAZER" in
+      yes) USE_RAZER=1 ;;
+      no) USE_RAZER=0 ;;
+      auto)
+        def=n
+        [ ${#RAZER_FOUND[@]} -gt 0 ] && def=y
+        if confirm "Do you have Razer devices?" "¿Tienes dispositivos Razer?" "$def"; then USE_RAZER=1; fi
+        ;;
+    esac
+    if [ "$USE_RAZER" = 1 ]; then
+      t "openrgb-razer is OpenRGB plus a fix that lets Razer keyboards such as the Huntsman V3 Pro TKL work on Linux
 (the official OpenRGB cannot reach their lighting interface). It replaces the official OpenRGB package.
 " "openrgb-razer es OpenRGB más un arreglo que hace funcionar en Linux teclados Razer como el Huntsman V3 Pro TKL
 (el OpenRGB oficial no llega a su interfaz de iluminación). Sustituye al paquete oficial de OpenRGB.
 "
+    fi
+  else
+    RAZER=no
+    info "$(t "macOS: installing the official OpenRGB (the Razer fix is Linux-only)." "macOS: se instala el OpenRGB oficial (el arreglo Razer es solo para Linux).")"
   fi
-else
-  RAZER=no
-  info "$(t "macOS: installing the official OpenRGB (the Razer fix is Linux-only)." "macOS: se instala el OpenRGB oficial (el arreglo Razer es solo para Linux).")"
-fi
 
-if [ "$ASSUME_YES" = 0 ] && [ "$DRY_RUN" = 0 ]; then
-  confirm "Continue?" "¿Continuar?" y || {
-    info "$(t "Cancelled." "Cancelado.")"
-    exit 0
-  }
-fi
+  if [ "$ASSUME_YES" = 0 ] && [ "$DRY_RUN" = 0 ]; then
+    confirm "Continue?" "¿Continuar?" y || {
+      info "$(t "Cancelled." "Cancelado.")"
+      exit 0
+    }
+  fi
 
-if [ "$USE_RAZER" = 1 ]; then install_openrgb_razer; else install_openrgb_official; fi
-install_chroma_desk
-post_install
+  if [ "$USE_RAZER" = 1 ]; then install_openrgb_razer; else install_openrgb_official; fi
+  install_chroma_desk
+  post_install
 
-cat <<EOF
+  cat <<EOF
 
 $(t "Done. Next steps:" "Listo. Siguientes pasos:")
   - $(t "Run: chroma-desk (it starts the OpenRGB server by itself)." "Ejecuta: chroma-desk (arranca el servidor de OpenRGB por sí solo).")
   - $(t "If a device is not found, log out and back in (udev rules / groups) and check 'openrgb --list-devices'." "Si no aparece un dispositivo, cierra sesión y vuelve a entrar (reglas udev / grupos) y prueba 'openrgb --list-devices'.")
   - $(t "Remove everything later with: install.sh --uninstall" "Para quitarlo todo más adelante: install.sh --uninstall")
 EOF
+}
+
+# Everything above only defines functions, so a truncated download (curl | bash) runs nothing.
+main "$@"
