@@ -470,6 +470,8 @@ install_openrgb_official() {
   fi
   if [ "$FAMILY" != appimage ] && pm_install_repo openrgb; then
     state_set official native
+  elif [ "${1:-}" = revert ]; then
+    warn "$(t "The official OpenRGB is not available from your package manager: OpenRGB is now uninstalled." "El OpenRGB oficial no está en los repositorios de tu distribución: OpenRGB queda desinstalado.")"
   else
     # Not packaged for this distribution (Debian and Ubuntu do not ship it): the openrgb-razer
     # builds are upstream OpenRGB plus the Razer fix, and come from the same trusted release page.
@@ -577,7 +579,7 @@ uninstall_all() {
     elif pkg_installed openrgb-razer || [ "$DRY_RUN" = 1 ]; then
       pm_remove openrgb-razer
     fi
-    install_openrgb_official
+    install_openrgb_official revert
   fi
   state_clear
   info "$(t "Done. Your chroma-desk settings were kept (~/.config/chroma-desk)." "Listo. Tus ajustes de chroma-desk se conservan (~/.config/chroma-desk).")"
