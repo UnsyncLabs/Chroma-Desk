@@ -3,7 +3,7 @@
 #   cd packaging/arch && makepkg -si
 pkgname=chroma-desk
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Modern UI for OpenRGB: per-LED painting, effect layers, profiles and tray'
 arch=(x86_64)
 url='https://github.com/neokuze/chroma-desk'
