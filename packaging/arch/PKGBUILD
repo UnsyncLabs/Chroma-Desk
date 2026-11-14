@@ -1,37 +1,41 @@
-# OpenRGB 1.1 + soporte para Razer Huntsman V3 Pro TKL en Linux (via hidapi-libusb)
-# Instalar:  cd packaging/arch && makepkg -si
-# Reemplaza al paquete oficial "openrgb".
+# Maintainer: neokuze
+# OpenRGB + Razer Huntsman V3 Pro TKL support on Linux (control interface via hidapi-libusb).
+# Builds the checkout this PKGBUILD lives in (packaging/arch/ inside the repository):
+#   cd packaging/arch && makepkg -si
+# It replaces the official "openrgb" package (provides/conflicts/replaces openrgb).
+# CI overrides the version with:  OPENRGB_RAZER_VER=1.1 OPENRGB_RAZER_REL=1 makepkg
 
 pkgname=openrgb-razer
-pkgver=1.1
-pkgrel=1
+pkgver=${OPENRGB_RAZER_VER:-1.1}
+pkgrel=${OPENRGB_RAZER_REL:-1}
 pkgdesc="OpenRGB with Razer Huntsman V3 Pro TKL support on Linux (control interface via hidapi-libusb)"
-arch=('x86_64')
-url="https://gitlab.com/CalcProgrammer1/OpenRGB"
+arch=('x86_64' 'aarch64')
+url="https://github.com/UnsyncLabs/Chroma-Desk/tree/openrgb-razer"
 license=('GPL-2.0-or-later')
 depends=('glibc' 'gcc-libs' 'qt6-base' 'libusb' 'hidapi' 'mbedtls3' 'hicolor-icon-theme')
 makedepends=('git' 'qt6-tools')
 provides=("openrgb=${pkgver}")
 conflicts=('openrgb')
-# Repositorio local (este mismo fork), rama "openrazer"
-source=("openrgb-razer::git+file://$(realpath "${startdir}/../..")#branch=openrazer")
-sha256sums=('SKIP')
+replaces=('openrgb')
+options=('!lto')
+
+_root="$(realpath "${startdir}/../..")"
 
 build() {
-    cd "${srcdir}/openrgb-razer"
-    mkdir -p build && cd build
-    qmake6 ../OpenRGB.pro PREFIX=/usr CONFIG+=release
+    mkdir -p "${srcdir}/build"
+    cd "${srcdir}/build"
+    qmake6 "${_root}/OpenRGB.pro" PREFIX=/usr CONFIG+=release
     make -j"$(nproc)"
 }
 
 package() {
-    cd "${srcdir}/openrgb-razer/build"
+    cd "${srcdir}/build"
     make INSTALL_ROOT="${pkgdir}" install
 
-    # Reglas udev (acceso sin root a los dispositivos RGB)
+    # udev rules (access to the RGB devices without root)
     install -dm755 "${pkgdir}/usr/lib/udev/rules.d"
     ./openrgb --generate-udev-rules "${pkgdir}/usr/lib/udev/rules.d/60-openrgb.rules"
 
-    # Acceso a SMBus/I2C (RAM, placa base)
+    # SMBus/I2C access (RAM, motherboards)
     install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules-load.d/openrgb.conf" <<< "i2c-dev"
 }

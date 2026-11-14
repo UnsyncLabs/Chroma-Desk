@@ -1,0 +1,64 @@
+%global _name OpenRGB
+%global _pkg openrgb
+
+Name:           openrgb-razer
+Version:        __VERSION__
+Release:        __RELEASE__%{?dist}
+Summary:        OpenRGB with Razer Huntsman V3 Pro TKL support on Linux
+
+License:        GPLv2
+URL:            https://github.com/UnsyncLabs/Chroma-Desk/tree/openrgb-razer
+
+BuildRequires:  gcc-c++ libusbx-devel libstdc++-devel qt6-qtbase-devel qt6-linguist desktop-file-utils hidapi-devel mbedtls-devel systemd-rpm-macros
+Requires:       hicolor-icon-theme
+Requires:       qt6-qtbase
+Requires:       mbedtls
+Requires:       hidapi
+Provides:       openrgb = %{version}-%{release}
+Obsoletes:      openrgb
+Requires:       libusbx
+
+%description
+Open source RGB lighting control that doesn't depend on manufacturer software. Supports Windows and Linux.
+
+ASUS, ASRock, Corsair, G.Skill, Gigabyte, HyperX, MSI, Razer, ThermalTake, and more supported
+
+%prep
+cp -r %{_sourcedir}/%{_name}/. %{_builddir}
+
+%build
+cd %{_builddir}
+export CXXFLAGS=${CXXFLAGS/-pipe}
+%qmake_qt6 PREFIX=%{_prefix}
+%make_build
+
+%install
+%make_install INSTALL_ROOT=%{buildroot}
+
+# Generate the udev rules with the freshly installed OpenRGB binary.
+%{buildroot}%{_bindir}/%{_pkg} --generate-udev-rules 60-openrgb.rules
+install -p -D --mode=0644 60-openrgb.rules %{buildroot}%{_udevrulesdir}/60-openrgb.rules
+
+#desktop
+desktop-file-install %{_sourcedir}/%{_name}/qt/org.%{_pkg}.%{_name}.desktop
+
+%post -n %{name}
+if [ -S /run/udev/control ]; then
+    udevadm control --reload
+    udevadm trigger
+fi
+
+%files
+%{_bindir}/%{_pkg}
+%{_datadir}/icons/hicolor/*/apps/org.%{_pkg}.%{_name}.png
+%{_datadir}/applications/org.%{_pkg}.%{_name}.desktop
+%{_metainfodir}/org.%{_pkg}.%{_name}.metainfo.xml
+%{_udevrulesdir}/60-%{_pkg}.rules
+%{_unitdir}/openrgb.service
+%{_tmpfilesdir}/openrgb.conf
+%license LICENSE
+%doc README.md
+
+%changelog
+* Sat Nov 14 2026 neokuze <imneokuze@gmail.com> - __VERSION__-__RELEASE__
+- openrgb-razer: OpenRGB __VERSION__ plus Huntsman V3 Pro TKL support via hidapi-libusb

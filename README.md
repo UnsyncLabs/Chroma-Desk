@@ -1,3 +1,5 @@
+> **openrgb-razer:** this branch is OpenRGB plus a fix for the Razer Huntsman V3 Pro TKL on Linux. See [README-openrgb-razer.md](README-openrgb-razer.md).
+
 ## ![OpenRGB](Documentation/Images/OpenRGB.png "OpenRGB Logo")
 
 ![Pipeline Status](https://gitlab.com/CalcProgrammer1/OpenRGB/badges/master/pipeline.svg)

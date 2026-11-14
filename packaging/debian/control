@@ -1,0 +1,36 @@
+Source: openrgb-razer
+Maintainer: neokuze <imneokuze@gmail.com>
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+Build-Depends:
+ debhelper (>= 9),
+ pkg-config,
+ git,
+ qt6-base-dev,
+ qt6-base-dev-tools,
+ qt6-tools-dev-tools,
+ qmake6,
+ libusb-1.0-0-dev,
+ libhidapi-dev,
+ libmbedtls-dev,
+Homepage: https://github.com/UnsyncLabs/Chroma-Desk/tree/openrgb-razer
+
+Package: openrgb-razer
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ udev,
+ libhidapi-libusb0,
+Provides:
+ openrgb,
+Conflicts:
+ openrgb,
+ openrgb-udev,
+Replaces:
+ openrgb,
+Description: OpenRGB with Razer Huntsman V3 Pro TKL support on Linux
+ OpenRGB controls RGB lighting. This build adds a libusb path for the
+ control interface of the Razer Huntsman V3 Pro TKL, which the official
+ OpenRGB cannot reach on Linux. It replaces the official openrgb package.
