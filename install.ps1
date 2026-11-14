@@ -75,7 +75,10 @@ function Get-Verified($release, [string]$pattern, [string]$dir) {
   if ($DryRun) { Write-Host "  + download $($asset.browser_download_url) (+ SHA256SUMS check)"; return $dest }
   Info (T "Downloading $name" "Descargando $name")
   Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
-  $sums = (Invoke-WebRequest -Uri "${base}SHA256SUMS" -UseBasicParsing).Content -split "`n"
+  # SHA256SUMS has no extension, so GitHub serves it as application/octet-stream and .Content is a byte[].
+  $raw = (Invoke-WebRequest -Uri "${base}SHA256SUMS" -UseBasicParsing).Content
+  if ($raw -is [byte[]]) { $raw = [Text.Encoding]::UTF8.GetString($raw) }
+  $sums = ([string]$raw) -split "\r?\n"
   $line = $sums | Where-Object { $_ -match "^\s*([0-9a-fA-F]{64})\s+\*?$([regex]::Escape($name))\s*$" } | Select-Object -First 1
   if (-not $line) { throw (T "$name is not listed in SHA256SUMS: refusing to install it" "$name no aparece en SHA256SUMS: no lo instalo") }
   $expected = ($line -split '\s+')[0]
