@@ -23,7 +23,45 @@ Not included: effects that react to key presses.
 
 ## Install
 
-### Arch Linux
+### One-line installer (Linux and macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/UnsyncLabs/Chroma-Desk/main/install.sh | bash
+```
+
+It detects your system (Arch, Debian/Ubuntu, Fedora/openSUSE, anything else via AppImage; x86_64 and arm64), looks for Razer devices and asks whether you have any, installs OpenRGB (the Razer-capable **openrgb-razer** on Linux if you do, the official one otherwise), then chroma-desk. Downloads come only from `github.com/UnsyncLabs`, are checked against `SHA256SUMS`, and `sudo` is used only for the steps that need it (the command is shown first); never run it as root. Options: `--razer` / `--no-razer`, `--yes` (no questions), `--version vX.Y.Z`, `--dry-run` (show what it would do), `--uninstall` (remove chroma-desk; goes back to the official OpenRGB if the script installed openrgb-razer). Messages are in Spanish when `LANG=es*`. Prefer to read it first: download `install.sh`, read it, run `bash install.sh`.
+
+**Windows:** `irm https://raw.githubusercontent.com/UnsyncLabs/Chroma-Desk/main/install.ps1 | iex` (installs the MSI, offers the official OpenRGB through winget).
+
+### Downloads
+
+Every [release](https://github.com/UnsyncLabs/Chroma-Desk/releases) has `SHA256SUMS` and:
+
+| Platform | File |
+| --- | --- |
+| Linux x86_64 / arm64 | `.deb`, `.rpm`, `.AppImage` |
+| Arch Linux x86_64 | `chroma-desk-*.pkg.tar.zst` |
+| Windows x86_64 | `.msi`, `-setup.exe` (NSIS) |
+| macOS (Apple silicon and Intel) | `_universal.dmg` |
+
+chroma-desk is only the UI: it needs OpenRGB installed (see below for Razer). **The builds are not code-signed** (no certificates yet): on macOS the first launch says the developer is unidentified (right-click the app, *Open*, confirm; or *System Settings, Privacy & Security, Open Anyway*), and Windows SmartScreen shows "Windows protected your PC" (*More info*, *Run anyway*). Checksums are your integrity check: `sha256sum -c --ignore-missing SHA256SUMS`.
+
+Not available outside Linux: desktop-notification triggers (D-Bus), Omarchy/KDE/pywal/GNOME theme sources, the systemd OpenRGB service and CPU temperature; the UI hides them. On Windows the local control socket is the named pipe `\\.\pipe\chroma-desk` (same JSON protocol; `chroma-desk trigger` uses it automatically).
+
+### Razer devices
+
+The official OpenRGB cannot see the **Razer Huntsman V3 Pro TKL** on Linux (its lighting interface has no interrupt endpoint, so the kernel creates no hidraw node). **openrgb-razer** is OpenRGB plus a fix that reaches it through libusb. Use it **only on Linux and only if you have such a keyboard**; it replaces the official `openrgb` package (it declares `Provides/Conflicts/Replaces: openrgb`, so chroma-desk keeps working). On Windows and macOS the official OpenRGB is all you need. `install.sh` picks it for you; manual downloads are the releases tagged `openrgb-razer-v*` (`.deb` for Debian 13, `.rpm` for Fedora 44, Arch package, AppImage for the rest, x86_64 and aarch64). Details: branch [`openrgb-razer`](https://github.com/UnsyncLabs/Chroma-Desk/tree/openrgb-razer).
+
+### Branches of this repository
+
+| Branch | Contents |
+| --- | --- |
+| `main` | chroma-desk (default branch) |
+| `electron-openrgb` | an unmodified copy of OpenRGB `master`, kept in sync daily by a workflow (the repository is a fork of [CalcProgrammer1/OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB); the other upstream branches are kept too) |
+| `openrgb-razer` | OpenRGB `release_1.1` + the Razer fix (stable) |
+| `openrgb-razer-master` | the fix rebased on the current OpenRGB `master` (updated by the sync workflow) |
+
+### Arch Linux (from source)
 
 ```sh
 cd packaging/arch && makepkg -si
@@ -338,7 +376,29 @@ No incluido: efectos reactivos a las teclas pulsadas.
 
 ## Instalación
 
-### Arch Linux
+### Instalador de una línea (Linux y macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/UnsyncLabs/Chroma-Desk/main/install.sh | bash
+```
+
+Detecta tu sistema (Arch, Debian/Ubuntu, Fedora/openSUSE, el resto con AppImage; x86_64 y arm64), busca dispositivos Razer y te pregunta si tienes alguno, instala OpenRGB (en Linux, **openrgb-razer** si tienes Razer, el oficial si no) y después chroma-desk. Solo descarga de `github.com/UnsyncLabs`, comprueba `SHA256SUMS` y usa `sudo` únicamente donde hace falta (muestra el comando antes); no lo ejecutes como root. Opciones: `--razer` / `--no-razer`, `--yes` (sin preguntas), `--version vX.Y.Z`, `--dry-run` (muestra lo que haría), `--uninstall` (quita chroma-desk y vuelve al OpenRGB oficial si el script instaló openrgb-razer). Los mensajes salen en español con `LANG=es*`.
+
+**Windows:** `irm https://raw.githubusercontent.com/UnsyncLabs/Chroma-Desk/main/install.ps1 | iex` (instala el MSI y ofrece el OpenRGB oficial con winget).
+
+### Descargas
+
+Cada [release](https://github.com/UnsyncLabs/Chroma-Desk/releases) trae `SHA256SUMS` y: Linux x86_64/arm64 (`.deb`, `.rpm`, `.AppImage`), Arch x86_64 (`chroma-desk-*.pkg.tar.zst`), Windows x86_64 (`.msi`, `-setup.exe`) y macOS (`_universal.dmg`, Apple silicon e Intel). chroma-desk es solo la interfaz: necesita OpenRGB. **Los paquetes no están firmados** (aún no hay certificados): en macOS el primer arranque dice «desarrollador no identificado» (clic derecho, *Abrir*, confirmar) y en Windows SmartScreen muestra «Windows protegió tu PC» (*Más información*, *Ejecutar de todas formas*). Fuera de Linux no están disponibles los disparadores por notificaciones de escritorio, las fuentes de tema Omarchy/KDE/pywal/GNOME, el servicio systemd de OpenRGB ni la temperatura de CPU; la interfaz los oculta. En Windows el socket local es la tubería `\\.\pipe\chroma-desk` (mismo protocolo JSON).
+
+### Dispositivos Razer
+
+El OpenRGB oficial no ve el **Razer Huntsman V3 Pro TKL** en Linux. **openrgb-razer** es OpenRGB más un arreglo que llega a él con libusb. Úsalo **solo en Linux y solo si tienes ese teclado**: sustituye al paquete `openrgb` (declara `Provides/Conflicts/Replaces: openrgb`). En Windows y macOS basta el OpenRGB oficial. `install.sh` lo elige por ti; las descargas manuales son los releases `openrgb-razer-v*`. Más información: rama [`openrgb-razer`](https://github.com/UnsyncLabs/Chroma-Desk/tree/openrgb-razer).
+
+### Ramas
+
+`main` es chroma-desk; `electron-openrgb` es una copia sin cambios del `master` de OpenRGB (sincronizada a diario por un workflow; el repositorio es un fork de OpenRGB y conserva sus ramas); `openrgb-razer` es OpenRGB `release_1.1` + el arreglo Razer (estable); `openrgb-razer-master` es el arreglo rebasado sobre el `master` actual.
+
+### Arch Linux (desde el código)
 
 ```sh
 cd packaging/arch && makepkg -si

@@ -103,3 +103,33 @@ Frames W -> A -> D looping, crossfade (W fades into A), path head advancing in s
 - "Stop all" (button, `trigger --stop`, socket `stop`) now pauses Always automations (`Engine.paused_always`, kept while the automation is unchanged and enabled); Resume button, `trigger --resume`, socket `resume`, commands `resume_triggers` / `paused_automations`. Every/Threshold keep running (they are one-shot alerts).
 - Audit round: Claude hook matching is "our command, optionally with extra flags" (a `--from codex` hook is never removed), settings.json symlinks are written through, scheduler durations cannot panic on hand-edited NaN/negative values. Live checks: `examples/monitor_demo.rs` (meters vs sensors) and `examples/desktop_demo.rs` (chat templates through a private dbus-daemon + stub notification daemon; compare only the template colour, the installed app also writes the keyboard).
 - Intel GPUs report "not available" (no unprivileged usage counter).
+
+
+## Distribution: releases, installer, OpenRGB sync
+
+### Portability (cfg gating)
+- `zbus` is a Linux-only dependency; `sysinfo` is used instead of `/proc` on Windows/macOS (CPU, RAM, OpenRGB window check; `cpu.temp` unavailable there). `desktop.rs` (D-Bus notifications) is `cfg(target_os = "linux")` with a stub reporting `unavailable` elsewhere. `socket.rs`: Unix socket on Linux/macOS, named pipe `\\.\pipe\chroma-desk` on Windows (same protocol). `server.rs`: `find_openrgb()` looks at `PATH` and the usual per-OS install paths; the systemd unit is Linux only.
+- `capabilities.rs` + command `capabilities` list what the platform supports; the UI (`lib/capabilities.svelte.ts`) hides the rest. The mock returns the Linux list.
+- Gotcha: store modules are `*Store.svelte.ts` because `profiles.svelte` vs `Profiles.svelte` collide on case-insensitive file systems (broke the Windows/macOS Vite build).
+- Local Windows check without mingw: `cargo check --target x86_64-pc-windows-gnu` needs a stand-in `x86_64-w64-mingw32-windres` (any script that creates the `-o` file) on `PATH`; macOS: `CC_aarch64_apple_darwin=true AR_aarch64_apple_darwin=true cargo check --target aarch64-apple-darwin`. CI does the real thing (`ci.yml`, windows-latest and macos-latest).
+
+### Cutting a chroma-desk release
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (+ `Cargo.lock`) and `packaging/arch/PKGBUILD` (`pkgver`, `pkgrel=1`). The workflow refuses a `vX.Y.Z` tag that does not match `tauri.conf.json`.
+2. Merge to `main`, then `git tag vX.Y.Z && git push origin vX.Y.Z`. `release.yml` creates a draft release, builds in parallel (Linux x86_64/arm64 `.deb .rpm .AppImage` via tauri-action, Windows `.msi`/NSIS `.exe`, macOS universal `.dmg`, Arch `.pkg.tar.zst` with makepkg in an `archlinux` container), uploads `SHA256SUMS` and publishes.
+3. Dry run: push a tag `test-vX.Y.Z-rcN` (same pipeline, the release stays a draft; delete it and its tag afterwards). `workflow_dispatch` only works once the workflow exists on `main`.
+- Builds are unsigned. Add signing secrets to tauri-action later (Apple certificate + notarisation, Windows certificate).
+- `install.sh` picks assets by file-name patterns (`chroma-desk_*_amd64.deb`, `chroma-desk-*.x86_64.rpm`, `chroma-desk-*-x86_64.pkg.tar.zst`, `chroma-desk_*_{amd64,aarch64}.AppImage`, `*_universal.dmg`); `install.ps1` takes the `.msi`. Keep those names if you change the bundler config. `install.sh` ignores pre-releases when choosing "latest".
+- Test the installer without touching a machine: `bash install.sh --dry-run --yes --no-razer`, or in containers (`archlinux`, `debian:trixie`, `ubuntu:24.04`, `fedora:44`) as a non-root user with sudo, `--version <tag>` against a published pre-release.
+
+### openrgb-razer
+- Branches: `openrgb-razer` (OpenRGB `release_1.1` + fix + packaging) and `openrgb-razer-master` (rebased on upstream `master`; its fix commit also adds `hid_write`/`hid_get_input_report` to the Razer hidapi wrapper initialiser because upstream's `hidapi_wrapper` grew those members). They contain `packaging/{arch,debian,fedora}`, `README-openrgb-razer.md` and no workflow files, so the sync workflow (default token) can rebase them.
+- Release: `openrgb-razer-release.yml` is on `main`. `gh workflow run openrgb-razer-release.yml -f ref=openrgb-razer -f tag=openrgb-razer-v1.1-r1 -f publish=true` (or push that tag on a `main` commit: it builds the tip of `openrgb-razer`; a tag containing `master` builds `openrgb-razer-master`). `test-` tags/`publish=false` leave a draft. Assets: `.deb` (debian:trixie), `.rpm` (fedora:44), Arch (x86_64), AppImage (OpenRGB's `scripts/build-appimage.sh` and CI image), `60-openrgb.rules`, `SHA256SUMS`; x86_64 and aarch64 except Arch. The deb/rpm use the system hidapi (upstream's packaging needs the `hidapi-hotplug` library which stock distributions lack) and replace `openrgb` (`Provides/Conflicts/Replaces`, rpm `Provides/Obsoletes`).
+- Bumping to a new upstream release by hand: `git rebase --onto release_X.Y release_1.1 openrgb-razer`, push (force-with-lease), tag `openrgb-razer-vX.Y-r1`.
+
+### Keeping the OpenRGB copies current: `sync-openrgb.yml`
+Daily (03:17 UTC) and manual (`dry_run`, default true for manual runs; scheduled runs are real). `scripts/sync-openrgb.sh`:
+- fast-forwards `master` and `electron-openrgb` to `gitlab.com/CalcProgrammer1/OpenRGB` master (never forced; a diverged branch is reported, not touched) and mirrors new upstream `release_*` tags (the first run pushes all of them);
+- rebases `openrgb-razer-master` onto the new master; on success the workflow compiles it in OpenRGB's CI image, then pushes it with `--force-with-lease` (rebases are the only force pushes it does) and dispatches `openrgb-razer-release.yml` for a pre-release `openrgb-razer-master-YYYYMMDD`;
+- when upstream tags a newer `release_X.Y`, rebases `openrgb-razer` on it and releases `openrgb-razer-vX.Y-r1`;
+- a conflict or a failed build opens (or comments on) the issue "openrgb-razer needs manual rebase" with the log. `simulate_conflict=true` tests that path.
+- Permissions: `contents: write`, `issues: write`, `actions: write` (to dispatch the release); no secrets. A push to the `dist` branch runs it as a dry run.
