@@ -16,6 +16,8 @@ Requires:       mbedtls
 Requires:       hidapi
 Provides:       openrgb = %{version}-%{release}
 Obsoletes:      openrgb
+Provides:       openrgb-udev-rules = %{version}-%{release}
+Obsoletes:      openrgb-udev-rules
 Requires:       libusbx
 
 %description
