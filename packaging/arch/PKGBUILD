@@ -6,7 +6,7 @@ pkgver=0.1.0
 pkgrel=2
 pkgdesc='Modern UI for OpenRGB: per-LED painting, effect layers, profiles and tray'
 arch=(x86_64)
-url='https://github.com/neokuze/chroma-desk'
+url='https://github.com/UnsyncLabs/Chroma-Desk'
 license=(GPL-2.0-or-later)
 # openrgb-razer (and any other package providing openrgb) satisfies `openrgb`.
 depends=(openrgb webkit2gtk-4.1 gtk3 libayatana-appindicator)
