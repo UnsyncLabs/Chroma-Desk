@@ -27,7 +27,8 @@ mkdir -p "$WORK"
 say() { echo "$*" | tee -a "$WORK/summary.md"; }
 out() { echo "$1=$2" >>"$OUT"; }
 do_push() { # args for git push
-  if [ "$DRY_RUN" = true ]; then say "- (dry run) would run: git push $*"; else git push "$@"; fi
+  # Fail closed: only the exact value "false" allows a real push (any typo stays a dry run).
+  if [ "$DRY_RUN" != false ]; then say "- (dry run) would run: git push $*"; else git push "$@"; fi
 }
 
 git remote get-url upstream >/dev/null 2>&1 || git remote add upstream "$UPSTREAM_URL"
@@ -91,7 +92,7 @@ rebase_variant master openrgb-razer-master upstream/master
 # stable: newer upstream release than the one the branch is based on?
 base_tag="$(git tag --merged origin/openrgb-razer --list 'release_[0-9]*' 2>/dev/null | sort -V | tail -1 || true)"
 latest_tag="$(git tag --list 'release_[0-9]*' | sort -V | tail -1 || true)"
-if [ -n "$base_tag" ] && [ -n "$latest_tag" ] && [ "$base_tag" != "$latest_tag" ] && [ "$(printf '%s\n%s\n' "$base_tag" "$latest_tag" | sort -V | tail -1)" = "$latest_tag" ]; then
+if [ -n "$base_tag" ] && [[ $latest_tag =~ ^release_[0-9]+(\.[0-9]+)*$ ]] && [ "$base_tag" != "$latest_tag" ] && [ "$(printf '%s\n%s\n' "$base_tag" "$latest_tag" | sort -V | tail -1)" = "$latest_tag" ]; then
   ver="${latest_tag#release_}"
   rtag="openrgb-razer-v${ver}-r1"
   if git ls-remote --exit-code --tags origin "refs/tags/$rtag" >/dev/null 2>&1; then

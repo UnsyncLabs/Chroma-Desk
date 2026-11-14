@@ -58,6 +58,8 @@ jobs:
     steps:
       - name: Parse the tag
         id: ver
+        env:
+          INPUT_PUBLISH: ${{ github.event.inputs.publish }}
         run: |
           t="${TAG#test-}"
           if [[ $t =~ ^openrgb-razer-v([0-9]+(\.[0-9]+)*)-r([0-9]+)$ ]]; then
@@ -69,7 +71,7 @@ jobs:
           fi
           publish=false
           if [[ $TAG != test-* ]]; then
-            if [ "$GITHUB_EVENT_NAME" = push ] || [ "${{ github.event.inputs.publish }}" = true ]; then publish=true; fi
+            if [ "$GITHUB_EVENT_NAME" = push ] || [ "$INPUT_PUBLISH" = true ]; then publish=true; fi
           fi
           {
             echo "ver=$ver"
@@ -79,6 +81,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.BUILD_REF }}
       - name: Create the draft release
         id: create
@@ -115,17 +118,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
           fetch-tags: true
       - name: Build with OpenRGB's own AppImage script (their CI image)
+        env:
+          VER: ${{ needs.prepare.outputs.ver }}
         run: |
           docker run --rm -v "$PWD:/src" -w /src \
             registry.gitlab.com/openrgbdevelopers/openrgb-linux-ci-deb-builder:trixie-${{ matrix.ci }} \
             bash -euxc 'git config --global --add safe.directory /src; export $(dpkg-architecture); ./scripts/build-appimage.sh qt6'
           ls -l ./*.AppImage
           mkdir -p out
-          mv ./OpenRGB-*.AppImage "out/openrgb-razer-${{ needs.prepare.outputs.ver }}-${{ matrix.arch }}.AppImage"
+          mv ./OpenRGB-*.AppImage "out/openrgb-razer-$VER-${{ matrix.arch }}.AppImage"
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
@@ -146,13 +152,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
           fetch-tags: true
       - name: dpkg-buildpackage in debian:trixie (system hidapi, no hotplug library needed)
+        env:
+          VER: ${{ needs.prepare.outputs.ver }}
+          REL: ${{ needs.prepare.outputs.rel }}
         run: |
           mkdir -p out
-          docker run --rm -v "$PWD:/src" -e VER="${{ needs.prepare.outputs.ver }}" -e REL="${{ needs.prepare.outputs.rel }}" debian:trixie bash -euxc '
+          docker run --rm -v "$PWD:/src" -e VER -e REL debian:trixie bash -euxc '
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
               build-essential fakeroot dpkg-dev debhelper pkg-config git ca-certificates \
@@ -186,13 +196,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
           fetch-tags: true
       - name: rpmbuild in fedora:44
+        env:
+          VER: ${{ needs.prepare.outputs.ver }}
+          REL: ${{ needs.prepare.outputs.rel }}
         run: |
           mkdir -p out
-          docker run --rm -v "$PWD:/src" -e VER="${{ needs.prepare.outputs.ver }}" -e REL="${{ needs.prepare.outputs.rel }}" fedora:44 bash -euxc '
+          docker run --rm -v "$PWD:/src" -e VER -e REL fedora:44 bash -euxc '
             dnf install -y rpmdevtools gcc-c++ git libusbx-devel libstdc++-devel qt6-qtbase-devel qt6-linguist \
               desktop-file-utils hidapi-devel mbedtls-devel systemd-rpm-macros
             git config --global --add safe.directory /src
@@ -217,14 +231,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
           fetch-tags: true
       - name: makepkg in archlinux (builds this checkout)
+        env:
+          OPENRGB_RAZER_VER: ${{ needs.prepare.outputs.ver }}
+          OPENRGB_RAZER_REL: ${{ needs.prepare.outputs.rel }}
         run: |
           mkdir -p out
           docker run --rm -v "$PWD:/work" -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-            -e OPENRGB_RAZER_VER="${{ needs.prepare.outputs.ver }}" -e OPENRGB_RAZER_REL="${{ needs.prepare.outputs.rel }}" archlinux:latest bash -euxc '
+            -e OPENRGB_RAZER_VER -e OPENRGB_RAZER_REL archlinux:latest bash -euxc '
             pacman -Syu --noconfirm --needed base-devel git sudo libarchive
             useradd -m builder
             echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder

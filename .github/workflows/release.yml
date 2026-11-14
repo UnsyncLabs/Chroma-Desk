@@ -37,8 +37,12 @@ jobs:
       release_id: ${{ steps.create.outputs.release_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tag matches the app version
         run: |
+          # The tag ends up in a jq filter and in API calls: accept only the expected shape.
+          [[ $TAG =~ ^(test-)?v[0-9][A-Za-z0-9._-]*$ ]] || { echo "::error::unexpected tag format: $TAG"; exit 1; }
           ver=$(sed -n 's/^  "version": "\(.*\)",/\1/p' src-tauri/tauri.conf.json | head -1)
           echo "app version: $ver, tag: $TAG"
           case "$TAG" in
@@ -83,6 +87,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -120,6 +126,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Build with makepkg in an archlinux container
         run: |
           mkdir -p out
@@ -143,10 +151,11 @@ jobs:
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          RID: ${{ needs.create-release.outputs.release_id }}
         run: |
           for f in out/chroma-desk-[0-9]*.pkg.tar.zst; do
             gh api --method POST -H "Content-Type: application/octet-stream" \
-              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/${{ needs.create-release.outputs.release_id }}/assets?name=$(basename "$f")" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RID/assets?name=$(basename "$f")" \
               --input "$f" >/dev/null
           done
 
