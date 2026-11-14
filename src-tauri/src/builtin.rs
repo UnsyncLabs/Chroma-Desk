@@ -117,14 +117,32 @@ fn key_mask(dev: &DevInfo) -> Mask {
     if leds.is_empty() { Mask::Leds { leds: vec![] } } else { Mask::Leds { leds } }
 }
 
+/// The Cyberpunk glitch overlay, tuned by how many LEDs the device has: fewer LEDs get a denser,
+/// bigger glitch (a few LEDs would otherwise rarely flicker at all) and a slightly longer interval.
+fn glitch(led_count: usize) -> Layer {
+    let (interval, duration, density, size) = match led_count {
+        0..=8 => (5.0, 0.3, 0.5, 0.5),
+        9..=32 => (6.0, 0.25, 0.4, 0.3),
+        _ => (6.0, 0.25, 0.3, 0.14),
+    };
+    layer("glitch", "glitch", json!({ "colors": [slot("primary"), slot("secondary"), slot("accent")], "interval": interval, "duration": duration, "density": density, "size": size }), 1.0, Mask::All)
+}
+
 fn layers_for(profile: &str, dev: &DevInfo) -> Vec<Layer> {
     let cyber = profile == CYBERPUNK;
+    let mut layers = base_layers(cyber, dev);
+    if cyber {
+        layers.push(glitch(dev.led_count));
+    }
+    layers
+}
+
+fn base_layers(cyber: bool, dev: &DevInfo) -> Vec<Layer> {
     match dev.device_type.as_str() {
         "Keyboard" if cyber => vec![
             layer("bg", "solid", json!({ "color": lit("tertiary", -0.78) }), 1.0, Mask::All),
             layer("scan", "color_wave", json!({ "colors": [slot("primary"), slot("secondary"), slot("primary")], "speed": 0.35, "angle": 90, "scale": 1.5 }), 0.8, Mask::All),
             layer("keys", "solid", json!({ "color": slot("accent") }), 1.0, key_mask(dev)),
-            layer("glitch", "glitch", json!({ "colors": [slot("primary"), slot("secondary"), slot("accent")], "interval": 6.0, "duration": 0.25, "density": 0.3, "size": 0.14 }), 1.0, Mask::All),
         ],
         "Keyboard" => vec![
             layer("bg", "solid", json!({ "color": lit("background", 0.14) }), 1.0, Mask::All),
@@ -226,6 +244,20 @@ mod tests {
         // Keyboard WASD/arrows get a mask on the real LED names; Cyberpunk has the glitch layer.
         let kb = &scene_for(CYBERPUNK, &devs).devices["kb"];
         assert_eq!(kb.layers.iter().map(|l| l.effect.as_str()).collect::<Vec<_>>(), ["solid", "color_wave", "solid", "glitch"]);
+        // Every device type gets the glitch on top in Cyberpunk, and only there.
+        for d in &devs {
+            let top = scene_for(CYBERPUNK, &devs).devices[&d.key].layers.last().unwrap().clone();
+            assert_eq!(top.effect, "glitch", "{} ends with glitch", d.key);
+            assert!(!scene_for(OMARCHY, &devs).devices[&d.key].layers.iter().any(|l| l.effect == "glitch"), "{} has no glitch in omarchy", d.key);
+        }
+        for ty in ["DRam", "Gpu", "LEDStrip", "Mouse", "Motherboard", "Cooler", "Unknown"] {
+            let l = layers_for(CYBERPUNK, &dev("x", ty, &[]));
+            assert!(l.len() >= 2 && l.last().unwrap().effect == "glitch", "{ty}");
+        }
+        // Fewer LEDs get a denser, bigger glitch.
+        let small = glitch(4).params.0["size"].as_f64().unwrap();
+        let big = glitch(100).params.0["size"].as_f64().unwrap();
+        assert!(small > big);
         assert_eq!(kb.layers[2].mask, Mask::Leds { leds: vec![1, 2, 3, 4, 5] });
         let o = &scene_for(OMARCHY, &devs).devices["fans"];
         assert_eq!(o.layers[0].effect, "chase");

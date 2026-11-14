@@ -292,7 +292,7 @@
   "level.draw.hint": "Paint LEDs, make frames, paths or palettes.",
   "level.layers": "Layers",
   "level.layers.hint": "Advanced: stack effects with masks and blending.",
-  "quick.hint": "Click a card to apply it to this device right away.",
+  "quick.hint": "Click cards to stack them as layers; click again to remove. Shift-click or “Only this” replaces everything.",
   "quick.colour": "Solid colour",
   "quick.pickColour": "Pick a colour",
   "quick.useColour": "Use this colour",
@@ -898,5 +898,12 @@
   "quick.nowHardware": "hardware mode “{mode}”",
   "quick.nowHardwareDefault": "the device's own hardware mode",
   "quick.nowNothing": "nothing (lights off)",
-  "quick.nowProfile": "Profile: {name}"
+  "quick.nowProfile": "Profile: {name}",
+  "quick.effects": "Effects",
+  "quick.addColour": "Add on top",
+  "quick.removeLayer": "Remove {name}",
+  "quick.globalLayer": "Comes from the global scene",
+  "quick.only": "Only this",
+  "quick.onlyHint": "Replace everything with this one",
+  "quick.toggleHint": "Click to add or remove as a layer. Shift-click to replace everything."
 }

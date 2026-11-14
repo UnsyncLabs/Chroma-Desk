@@ -24,7 +24,7 @@ export default async function (t, url) {
   const a = (await t.mockState("animations"))[0];
   // Quick shows it under "My animations" and one click applies it.
   await t.level("Quick");
-  await t.clickText(`[data-anim="${a.id}"] button.face`, "Space pulse");
+  await t.page.click(`[data-anim="${a.id}"] button.only`);
   await sleep(300);
   const ds = (await t.scene()).devices["Razer Huntsman V3 Pro TKL@0"];
   assert.equal(ds.layers[0].params.anim_id, a.id);

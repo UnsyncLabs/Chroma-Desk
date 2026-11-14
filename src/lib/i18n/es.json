@@ -292,7 +292,7 @@
   "level.draw.hint": "Pinta LEDs, crea fotogramas, caminos o paletas.",
   "level.layers": "Capas",
   "level.layers.hint": "Avanzado: apila efectos con máscaras y mezcla.",
-  "quick.hint": "Haz clic en una tarjeta para aplicarla ya a este dispositivo.",
+  "quick.hint": "Haz clic en las tarjetas para apilarlas como capas; otro clic la quita. Mayús+clic o «Solo este» reemplaza todo.",
   "quick.colour": "Color fijo",
   "quick.pickColour": "Elegir color",
   "quick.useColour": "Usar este color",
@@ -898,5 +898,12 @@
   "quick.nowHardware": "modo de hardware «{mode}»",
   "quick.nowHardwareDefault": "el modo de hardware del propio dispositivo",
   "quick.nowNothing": "nada (luces apagadas)",
-  "quick.nowProfile": "Perfil: {name}"
+  "quick.nowProfile": "Perfil: {name}",
+  "quick.effects": "Efectos",
+  "quick.addColour": "Añadir encima",
+  "quick.removeLayer": "Quitar {name}",
+  "quick.globalLayer": "Viene de la escena global",
+  "quick.only": "Solo este",
+  "quick.onlyHint": "Reemplazar todo con este",
+  "quick.toggleHint": "Clic para añadir o quitar como capa. Mayús+clic para reemplazar todo."
 }

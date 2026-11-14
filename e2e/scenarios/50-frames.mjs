@@ -120,7 +120,7 @@ export default async function (t, url) {
   await t.level("Quick");
   await t.waitFor(() => t.page.$(`[data-anim="${saved.id}"]`), "in Quick > My animations");
   assert.match(await t.page.$eval(`[data-anim="${saved.id}"]`, (e) => e.textContent), /3\/3 LEDs|WAD blink/);
-  await t.clickText(`[data-anim="${saved.id}"] button.face`, "WAD blink");
+  await t.page.click(`[data-anim="${saved.id}"] button.only`);
   await sleep(300);
   const ds = (await t.scene()).devices[KB];
   assert.equal(ds.layers.length, 1);

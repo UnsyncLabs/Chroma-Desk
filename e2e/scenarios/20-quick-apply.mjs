@@ -20,7 +20,8 @@ export default async function (t, url) {
   await t.shot("quick", 400, 400);
 
   // One click on "Rainbow" applies it: layer is an animation layer with a snapshot.
-  await t.clickText("[data-anim] button.face", "Rainbow");
+  // The mock devices start with layers of their own (profile scene): "Only this" replaces them all.
+  await t.page.click('[data-anim="builtin:rainbow"] button.only');
   await sleep(400);
   let ds = (await t.scene()).devices[kb];
   assert.equal(ds.mode, "effects");
@@ -31,8 +32,13 @@ export default async function (t, url) {
   assert.equal(await t.page.$eval('[data-anim="builtin:rainbow"]', (e) => e.classList.contains("active")), true, "the card shows it is active");
 
   // The device preview in the sidebar/engine produced frames: LED colours are not all the same.
-  // Snake (a path animation) replaces it.
+  // Cards are toggles: Snake is stacked on top, then "Only this" replaces everything.
   await t.clickText("[data-anim] button.face", "Snake");
+  await sleep(300);
+  ds = (await t.scene()).devices[kb];
+  assert.equal(ds.layers.length, 2);
+  assert.equal(ds.layers[1].params.anim_id, "builtin:snake");
+  await t.page.click('[data-anim="builtin:snake"] button.only');
   await sleep(300);
   ds = (await t.scene()).devices[kb];
   assert.equal(ds.layers.length, 1);

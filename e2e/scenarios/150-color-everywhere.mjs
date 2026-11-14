@@ -22,6 +22,7 @@ export default async function (t, url) {
   // Quick thumbnails of themed presets follow a palette change.
   const before = await t.thumbSig("builtin:accent-breathing");
   assert.ok(before !== null, "themed preset card is there");
+  await t.page.$eval('[data-anim="builtin:accent-breathing"]', (e) => e.scrollIntoView({ block: "center" })); // thumbnails only animate on screen
   await t.page.evaluate(() => globalThis.__chromaMock.fns.setPalette({ accent: [255, 0, 0], primary: [0, 255, 0] }));
   await sleep(700);
   // Compare the same animation phase: sample a few frames of each palette and look at the dominant channel.

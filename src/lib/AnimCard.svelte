@@ -14,6 +14,7 @@
     names,
     active = false,
     onpick,
+    onreplace,
     pickLabel = "",
     children,
   }: {
@@ -23,7 +24,9 @@
     /** Currently applied on the device. */
     active?: boolean;
     /** Makes the thumbnail a button (Quick). */
-    onpick?: () => void;
+    onpick?: (e: MouseEvent) => void;
+    /** Secondary action: replace everything with this one (Quick). */
+    onreplace?: () => void;
     pickLabel?: string;
     /** Footer actions. */
     children?: Snippet;
@@ -41,6 +44,7 @@
   {:else}
     <div class="face"><AnimThumb {anim} {layout} {names} /></div>
   {/if}
+  {#if active}<span class="badge" aria-hidden="true">✓</span>{/if}
   <div class="info">
     <b class="name" title={name}>{name}</b>
     <span class="meta">
@@ -52,12 +56,15 @@
       {#each anim.tags.slice(0, 3) as tag (tag)}<span class="chip tag">#{tag}</span>{/each}
     </span>
   </div>
+  {#if onreplace}<button class="only" onclick={onreplace} title={t("quick.onlyHint")}>{t("quick.only")}</button>{/if}
   {@render children?.()}
 </article>
 
 <style>
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 0.55rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; position: relative; }
-  .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .card.active { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) inset; }
+  .badge { position: absolute; top: 0.9rem; right: 0.9rem; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--ok); color: var(--bg, #000); display: grid; place-items: center; font-size: 0.85rem; font-weight: 700; pointer-events: none; }
+  .only { font-size: 0.75rem; padding: 0.15rem 0.5rem; align-self: flex-start; }
   .face { display: block; width: 100%; padding: 0; background: none; border: 1px solid transparent; border-radius: 9px; cursor: default; }
   button.face { cursor: pointer; }
   button.face:hover:not(:disabled), button.face:focus-visible { border-color: var(--accent); }
