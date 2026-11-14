@@ -107,6 +107,113 @@
     }
   },
   {
+    "id": "gpu_temp_monitor",
+    "category": "monitor",
+    "notification": {
+      "anim": "",
+      "sequence": {
+        "schema_version": 1,
+        "id": "",
+        "name": "gpu_temp_monitor",
+        "description": null,
+        "tags": [],
+        "created": 0,
+        "updated": 1,
+        "target": {
+          "kind": "keyboard",
+          "hint": null
+        },
+        "builtin": false,
+        "kind": {
+          "type": "sequence",
+          "steps": [
+            {
+              "effect": "meter",
+              "params": {
+                "metric": "gpu.temp",
+                "color": {
+                  "slot": "alert"
+                },
+                "min": 30.0,
+                "max": 95.0,
+                "style": "sweep",
+                "sweep_ms": 1200,
+                "background": "none"
+              },
+              "keys": [
+                "name:Key: Escape",
+                "name:Key: F1",
+                "name:Key: F2",
+                "name:Key: F3",
+                "name:Key: F4",
+                "name:Key: F5",
+                "name:Key: F6",
+                "name:Key: F7",
+                "name:Key: F8",
+                "name:Key: F9",
+                "name:Key: F10",
+                "name:Key: F11",
+                "name:Key: F12"
+              ],
+              "duration_ms": 3200
+            },
+            {
+              "effect": "meter",
+              "params": {
+                "metric": "gpu.usage",
+                "color": [
+                  255,
+                  255,
+                  255
+                ],
+                "min": 0.0,
+                "max": 100.0,
+                "style": "sweep",
+                "sweep_ms": 1200,
+                "background": "none"
+              },
+              "keys": [
+                "name:Key: Escape",
+                "name:Key: F1",
+                "name:Key: F2",
+                "name:Key: F3",
+                "name:Key: F4",
+                "name:Key: F5",
+                "name:Key: F6",
+                "name:Key: F7",
+                "name:Key: F8",
+                "name:Key: F9",
+                "name:Key: F10",
+                "name:Key: F11",
+                "name:Key: F12"
+              ],
+              "duration_ms": 3200
+            }
+          ],
+          "loop": true
+        }
+      },
+      "keys": [
+        "name:Key: Escape",
+        "name:Key: F1",
+        "name:Key: F10",
+        "name:Key: F11",
+        "name:Key: F12",
+        "name:Key: F2",
+        "name:Key: F3",
+        "name:Key: F4",
+        "name:Key: F5",
+        "name:Key: F6",
+        "name:Key: F7",
+        "name:Key: F8",
+        "name:Key: F9"
+      ],
+      "sources": {
+        "always": true
+      }
+    }
+  },
+  {
     "id": "cpu_monitor",
     "category": "monitor",
     "notification": {

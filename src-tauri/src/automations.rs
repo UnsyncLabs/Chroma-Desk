@@ -342,6 +342,26 @@ mod tests {
         assert_eq!(e.overlays.lock().unwrap().len(), 1);
     }
 
+    /// "Every 10 s, show it for 7 s": visible 10..17, hidden 17..20, visible again 20..27.
+    #[test]
+    fn every_10_for_7_shows_then_hides_until_the_next_period() {
+        let e = engine();
+        let dir = crate::fsutil::test_dir("auto-every-7");
+        let mut sch = Scheduler::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let mut n = auto(Sources { every: Some(Every { every_secs: 10.0, for_secs: 7.0 }), ..Default::default() });
+        n.sequence.as_mut().unwrap().id = "inline".into();
+        e.global_triggers.lock().unwrap().insert("mon".into(), n);
+        let mut shown = vec![];
+        for s in 0..=30 {
+            sch.tick(&e, &dir, at(s));
+            shown.push(active(&e, "mon", at(s)));
+        }
+        let expect: Vec<bool> = (0..=30).map(|s| (10..17).contains(&s) || (20..27).contains(&s) || s == 30).collect();
+        assert_eq!(shown, expect);
+    }
+
     #[test]
     fn nothing_is_scheduled_without_scheduled_triggers() {
         let e = engine();

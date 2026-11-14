@@ -100,6 +100,13 @@ pub fn templates() -> Vec<Template> {
         vec![meter("cpu.usage", json!({"slot": "warn"}), 0.0, 100.0, &NUMBER_ROW), meter("cpu.temp", json!({"slot": "alert"}), 30.0, 95.0, &NUMBER_ROW)],
         true,
     );
+    let gpu_temp = sequence(
+        "gpu_temp_monitor",
+        vec![meter("gpu.temp", json!({"slot": "alert"}), 30.0, 95.0, &F_ROW), meter("gpu.usage", json!([255, 255, 255]), 0.0, 100.0, &F_ROW)],
+        true,
+    );
+    let mut gpu_temp_n = with_sequence(gpu_temp);
+    gpu_temp_n.sources.always = true;
     let mut gpu_n = with_sequence(gpu);
     gpu_n.sources.always = true;
     let mut cpu_n = with_sequence(cpu);
@@ -112,6 +119,7 @@ pub fn templates() -> Vec<Template> {
     ai.sources.ai = Some(AiMatch::default());
     vec![
         Template { id: "gpu_monitor", category: "monitor", notification: gpu_n },
+        Template { id: "gpu_temp_monitor", category: "monitor", notification: gpu_temp_n },
         Template { id: "cpu_monitor", category: "monitor", notification: cpu_n },
         chat("discord", [0x7c, 0x5c, 0xff], "discord"),
         chat("telegram", [0x2a, 0xab, 0xee], "telegram"),
@@ -167,7 +175,7 @@ mod tests {
     #[test]
     fn all_templates_are_valid_automations_with_valid_names() {
         let list = templates();
-        assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), ["gpu_monitor", "cpu_monitor", "discord", "telegram", "slack", "matrix", "ai_needs_you"]);
+        assert_eq!(list.iter().map(|t| t.id).collect::<Vec<_>>(), ["gpu_monitor", "gpu_temp_monitor", "cpu_monitor", "discord", "telegram", "slack", "matrix", "ai_needs_you"]);
         let map = list.iter().map(|t| (t.id.to_string(), t.notification.clone())).collect();
         crate::profiles::validate_triggers(&map).unwrap();
         for t in &list {
@@ -197,6 +205,20 @@ mod tests {
         // Nothing outside the F-row is touched; the sequence loops.
         assert_eq!(out[named(&n, "W")].a, 0.0);
         assert_eq!(at(&a, &n, 6.4 + 2.0)[esc], out[esc]);
+    }
+
+    #[test]
+    fn gpu_temp_monitor_shows_temperature_on_a_30_to_95_scale_then_usage() {
+        let n = keyboard();
+        let alert = crate::themes::default_palette().get("alert");
+        // 62.5 C on 30..95 = 50 % of 13 keys = 6.5 keys.
+        let a = pinned("gpu_temp_monitor", &[62.5, 100.0]);
+        let out = at(&a, &n, 2.0);
+        assert_eq!(out[named(&n, "F5")].r, alert[0] as f32);
+        assert_eq!(out[named(&n, "F7")].a, 0.0);
+        let AnimKind::Sequence { steps, .. } = &get("gpu_temp_monitor").sequence.unwrap().kind else { panic!() };
+        assert_eq!(steps[0].params.0["metric"], json!("gpu.temp"));
+        assert!(get("gpu_temp_monitor").sources.always);
     }
 
     #[test]

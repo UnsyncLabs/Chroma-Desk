@@ -828,6 +828,7 @@ mod tests {
             |n: &mut NamedTrigger| n.sources.threshold.as_mut().unwrap().metric = "nope".into(),
             |n: &mut NamedTrigger| n.sources.threshold.as_mut().unwrap().op = "eq".into(),
             |n: &mut NamedTrigger| n.sources.every.as_mut().unwrap().every_secs = 0.1,
+            |n: &mut NamedTrigger| n.sources.every.as_mut().unwrap().for_secs = 61.0,
             |n: &mut NamedTrigger| n.sources.ai.as_mut().unwrap().from = "x".repeat(40),
             |n: &mut NamedTrigger| n.anim = String::new(),
         ] {

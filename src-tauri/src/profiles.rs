@@ -269,7 +269,7 @@ pub fn validate_triggers(triggers: &BTreeMap<String, NamedTrigger>) -> Res<()> {
                 || !(-1000..=1000).contains(&t.priority)
                 || t.sources.omarchy.iter().any(|e| !OMARCHY_EVENTS.contains(&e.as_str()))
                 || t.sources.ai.as_ref().is_some_and(|a| a.from.chars().count() > 32 || a.kind.chars().count() > 32)
-                || t.sources.every.as_ref().is_some_and(|e| !e.every_secs.is_finite() || !(1.0..=86_400.0).contains(&e.every_secs) || !e.for_secs.is_finite() || !(0.05..=3600.0).contains(&e.for_secs))
+                || t.sources.every.as_ref().is_some_and(|e| !e.every_secs.is_finite() || !(1.0..=86_400.0).contains(&e.every_secs) || !e.for_secs.is_finite() || !(0.05..=3600.0).contains(&e.for_secs) || e.for_secs > e.every_secs)
                 || t.sources.threshold.as_ref().is_some_and(|h| {
                     crate::sysmon::Metric::parse(&h.metric).is_none()
                         || !["gt", "lt"].contains(&h.op.as_str())
