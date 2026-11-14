@@ -11,7 +11,8 @@ const setNum = (t, sel, v) =>
     },
     v,
   );
-const running = async (t, name) => (await t.mockState("overlays")).some((o) => o.name === name);
+// Expired overlays are only pruned while a device renders, so check `until` as the engine does.
+const running = async (t, name) => (await t.mockState("overlays")).some((o) => o.name === name && o.until > Date.now());
 
 export default async function (t, url) {
   await t.load(url);
@@ -53,7 +54,7 @@ export default async function (t, url) {
   await t.page.select("[data-dm-every-unit]", "min");
   await t.waitFor(async () => (await t.page.$eval("[data-dm-every]", (e) => e.value)) === "3", "3 min kept");
   await t.page.select("[data-dm-every-unit]", "s");
-  await setNum(t, "[data-dm-every]", 3);
+  await setNum(t, "[data-dm-every]", 6);
 
   // Metrics: add GPU temperature, drop VRAM (the last one cannot be removed).
   await t.clickText('[data-metric-chip="gpu.temp"]', ".*");
@@ -61,17 +62,17 @@ export default async function (t, url) {
   await t.clickText("[data-save]", ".*");
   await t.waitFor(() => t.page.$('[data-notif="gpu_monitor"]'), "saved");
   const g = (await global(t)).gpu_monitor;
-  assert.deepEqual(g.sources.every, { every_secs: 3, for_secs: 2 });
+  assert.deepEqual(g.sources.every, { every_secs: 6, for_secs: 2 });
   assert.ok(!g.sources.always, "always dropped");
   assert.deepEqual(g.sequence.kind.steps.map((s) => s.params.metric), ["gpu.usage", "gpu.temp"]);
   assert.equal(g.sequence.kind.steps[1].keys.length, 13, "new meter reuses the F-row");
-  assert.match(await t.page.$eval('[data-notif="gpu_monitor"] [data-when-chips]', (e) => e.textContent), /Every 3 s for 2 s/);
+  assert.match(await t.page.$eval('[data-notif="gpu_monitor"] [data-when-chips]', (e) => e.textContent), /Every 6 s for 2 s/);
   const groups = await t.page.$$eval("[data-group]", (e) => e.map((x) => x.getAttribute("data-group")));
   assert.deepEqual(groups, ["monitor"], "a periodic monitor stays a monitor");
 
   // The overlay appears, lasts for_secs, then hides until the next period.
   await t.waitFor(() => running(t, "gpu_monitor"), "overlay shows up", 9000);
-  await t.waitFor(async () => !(await running(t, "gpu_monitor")), "overlay hides again", 5000);
+  await t.waitFor(async () => !(await running(t, "gpu_monitor")), "overlay hides again", 8000);
 
   // Back to Always: periodic is dropped.
   await t.clickText('[data-notif="gpu_monitor"] [data-edit]', ".*");

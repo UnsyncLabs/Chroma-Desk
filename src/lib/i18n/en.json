@@ -893,5 +893,10 @@
   "anim.autosSeq": "Sequence",
   "anim.autosSaveSeq": "Save sequence to library",
   "anim.autosSeqSaved": "Sequence saved to the library as \"{name}\".",
-  "anim.autosEdit": "Edit"
+  "anim.autosEdit": "Edit",
+  "quick.now": "Now playing:",
+  "quick.nowHardware": "hardware mode “{mode}”",
+  "quick.nowHardwareDefault": "the device's own hardware mode",
+  "quick.nowNothing": "nothing (lights off)",
+  "quick.nowProfile": "Profile: {name}"
 }
