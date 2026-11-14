@@ -1,6 +1,6 @@
 [package]
 name = "chroma-desk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Interfaz para OpenRGB con editor de teclado"
 authors = ["neokuze"]
 license = "GPL-2.0-or-later"
