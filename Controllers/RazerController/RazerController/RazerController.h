@@ -17,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <hidapi.h>
+#include "hidapi_wrapper.h"
 #include "RGBController.h"
 #include "DeviceGuardManager.h"
 
@@ -266,6 +267,7 @@ class RazerController
 {
 public:
     RazerController(hid_device* dev_handle, hid_device* dev_argb_handle, const char* path, unsigned short pid, std::string dev_name);
+    RazerController(hidapi_wrapper hid_wrapper, hid_device* dev_handle, hid_device* dev_argb_handle, const char* path, unsigned short pid, std::string dev_name);
     ~RazerController();
 
     unsigned int            GetDeviceIndex();
@@ -309,6 +311,7 @@ public:
     bool                    SupportsFire();
 
 private:
+    hidapi_wrapper          wrapper;
     hid_device*             dev;
     hid_device*             dev_argb;
     unsigned short          dev_pid;

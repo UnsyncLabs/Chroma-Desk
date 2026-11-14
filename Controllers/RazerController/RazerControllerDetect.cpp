@@ -26,6 +26,33 @@
 #include "RGBController_RazerKrakenV4.h"
 #include "RGBController_RazerHanbo.h"
 
+/*---------------------------------------------------------*\
+| Some Razer keyboards (e.g. Huntsman V3 Pro TKL) expose    |
+| their control interface (3) without an interrupt IN      |
+| endpoint. Linux usbhid refuses to bind it ("couldn't     |
+| find an input interrupt endpoint"), so no hidraw node    |
+| exists and the regular detector never sees it. Talk to   |
+| that interface through the hidapi libusb backend, which  |
+| only needs control transfers for feature reports.        |
+\*---------------------------------------------------------*/
+DetectedControllers DetectRazerControllersLibusb(hidapi_wrapper wrapper, hid_device_info* info, const std::string& name)
+{
+    DetectedControllers detected_controllers;
+    hid_device*         dev;
+
+    dev = wrapper.hid_open_path(info->path);
+
+    if(dev)
+    {
+        RazerController*     controller     = new RazerController(wrapper, dev, dev, info->path, info->product_id, name);
+        RGBController_Razer* rgb_controller = new RGBController_Razer(controller);
+
+        detected_controllers.push_back(rgb_controller);
+    }
+
+    return(detected_controllers);
+}
+
 DetectedControllers DetectRazerControllers(hid_device_info* info, const std::string& name)
 {
     DetectedControllers detected_controllers;
@@ -300,6 +327,14 @@ REGISTER_HID_DETECTOR_IPU("Razer Huntsman V2 TKL",                           Det
 REGISTER_HID_DETECTOR_IPU("Razer Huntsman V2",                               DetectRazerControllers,        RAZER_VID,  RAZER_HUNTSMAN_V2_PID,                          0x03,   0x0C,   0x01);
 REGISTER_HID_DETECTOR_IPU("Razer Huntsman V3 Pro",                           DetectRazerControllers,        RAZER_VID,  RAZER_HUNTSMAN_V3_PRO_PID,                      0x03,   0x0C,   0x01);
 REGISTER_HID_DETECTOR_IPU("Razer Huntsman V3 Pro TKL White",                 DetectRazerControllers,        RAZER_VID,  RAZER_HUNTSMAN_V3_PRO_TKL_WHITE_PID,            0x03,   0x0C,   0x01);
+#ifdef __linux__
+/*-----------------------------------------------------------------*\
+| Interface 3 has no interrupt endpoint, so on Linux it has no      |
+| hidraw node; reach it through the libusb backend instead.         |
+| PID 0x02A7 is the Huntsman V3 Pro TKL (black and white).          |
+\*-----------------------------------------------------------------*/
+REGISTER_HID_WRAPPED_DETECTOR_I("Razer Huntsman V3 Pro TKL",            DetectRazerControllersLibusb,  RAZER_VID,  RAZER_HUNTSMAN_V3_PRO_TKL_WHITE_PID,            0x03);
+#endif
 REGISTER_HID_DETECTOR_IPU("Razer Huntsman V3 HE Magnetic Mini",              DetectRazerControllers,        RAZER_VID,  RAZER_HUNTSMAN_V3_HE_MAGNETIC_MINI_PID,         0x03,   0x0C,   0x01);
 REGISTER_HID_DETECTOR_IPU("Razer Ornata Chroma",                             DetectRazerControllers,        RAZER_VID,  RAZER_ORNATA_CHROMA_PID,                        0x02,   0x01,   0x02);
 REGISTER_HID_DETECTOR_IPU("Razer Ornata Chroma V2",                          DetectRazerControllers,        RAZER_VID,  RAZER_ORNATA_CHROMA_V2_PID,                     0x02,   0x01,   0x02);

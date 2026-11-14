@@ -17,8 +17,34 @@
 
 using namespace std::chrono_literals;
 
-RazerController::RazerController(hid_device* dev_handle, hid_device* dev_argb_handle, const char* path, unsigned short pid, std::string dev_name)
+/*---------------------------------------------------------*\
+| hidapi wrapper using the default (hidraw) backend         |
+\*---------------------------------------------------------*/
+static const hidapi_wrapper razer_default_hidapi_wrapper =
 {
+    NULL,
+    (hidapi_wrapper_send_feature_report)            hid_send_feature_report,
+    (hidapi_wrapper_get_feature_report)             hid_get_feature_report,
+    (hidapi_wrapper_get_serial_number_string)       hid_get_serial_number_string,
+    (hidapi_wrapper_open_path)                      hid_open_path,
+    (hidapi_wrapper_enumerate)                      hid_enumerate,
+    (hidapi_wrapper_free_enumeration)               hid_free_enumeration,
+    (hidapi_wrapper_close)                          hid_close,
+    (hidapi_wrapper_error)                          hid_error,
+#if(HID_HOTPLUG_ENABLED)
+    (hidapi_wrapper_hotplug_register_callback)      hid_hotplug_register_callback,
+    (hidapi_wrapper_hotplug_deregister_callback)    hid_hotplug_deregister_callback,
+#endif
+};
+
+RazerController::RazerController(hid_device* dev_handle, hid_device* dev_argb_handle, const char* path, unsigned short pid, std::string dev_name)
+    : RazerController(razer_default_hidapi_wrapper, dev_handle, dev_argb_handle, path, pid, dev_name)
+{
+}
+
+RazerController::RazerController(hidapi_wrapper hid_wrapper, hid_device* dev_handle, hid_device* dev_argb_handle, const char* path, unsigned short pid, std::string dev_name)
+{
+    wrapper           = hid_wrapper;
     dev               = dev_handle;
     dev_argb          = dev_argb_handle;
     dev_pid           = pid;
@@ -214,7 +240,7 @@ RazerController::~RazerController()
         keepalive_thread->join();
     }
 
-    hid_close(dev);
+    wrapper.hid_close(dev);
     delete guard_manager_ptr;
 }
 
@@ -2178,7 +2204,7 @@ void RazerController::razer_set_mode_wave(unsigned char direction)
 
 int RazerController::razer_usb_receive(razer_report* report)
 {
-    return hid_get_feature_report(dev, (unsigned char*)report, sizeof(*report));
+    return wrapper.hid_get_feature_report(dev, (unsigned char*)report, sizeof(*report));
 }
 
 int RazerController::razer_usb_send(razer_report* report)
@@ -2187,7 +2213,7 @@ int RazerController::razer_usb_send(razer_report* report)
 
     std::lock_guard<std::mutex> send_lock(send_mutex);
     DeviceGuardLock _ = guard_manager_ptr->AwaitExclusiveAccess();
-    int ret = hid_send_feature_report(dev, (unsigned char*)report, sizeof(*report));
+    int ret = wrapper.hid_send_feature_report(dev, (unsigned char*)report, sizeof(*report));
 
     /*-----------------------------------------------------------------*\
     | Devices behind a receiver (e.g. a mouse on the Mouse Dock Pro)    |
@@ -2202,7 +2228,7 @@ int RazerController::razer_usb_send(razer_report* report)
 
             std::this_thread::sleep_for(2ms);
 
-            if(hid_get_feature_report(dev, (unsigned char*)&response, sizeof(response)) < 0)
+            if(wrapper.hid_get_feature_report(dev, (unsigned char*)&response, sizeof(response)) < 0)
             {
                 break;
             }
@@ -2224,5 +2250,5 @@ int RazerController::razer_usb_send(razer_report* report)
 int RazerController::razer_usb_send_argb(razer_argb_report* report)
 {
     DeviceGuardLock _ = guard_manager_ptr->AwaitExclusiveAccess();
-    return hid_send_feature_report(dev_argb, (unsigned char*)report, sizeof(*report));
+    return wrapper.hid_send_feature_report(dev_argb, (unsigned char*)report, sizeof(*report));
 }
