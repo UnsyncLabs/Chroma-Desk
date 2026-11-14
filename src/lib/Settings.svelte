@@ -2,6 +2,7 @@
   /** Settings screen. */
   import { getVersion } from "@tauri-apps/api/app";
   import { api, hex, type HookStatus, type ServerStatus, type SysmonStatus, type ThemeStatus } from "./api";
+  import { has } from "./capabilities.svelte";
   import ClaudeSetup from "./ClaudeSetup.svelte";
   import { describeLive, metricLabel, sysmon, watchMetrics } from "./sysmon.svelte";
   import { SLOTS, palette } from "./palette.svelte";
@@ -205,11 +206,13 @@
   </p>
   {#if server?.gui_open}<p class="warn">{t("status.guiOpen")}</p>{/if}
   <button onclick={reconnect}>{t("set.reconnect")}</button>
-  <label class="check">
-    <input type="checkbox" checked={server?.service_enabled ?? false} onchange={(e) => toggleService(e.currentTarget.checked)} />
-    {t("set.service")}
-  </label>
-  <p class="muted small">{t("set.serviceHint")}</p>
+  {#if has("systemd_service")}
+    <label class="check">
+      <input type="checkbox" checked={server?.service_enabled ?? false} onchange={(e) => toggleService(e.currentTarget.checked)} />
+      {t("set.service")}
+    </label>
+    <p class="muted small">{t("set.serviceHint")}</p>
+  {/if}
 </section>
 
 <section data-themes>
@@ -245,6 +248,7 @@
     <button onclick={addRule} disabled={!ruleTheme.trim() || !userProfiles.length}>{t("themes.addRule")}</button>
   </div>
 
+  {#if has("omarchy")}
   <h4>{t("themes.hook")}</h4>
   {#if hook?.available}
     <p class="muted small">{t("themes.hookHint")}</p>
@@ -260,6 +264,7 @@
   {:else}
     <p class="muted small">{t("themes.noOmarchy")}</p>
   {/if}
+  {/if}
 </section>
 
 <section>
@@ -268,7 +273,11 @@
   <h4>{t("trg.cli")}</h4>
   <div class="cmd"><code>{CLI_EXAMPLE}</code><button onclick={() => copyText(CLI_EXAMPLE, t("trg.copied"))}>{t("trg.copy")}</button></div>
   <h4>{t("trg.socket")}</h4>
-  <div class="cmd"><code>{SOCKET_EXAMPLE}</code><button onclick={() => copyText(SOCKET_EXAMPLE, t("trg.copied"))}>{t("trg.copy")}</button></div>
+  {#if has("unix_socket")}
+    <div class="cmd"><code>{SOCKET_EXAMPLE}</code><button onclick={() => copyText(SOCKET_EXAMPLE, t("trg.copied"))}>{t("trg.copy")}</button></div>
+  {:else}
+    <div class="cmd"><code>{sockPath}</code><button onclick={() => copyText(sockPath, t("trg.copied"))}>{t("trg.copy")}</button></div>
+  {/if}
   <p class="muted small">{t("trg.socketHint")}</p>
   <div class="row">
     <button onclick={testAlert}>{t("trg.test")}</button>

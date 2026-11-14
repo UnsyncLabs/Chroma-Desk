@@ -1,6 +1,7 @@
 <script lang="ts">
   /** "When does it run?": every way an automation can be triggered, as cards you switch on. */
   import { api, type EventHookStatus, type NamedTrigger, type NotifSources } from "./api";
+  import { has } from "./capabilities.svelte";
   import ClaudeSetup from "./ClaudeSetup.svelte";
   import { t } from "./i18n/index.svelte";
   import { snippets } from "./automations.svelte";
@@ -163,6 +164,7 @@
     {/if}
   </div>
 
+  {#if has("desktop_notifications")}
   <div class="card" class:on={!!src.desktop} data-when="desktop" data-source="desktop">
     <label class="head"><input type="checkbox" checked={!!src.desktop} onchange={(e) => setDesktop(e.currentTarget.checked)} data-desktop /> <b>{t("notif.src.desktop")}</b></label>
     <p class="muted small">{t("notif.src.desktopHint")}</p>
@@ -181,8 +183,9 @@
     <p class="privacy small">{t("notif.privacy")}</p>
     <p class="muted small">{t("notif.listenStatus")}: <b data-desktop-status>{desktopStatus}</b></p>
   </div>
+  {/if}
 
-  {#if omarchyHere}
+  {#if omarchyHere && has("omarchy")}
     <div class="card" class:on={!!src.omarchy?.length} data-when="omarchy" data-source="omarchy">
       <div class="head"><b>{t("notif.src.omarchy")}</b></div>
       <p class="muted small">{t("notif.src.omarchyHint")}</p>

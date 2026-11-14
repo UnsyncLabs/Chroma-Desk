@@ -19,7 +19,7 @@ pub struct Env {
 
 impl Env {
     pub fn from_env() -> Env {
-        let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+        let home = crate::fsutil::home_dir();
         let dir = |var: &str, rel: &str| std::env::var_os(var).filter(|v| !v.is_empty()).map_or_else(|| home.join(rel), PathBuf::from);
         Env { state: dir("XDG_STATE_HOME", ".local/state"), cache: dir("XDG_CACHE_HOME", ".cache"), config: dir("XDG_CONFIG_HOME", ".config"), home }
     }

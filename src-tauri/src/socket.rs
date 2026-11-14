@@ -1,17 +1,16 @@
-//! Local control socket: `$XDG_RUNTIME_DIR/chroma-desk.sock`, one JSON object per line.
+//! Local control socket, one JSON object per line.
 //!
-//! Local only (a Unix socket, mode 0600, no network). Every line is size-limited and validated;
-//! see `triggers::handle_line` for the protocol.
+//! Linux/macOS: a Unix socket `$XDG_RUNTIME_DIR/chroma-desk.sock` (mode 0600). Windows: the named
+//! pipe `\\.\pipe\chroma-desk` (local clients only; remote clients are rejected). Nothing listens on
+//! the network. Every line is size-limited and validated; see `triggers::handle_line` for the
+//! protocol, which is identical on every platform.
 
 use crate::engine::Engine;
 use crate::triggers;
-use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::Semaphore;
 
 /// Longest accepted request line (bytes).
@@ -20,33 +19,125 @@ const MAX_CONNECTIONS: usize = 16;
 const MAX_LINES_PER_CONNECTION: usize = 100;
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// `$XDG_RUNTIME_DIR/chroma-desk.sock`; `None` without a runtime dir (no insecure fallback).
-pub fn socket_path() -> Option<PathBuf> {
-    let dir = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty())?;
-    Some(PathBuf::from(dir).join("chroma-desk.sock"))
+#[cfg(unix)]
+mod imp {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::os::unix::fs::PermissionsExt;
+    use tokio::net::{UnixListener, UnixStream};
+
+    pub type Listener = UnixListener;
+    pub type Stream = UnixStream;
+
+    /// `$XDG_RUNTIME_DIR/chroma-desk.sock`; `None` without a runtime dir (no insecure fallback).
+    pub fn socket_path() -> Option<PathBuf> {
+        let dir = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty())?;
+        Some(PathBuf::from(dir).join("chroma-desk.sock"))
+    }
+
+    /// Binds the socket (replacing a stale one) with mode 0600.
+    pub async fn bind(path: &Path) -> std::io::Result<Listener> {
+        if path.exists() {
+            if UnixStream::connect(path).await.is_ok() {
+                return Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "another instance is listening"));
+            }
+            std::fs::remove_file(path)?;
+        }
+        let listener = UnixListener::bind(path)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        Ok(listener)
+    }
+
+    pub async fn accept(l: &mut Listener) -> std::io::Result<Stream> {
+        l.accept().await.map(|(s, _)| s)
+    }
+
+    /// Blocking client (the `chroma-desk trigger` CLI): sends one line, returns the reply line.
+    pub fn send(path: &Path, line: &str) -> std::io::Result<String> {
+        let mut s = std::os::unix::net::UnixStream::connect(path)?;
+        s.set_read_timeout(Some(Duration::from_secs(5)))?;
+        s.set_write_timeout(Some(Duration::from_secs(5)))?;
+        s.write_all(line.trim_end().as_bytes())?;
+        s.write_all(b"\n")?;
+        let mut out = Vec::new();
+        let mut byte = [0u8; 1];
+        while out.len() < 64 * 1024 && s.read(&mut byte)? == 1 && byte[0] != b'\n' {
+            out.push(byte[0]);
+        }
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
 }
 
-/// Binds the socket (replacing a stale one) with mode 0600.
-pub async fn bind(path: &Path) -> std::io::Result<UnixListener> {
-    if path.exists() {
-        if UnixStream::connect(path).await.is_ok() {
-            return Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "another instance is listening"));
-        }
-        std::fs::remove_file(path)?;
+#[cfg(windows)]
+mod imp {
+    use super::*;
+    use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+
+    /// Name of the control pipe.
+    pub const PIPE_NAME: &str = r"\\.\pipe\chroma-desk";
+
+    /// The listening end: always one pending pipe instance waiting for the next client.
+    pub struct Listener {
+        name: PathBuf,
+        next: NamedPipeServer,
     }
-    let listener = UnixListener::bind(path)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    Ok(listener)
+    pub type Stream = NamedPipeServer;
+
+    pub fn socket_path() -> Option<PathBuf> {
+        Some(PathBuf::from(PIPE_NAME))
+    }
+
+    fn create(name: &Path, first: bool) -> std::io::Result<NamedPipeServer> {
+        ServerOptions::new().first_pipe_instance(first).reject_remote_clients(true).max_instances(MAX_CONNECTIONS + 1).create(name)
+    }
+
+    /// Creates the pipe; fails with `AddrInUse` (access denied) when another instance owns it.
+    pub async fn bind(path: &Path) -> std::io::Result<Listener> {
+        let next = create(path, true).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied { std::io::Error::new(std::io::ErrorKind::AddrInUse, "another instance is listening") } else { e }
+        })?;
+        Ok(Listener { name: path.to_path_buf(), next })
+    }
+
+    pub async fn accept(l: &mut Listener) -> std::io::Result<Stream> {
+        l.next.connect().await?;
+        let fresh = create(&l.name, false)?;
+        Ok(std::mem::replace(&mut l.next, fresh))
+    }
+
+    /// Blocking client: opens the pipe, sends one line, returns the reply line (5 s limit).
+    pub fn send(path: &Path, line: &str) -> std::io::Result<String> {
+        use std::io::{Read, Write};
+        let mut f = std::fs::OpenOptions::new().read(true).write(true).open(path)?;
+        let line = line.trim_end().to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let res = (|| {
+                f.write_all(line.as_bytes())?;
+                f.write_all(b"\n")?;
+                let mut out = Vec::new();
+                let mut byte = [0u8; 1];
+                while out.len() < 64 * 1024 && f.read(&mut byte)? == 1 && byte[0] != b'\n' {
+                    out.push(byte[0]);
+                }
+                Ok::<_, std::io::Error>(String::from_utf8_lossy(&out).into_owned())
+            })();
+            let _ = tx.send(res);
+        });
+        rx.recv_timeout(Duration::from_secs(5)).unwrap_or_else(|_| Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "no reply")))
+    }
 }
+
+pub use imp::{Listener, bind, send, socket_path};
 
 /// Applies a profile by name (the application provides it); returns the profile's name.
 pub type ProfileFn = Arc<dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = crate::error::Res<String>> + Send>> + Send + Sync>;
 
 /// Accepts connections forever. `profiles` handles `{"cmd":"set_profile","name":...}`.
-pub async fn serve(listener: UnixListener, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
+pub async fn serve(mut listener: Listener, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
     let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
+        let Ok(stream) = imp::accept(&mut listener).await else {
             tokio::time::sleep(Duration::from_millis(100)).await;
             continue;
         };
@@ -59,8 +150,8 @@ pub async fn serve(listener: UnixListener, engine: Arc<Engine>, dir: PathBuf, pr
     }
 }
 
-async fn connection(stream: UnixStream, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
-    let (r, mut w) = stream.into_split();
+async fn connection<S: AsyncRead + AsyncWrite + Unpin>(stream: S, engine: Arc<Engine>, dir: PathBuf, profiles: Option<ProfileFn>) {
+    let (r, mut w) = tokio::io::split(stream);
     let mut r = BufReader::new(r);
     for _ in 0..MAX_LINES_PER_CONNECTION {
         let mut buf = Vec::new();
@@ -114,24 +205,11 @@ async fn set_profile(hook: Option<&ProfileFn>, name: Result<String, String>) -> 
     }
 }
 
-/// Blocking client (the `chroma-desk trigger` CLI): sends one line, returns the reply line.
-pub fn send(path: &Path, line: &str) -> std::io::Result<String> {
-    let mut s = std::os::unix::net::UnixStream::connect(path)?;
-    s.set_read_timeout(Some(Duration::from_secs(5)))?;
-    s.set_write_timeout(Some(Duration::from_secs(5)))?;
-    s.write_all(line.trim_end().as_bytes())?;
-    s.write_all(b"\n")?;
-    let mut out = Vec::new();
-    let mut byte = [0u8; 1];
-    while out.len() < 64 * 1024 && s.read(&mut byte)? == 1 && byte[0] != b'\n' {
-        out.push(byte[0]);
-    }
-    Ok(String::from_utf8_lossy(&out).into_owned())
-}
-
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use tokio::net::UnixStream;
     use crate::animations;
     use crate::engine::{DevInfo, DeviceScene, SceneMode};
     use crate::fsutil::test_dir;

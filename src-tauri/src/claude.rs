@@ -18,7 +18,7 @@ pub const COMMAND: &str = "chroma-desk event ai:attention --from claude";
 
 /// `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json`.
 pub fn default_path() -> Option<PathBuf> {
-    let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude")))?;
+    let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| Some(crate::fsutil::home_dir()).filter(|h| !h.as_os_str().is_empty()).map(|h| h.join(".claude")))?;
     Some(dir.join("settings.json"))
 }
 
@@ -278,6 +278,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn other_tools_and_symlinked_files_are_respected() {
         let other = r#"{"hooks":{"Notification":[{"hooks":[{"type":"command","command":"chroma-desk event ai:attention --from codex"},{"type":"command","command":"chroma-desk event ai:attention --from claudette"}]}]}}"#;
         let p = file("claude-other", other);

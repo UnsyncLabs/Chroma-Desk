@@ -549,6 +549,12 @@ pub fn stop_triggers(state: State<'_, AppState>) -> usize {
     triggers::stop_all(&state.engine)
 }
 
+/// Features this platform supports (the UI hides the rest).
+#[tauri::command]
+pub fn capabilities() -> Vec<&'static str> {
+    crate::capabilities::list()
+}
+
 /// Where scripts reach the app (`null` without `XDG_RUNTIME_DIR`).
 #[tauri::command]
 pub fn trigger_socket_path() -> Option<String> {

@@ -1,7 +1,11 @@
-//! CPU usage (`/proc/stat`), CPU temperature (hwmon) and RAM (`/proc/meminfo`).
+//! CPU usage (`/proc/stat`), CPU temperature (hwmon) and RAM (`/proc/meminfo`) on Linux; the
+//! `sysinfo` crate on Windows and macOS (where there is no CPU temperature sensor we can read
+//! without extra privileges, so `cpu.temp` is reported as unavailable).
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 use super::Sample;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 /// Cumulative `(idle, total)` jiffies from the first line of `/proc/stat`.
@@ -26,6 +30,7 @@ pub fn usage_between(a: (u64, u64), b: (u64, u64)) -> Option<f32> {
     (total > 0).then(|| ((total - idle.min(total)) as f32 / total as f32 * 100.0).clamp(0.0, 100.0))
 }
 
+#[cfg(target_os = "linux")]
 fn read_stat() -> Option<(u64, u64)> {
     parse_stat(&std::fs::read_to_string("/proc/stat").ok()?)
 }
@@ -34,8 +39,33 @@ fn read_stat() -> Option<(u64, u64)> {
 pub struct CpuState {
     prev: Option<(u64, u64)>,
     sensor: Option<Option<TempSensor>>,
+    #[cfg(not(target_os = "linux"))]
+    sys: Option<sysinfo::System>,
 }
 
+#[cfg(not(target_os = "linux"))]
+impl CpuState {
+    pub fn usage(&mut self) -> Option<Sample> {
+        let first = self.sys.is_none();
+        if first {
+            self.sys = Some(sysinfo::System::new().ok()?);
+        }
+        let sys = self.sys.as_mut()?;
+        sys.refresh_cpu_usage();
+        if first {
+            // The first reading has no interval to measure over.
+            std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+            sys.refresh_cpu_usage();
+        }
+        Some(Sample { value: sys.global_cpu_usage().clamp(0.0, 100.0), used: None, total: None })
+    }
+
+    pub fn temp(&mut self) -> Option<Sample> {
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
 impl CpuState {
     pub fn usage(&mut self) -> Option<Sample> {
         let prev = match self.prev {
@@ -67,6 +97,15 @@ pub fn parse_meminfo(text: &str) -> Option<(f64, f64)> {
     Some((field("MemTotal:")?, field("MemAvailable:")?))
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn ram() -> Option<Sample> {
+    let mut sys = sysinfo::System::new().ok()?;
+    sys.refresh_memory();
+    let (total, used) = (sys.total_memory() as f64, sys.used_memory() as f64);
+    (total > 0.0).then(|| Sample { value: (used / total * 100.0) as f32, used: Some(used), total: Some(total) })
+}
+
+#[cfg(target_os = "linux")]
 pub fn ram() -> Option<Sample> {
     let (total, avail) = parse_meminfo(&std::fs::read_to_string("/proc/meminfo").ok()?)?;
     let used = (total - avail).max(0.0);
@@ -116,8 +155,14 @@ pub fn find_temp_sensor(root: &Path) -> Option<TempSensor> {
     None
 }
 
+#[cfg(target_os = "linux")]
 pub fn temp_sensor() -> Option<TempSensor> {
     find_temp_sensor(Path::new("/sys/class/hwmon"))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn temp_sensor() -> Option<TempSensor> {
+    None
 }
 
 #[cfg(test)]

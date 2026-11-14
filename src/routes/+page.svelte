@@ -6,6 +6,7 @@
   import { loadAnimations } from "$lib/animations.svelte";
   import Animations from "$lib/Animations.svelte";
   import { frames, isDirty, listenEngine, loadEngine, sceneStore, syncPositions } from "$lib/scene.svelte";
+  import { loadCapabilities } from "$lib/capabilities.svelte";
   import { loadProfiles, profiles } from "$lib/profiles.svelte";
   import { listenPalette, loadPalette } from "$lib/palette.svelte";
   import { toastError } from "$lib/state.svelte";
@@ -24,6 +25,7 @@
 
   async function start() {
     await api.waitStartup();
+    await loadCapabilities();
     await loadProfiles();
     await loadPalette();
     loadAnimations();

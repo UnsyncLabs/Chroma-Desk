@@ -451,6 +451,7 @@ export const api = {
   stopTriggers: () => invoke<number>("stop_triggers"),
   resumeTriggers: () => invoke<number>("resume_triggers"),
   pausedAutomations: () => invoke<string[]>("paused_automations"),
+  capabilities: () => invoke<string[]>("capabilities"),
   triggerSocketPath: () => invoke<string | null>("trigger_socket_path"),
   getPalette: () => invoke<PaletteEvent>("get_palette"),
   themeStatus: () => invoke<ThemeStatus>("theme_status"),

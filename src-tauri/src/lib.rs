@@ -6,7 +6,26 @@ pub mod claude;
 pub mod cli;
 pub mod commands;
 pub mod config;
+#[cfg(target_os = "linux")]
 pub mod desktop;
+/// Desktop-notification monitoring needs the D-Bus session bus (Linux): elsewhere the source is
+/// reported as unavailable.
+#[cfg(not(target_os = "linux"))]
+pub mod desktop {
+    use crate::engine::Engine;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    pub fn set_status(engine: &Engine, s: &str) {
+        *engine.desktop_status.lock().unwrap() = s.to_string();
+    }
+
+    pub async fn run(engine: Arc<Engine>, _dir: PathBuf, _enabled: Arc<AtomicBool>) {
+        set_status(&engine, "unavailable");
+    }
+}
+pub mod capabilities;
 pub mod engine;
 pub mod error;
 pub mod fsutil;
@@ -160,6 +179,7 @@ pub fn run() {
             commands::resume_triggers,
             commands::paused_automations,
             commands::trigger_socket_path,
+            commands::capabilities,
             commands::profile_get,
             commands::profile_update,
             commands::set_builtin_enabled,

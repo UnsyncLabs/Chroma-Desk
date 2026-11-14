@@ -52,11 +52,21 @@ pub fn status(env: &Env) -> HookStatus {
     }
 }
 
+/// `chmod 755` (Omarchy is Linux-only; elsewhere this is a no-op so the module still compiles).
+fn make_executable(script: &std::path::Path) -> Res<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755)).map_err(ApiError::io)?;
+    }
+    let _ = script;
+    Ok(())
+}
+
 /// Writes the script and installs it with `<program> hook install theme-set <script>`.
 pub fn install_with(env: &Env, program: &str, script: &std::path::Path) -> Res<()> {
-    use std::os::unix::fs::PermissionsExt;
     crate::fsutil::write_atomic(script, SCRIPT.as_bytes()).map_err(ApiError::io)?;
-    std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755)).map_err(ApiError::io)?;
+    make_executable(script)?;
     let out = Command::new(program).args(["hook", "install", "theme-set"]).arg(script).env("HOME", &env.home).output().map_err(|e| ApiError::new("hook_failed", e))?;
     if !out.status.success() {
         return Err(ApiError::new("hook_failed", String::from_utf8_lossy(&out.stderr).trim().to_string()));
@@ -146,10 +156,9 @@ pub fn event_status(env: &Env) -> Vec<EventHookStatus> {
 }
 
 pub fn install_event_with(env: &Env, program: &str, kind: &str, script: &std::path::Path) -> Res<()> {
-    use std::os::unix::fs::PermissionsExt;
     check_kind(kind)?;
     crate::fsutil::write_atomic(script, event_script(kind).as_bytes()).map_err(ApiError::io)?;
-    std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755)).map_err(ApiError::io)?;
+    make_executable(script)?;
     let out = Command::new(program).args(["hook", "install", kind]).arg(script).env("HOME", &env.home).output().map_err(|e| ApiError::new("hook_failed", e))?;
     if !out.status.success() {
         return Err(ApiError::new("hook_failed", String::from_utf8_lossy(&out.stderr).trim().to_string()));
@@ -180,6 +189,7 @@ mod tests {
     use super::*;
     use crate::fsutil::test_dir;
 
+    #[cfg(unix)]
     #[test]
     fn install_and_remove_with_a_fake_omarchy() {
         use std::os::unix::fs::PermissionsExt;
@@ -203,6 +213,7 @@ mod tests {
         assert!(status(&env).command.starts_with("omarchy hook install theme-set "));
     }
 
+    #[cfg(unix)]
     #[test]
     fn event_hooks_install_and_remove_only_their_own_file() {
         use std::os::unix::fs::PermissionsExt;

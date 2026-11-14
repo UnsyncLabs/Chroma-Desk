@@ -5,12 +5,15 @@
   import { t } from "./i18n/index.svelte";
   import { lib } from "./animations.svelte";
   import { DEFAULT_SLOTS, MAIN_SLOTS, SLOTS, palette } from "./palette.svelte";
+  import { has, SOURCE_CAP } from "./capabilities.svelte";
   import { refreshActiveProfile } from "./profiles.svelte";
   import { navigate, toast, toastError } from "./state.svelte";
 
   let { name, onclose }: { name: string; onclose: () => void } = $props();
 
-  const SOURCES: ThemeSourceId[] = ["manual", "omarchy", "kde", "pywal", "gtk", "external"];
+  const ALL_SOURCES: ThemeSourceId[] = ["manual", "omarchy", "kde", "pywal", "gtk", "external"];
+  /** Sources that need a desktop this platform does not have are hidden (unless the profile already uses one). */
+  const SOURCES = $derived(ALL_SOURCES.filter((id) => !SOURCE_CAP[id] || has(SOURCE_CAP[id]) || theme.source === id));
   let profile = $state<Profile | null>(null);
   let theme: ProfileTheme = $state({ source: "manual", manual_palette: null, overrides: {} });
   let presets: AnimRef[] = $state([]);

@@ -446,6 +446,7 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
       const all = TM.notifications();
       return [...pausedAlways].filter(([k, j]) => all[k] && JSON.stringify(all[k]) === j).map(([k]) => k);
     }
+    case "capabilities": return ["claude_hook", "nvidia_gpu", "desktop_notifications", "omarchy", "kde", "pywal", "gnome", "systemd_service", "amd_gpu", "cpu_temp", "unix_socket"];
     case "trigger_socket_path": return "/run/user/1000/chroma-desk.sock";
     // native dialogs (tauri-plugin-dialog goes through invoke)
     case "plugin:dialog|open": { const p = M.nextOpen ?? "/mock/import.json"; M.nextOpen = null; return p; }
