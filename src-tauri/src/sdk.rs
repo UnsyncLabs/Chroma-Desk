@@ -100,7 +100,7 @@ pub async fn ensure_server() -> Res<()> {
     if server_running() {
         return Ok(());
     }
-    std::process::Command::new(crate::server::find_openrgb().unwrap_or_else(|| "openrgb".into()))
+    crate::fsutil::quiet_command(crate::server::find_openrgb().unwrap_or_else(|| "openrgb".into()))
         .args(["--server", "--startminimized"])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

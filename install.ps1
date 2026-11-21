@@ -119,8 +119,8 @@ if ($DryRun) { Info (T "Dry run: nothing will be installed." "Simulacion: no se 
 if (-not $NoOpenRGB -and -not (Find-OpenRGB)) {
   if (Confirm-Step "OpenRGB was not found. Install it with winget?" "No se encontro OpenRGB. Instalarlo con winget?" $true) {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-      Write-Host "  + winget install OpenRGB"
-      if (-not $DryRun) { winget install OpenRGB --accept-package-agreements --accept-source-agreements }
+      Write-Host "  + winget install -e --id OpenRGB.OpenRGB"
+      if (-not $DryRun) { winget install -e --id OpenRGB.OpenRGB --accept-package-agreements --accept-source-agreements }
     } else {
       Warn (T "winget is not available: download OpenRGB from https://openrgb.org and install it." "winget no esta disponible: descarga OpenRGB desde https://openrgb.org e instalalo.")
     }
