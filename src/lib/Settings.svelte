@@ -86,6 +86,21 @@
     }
   }
 
+  let adminBusy = $state(false);
+  async function adminAction(f: () => Promise<void>, ok: string) {
+    adminBusy = true;
+    try {
+      await f();
+      toast(t(ok), "ok");
+    } catch (e) {
+      toastError(e);
+    } finally {
+      adminBusy = false;
+      server = await api.serverStatus().catch(() => server);
+      autostart = await api.getAutostart().catch(() => autostart);
+    }
+  }
+
   async function toggleService(on: boolean) {
     try {
       await api.setServerService(on);
@@ -221,6 +236,23 @@
   {#if server?.gui_open}<p class="warn">{t("status.guiOpen")}</p>{/if}
   <button onclick={reconnect}>{t("set.reconnect")}</button>
   <button onclick={restartOpenrgb} disabled={restarting} title={t("set.restartHint")}>{restarting ? t("set.restarting") : t("set.restart")}</button>
+  {#if server?.can_install}
+    <h4>{t("set.win.title")}</h4>
+    <p>
+      {t("set.win.pawnio")}: <b>{server.pawnio ? t("set.win.yes") : t("set.win.no")}</b>
+      {#if !server.pawnio}<button disabled={adminBusy} onclick={() => adminAction(api.installPawnio, "set.win.pawnioDone")}>{adminBusy ? t("common.loading") : t("set.win.installPawnio")}</button>{/if}
+    </p>
+    <p class="muted small">{t("set.win.pawnioHint")}</p>
+    <label class="check">
+      <input type="checkbox" checked={server.admin_autostart} disabled={adminBusy} onchange={(e) => { const on = e.currentTarget.checked; adminAction(() => api.setAdminAutostart(on), "set.serviceChanged"); }} />
+      {t("set.win.adminAutostart")}
+    </label>
+    <p class="muted small">{t("set.win.adminHint")}</p>
+    <p>
+      {t("set.win.elevated")}: <b>{server.elevated ? t("set.win.yes") : t("set.win.no")}</b>
+      {#if server.admin_autostart && !server.elevated}<button disabled={adminBusy} onclick={() => api.relaunchElevated().catch(toastError)}>{t("set.win.relaunch")}</button>{/if}
+    </p>
+  {/if}
   {#if has("systemd_service")}
     <label class="check">
       <input type="checkbox" checked={server?.service_enabled ?? false} onchange={(e) => toggleService(e.currentTarget.checked)} />

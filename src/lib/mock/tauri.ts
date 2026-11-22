@@ -405,7 +405,7 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "profiles_path": return "~/.config/chroma-desk/profiles";
     case "get_autostart": return false;
     case "default_fps": return Object.fromEntries((args.types as string[]).map((ty) => [ty, ty === "Keyboard" || ty === "Mouse" ? 60 : 30]));
-    case "server_status": return { running: true, version: "mock", gui_open: false, service_installed: false, service_active: false, installed: true, can_install: false };
+    case "server_status": return { running: true, version: "mock", gui_open: false, service_installed: false, service_active: false, installed: true, can_install: false, pawnio: false, elevated: false, admin_autostart: false };
     // animation library
     case "anim_list": return { animations: clone(allAnims()), corrupt: [] };
     case "theme_layers": {

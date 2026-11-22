@@ -80,6 +80,12 @@ pub struct ServerStatus {
     pub installed: bool,
     /// chroma-desk can download the portable OpenRGB itself (Windows).
     pub can_install: bool,
+    /// Windows: the PawnIO driver (SMBus: RAM, motherboard) is installed.
+    pub pawnio: bool,
+    /// chroma-desk runs elevated (so the OpenRGB it starts is too).
+    pub elevated: bool,
+    /// Windows: the elevated logon task exists.
+    pub admin_autostart: bool,
 }
 
 /// Where this platform's OpenRGB usually lives, in order of preference (the first existing
@@ -126,13 +132,16 @@ pub fn status(protocol: Option<u32>) -> ServerStatus {
         protocol,
         installed: find_openrgb().is_some(),
         can_install: false,
+        pawnio: false,
+        elevated: false,
+        admin_autostart: false,
     }
 }
 
 /// No systemd service outside Linux: chroma-desk starts the server itself when it is needed.
 #[cfg(not(target_os = "linux"))]
 pub fn status(protocol: Option<u32>) -> ServerStatus {
-    ServerStatus { running: crate::sdk::server_running(), gui_open: openrgb_gui_open(), service_installed: false, service_enabled: false, protocol, installed: find_openrgb().is_some(), can_install: cfg!(windows) }
+    ServerStatus { running: crate::sdk::server_running(), gui_open: openrgb_gui_open(), service_installed: false, service_enabled: false, protocol, installed: find_openrgb().is_some(), can_install: cfg!(windows), pawnio: crate::winadmin::pawnio_installed(), elevated: crate::winadmin::is_elevated(), admin_autostart: crate::winadmin::admin_autostart() }
 }
 
 /// Installs (if not provided by the package) and enables, or disables, the server service.

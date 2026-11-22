@@ -294,6 +294,9 @@ export interface ServerStatus {
   protocol: number | null;
   installed: boolean;
   can_install: boolean;
+  pawnio: boolean;
+  elevated: boolean;
+  admin_autostart: boolean;
 }
 
 export interface TrayLabels {
@@ -442,6 +445,9 @@ export const api = {
   serverStatus: () => invoke<ServerStatus>("server_status"),
   installOpenrgb: () => invoke<void>("install_openrgb"),
   restartOpenrgb: () => invoke<void>("restart_openrgb"),
+  installPawnio: () => invoke<void>("install_pawnio"),
+  setAdminAutostart: (enabled: boolean) => invoke<void>("set_admin_autostart", { enabled }),
+  relaunchElevated: () => invoke<void>("relaunch_elevated"),
   setServerService: (enabled: boolean) => invoke<void>("set_server_service", { enabled }),
   setTrayLabels: (labels: TrayLabels) => invoke<void>("set_tray_labels", { labels }),
   refreshTray: () => invoke<void>("refresh_tray"),
