@@ -137,7 +137,7 @@ pub async fn apply_profile(state: &AppState, emit: &Emit, name: &str) -> Res<Sce
     Ok(profile.scene)
 }
 
-/// Startup sequence: connect, then apply `requested` (CLI) or the default profile.
+/// Startup sequence: connect, then apply `requested` (CLI), the default profile or the last selected one.
 /// Returns the applied scene, if any. Always marks the state ready.
 pub async fn startup(state: AppState, emit: Emit, requested: Option<String>) -> Option<Scene> {
     let fps = state.config.lock().unwrap().settings.fps_by_type.clone();
@@ -152,7 +152,11 @@ pub async fn startup(state: AppState, emit: Emit, requested: Option<String>) -> 
     let mut applied = None;
     match state.connect_all().await {
         Ok(()) => {
-            let name = requested.or_else(|| state.config.lock().unwrap().settings.default_profile.clone());
+            // CLI request, else the default profile, else the one selected last time.
+            let name = requested.or_else(|| {
+                let cfg = state.config.lock().unwrap();
+                cfg.settings.default_profile.clone().or_else(|| cfg.settings.current_profile.clone())
+            });
             if let Some(name) = name {
                 match apply_profile(&state, &emit, &name).await {
                     Ok(s) => applied = Some(s),
