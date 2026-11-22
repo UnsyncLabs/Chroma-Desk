@@ -160,6 +160,7 @@ pub fn run() {
             commands::set_autostart,
             commands::server_status,
             commands::install_openrgb,
+            commands::restart_openrgb,
             commands::set_server_service,
             commands::set_tray_labels,
             commands::refresh_tray,

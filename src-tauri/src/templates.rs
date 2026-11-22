@@ -69,7 +69,7 @@ const WASD_RING: [&str; 4] = ["W", "D", "S", "A"];
 const ARROW_RING: [&str; 4] = ["Up Arrow", "Right Arrow", "Down Arrow", "Left Arrow"];
 
 fn meter(metric: &str, color: Value, min: f64, max: f64, ks: &[&str]) -> Step {
-    step("meter", json!({"metric": metric, "color": color, "min": min, "max": max, "style": "sweep", "sweep_ms": 1200, "background": "none"}), keys(ks), 3200)
+    step("meter", json!({"metric": metric, "color": color, "min": min, "max": max, "style": "sweep", "sweep_ms": 1200, "background": "none"}), keys(ks), 6000)
 }
 
 fn chat(id: &'static str, color: [u8; 3], app: &str) -> Template {
@@ -201,11 +201,11 @@ mod tests {
         let early = at(&a, &n, 0.3);
         assert_eq!(early[named(&n, "F4")].a, 0.0);
         // Second step: white, full bar.
-        let white = at(&a, &n, 3.2 + 2.0);
+        let white = at(&a, &n, 6.0 + 2.0);
         assert!(F_ROW.iter().all(|k| (white[named(&n, k)].r - 255.0).abs() < 1.0));
         // Nothing outside the F-row is touched; the sequence loops.
         assert_eq!(out[named(&n, "W")].a, 0.0);
-        assert_eq!(at(&a, &n, 6.4 + 2.0)[esc], out[esc]);
+        assert_eq!(at(&a, &n, 12.0 + 2.0)[esc], out[esc]);
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod tests {
         let first = at(&a, &n, 2.0);
         assert_eq!(first[named(&n, "Backspace")].r, warn[0] as f32, "100 % fills all 14 keys");
         assert_eq!(first[named(&n, "`")].g, warn[1] as f32);
-        let second = at(&a, &n, 3.2 + 2.0);
+        let second = at(&a, &n, 6.0 + 2.0);
         assert_eq!(second[named(&n, "6")].r, alert[0] as f32);
         assert_eq!(second[named(&n, "-")].a, 0.0, "past 7 keys: transparent");
         assert_eq!(first[named(&n, "F1")].a, 0.0, "F-row untouched");

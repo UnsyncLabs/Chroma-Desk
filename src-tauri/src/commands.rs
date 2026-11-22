@@ -410,6 +410,19 @@ pub async fn wait_startup(state: State<'_, AppState>) -> Res<()> {
 
 // ---------- background, autostart and server ----------
 
+/// Restarts the OpenRGB server (unfreezes the LEDs); the UI reconnects afterwards.
+#[tauri::command]
+pub async fn restart_openrgb() -> Res<()> {
+    let by_service = tauri::async_runtime::spawn_blocking(server::stop_openrgb)
+        .await
+        .map_err(|e| ApiError::new("server_start_failed", e))?
+        .map_err(|e| ApiError::new("server_start_failed", e))?;
+    if by_service {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    crate::sdk::ensure_server().await
+}
+
 /// Downloads the portable OpenRGB (Windows) and starts its server.
 #[tauri::command]
 pub async fn install_openrgb() -> Res<()> {

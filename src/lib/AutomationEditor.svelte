@@ -35,7 +35,7 @@
     mode = m;
     if (m === "animation" && !n.anim) n.anim = "builtin:flash";
     if (m === "sequence" && seq.kind.type === "sequence" && !seq.kind.steps.length) {
-      seq.kind.steps.push({ effect: "meter", params: { metric: "cpu.usage", color: { slot: "ok" }, min: 0, max: 100, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [], duration_ms: 3200 });
+      seq.kind.steps.push({ effect: "meter", params: { metric: "cpu.usage", color: { slot: "ok" }, min: 0, max: 100, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [], duration_ms: 6000 });
     }
   }
 

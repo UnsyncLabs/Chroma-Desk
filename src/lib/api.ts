@@ -441,6 +441,7 @@ export const api = {
   setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),
   serverStatus: () => invoke<ServerStatus>("server_status"),
   installOpenrgb: () => invoke<void>("install_openrgb"),
+  restartOpenrgb: () => invoke<void>("restart_openrgb"),
   setServerService: (enabled: boolean) => invoke<void>("set_server_service", { enabled }),
   setTrayLabels: (labels: TrayLabels) => invoke<void>("set_tray_labels", { labels }),
   refreshTray: () => invoke<void>("refresh_tray"),

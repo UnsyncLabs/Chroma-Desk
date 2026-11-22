@@ -231,3 +231,22 @@ try {{
 pub fn install_portable() -> Result<PathBuf, String> {
     Err("only available on Windows".into())
 }
+
+/// Stops every running OpenRGB (the server sometimes stops updating the LEDs). On Linux an
+/// enabled systemd service is restarted instead; otherwise the caller starts the server again.
+/// Returns `true` when the service took care of the restart.
+pub fn stop_openrgb() -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    if systemctl(&["is-active", UNIT_NAME]).is_ok_and(|s| s == "active") {
+        return systemctl(&["restart", UNIT_NAME]).map(|_| true);
+    }
+    let (prog, args): (&str, &[&str]) = if cfg!(windows) { ("taskkill", &["/F", "/IM", "OpenRGB.exe"]) } else { ("pkill", &["-i", "-x", "openrgb"]) };
+    crate::fsutil::quiet_command(prog).args(args).output().map_err(|e| e.to_string())?;
+    for _ in 0..20 {
+        if !crate::sdk::server_running() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    Ok(false)
+}

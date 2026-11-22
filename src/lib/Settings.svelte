@@ -143,6 +143,20 @@
     }
   }
 
+  let restarting = $state(false);
+  async function restartOpenrgb() {
+    restarting = true;
+    try {
+      await api.restartOpenrgb();
+      await reconnect();
+      toast(t("set.restarted"), "ok");
+    } catch (e) {
+      toastError(e);
+    } finally {
+      restarting = false;
+    }
+  }
+
   async function reconnect() {
     await loadDevices(api.connect);
     await refresh();
@@ -206,6 +220,7 @@
   </p>
   {#if server?.gui_open}<p class="warn">{t("status.guiOpen")}</p>{/if}
   <button onclick={reconnect}>{t("set.reconnect")}</button>
+  <button onclick={restartOpenrgb} disabled={restarting} title={t("set.restartHint")}>{restarting ? t("set.restarting") : t("set.restart")}</button>
   {#if has("systemd_service")}
     <label class="check">
       <input type="checkbox" checked={server?.service_enabled ?? false} onchange={(e) => toggleService(e.currentTarget.checked)} />
