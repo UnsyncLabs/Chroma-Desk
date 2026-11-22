@@ -76,6 +76,10 @@ pub struct ServerStatus {
     pub service_installed: bool,
     pub service_enabled: bool,
     pub protocol: Option<u32>,
+    /// An OpenRGB executable was found.
+    pub installed: bool,
+    /// chroma-desk can download the portable OpenRGB itself (Windows).
+    pub can_install: bool,
 }
 
 /// Where this platform's OpenRGB usually lives, in order of preference (the first existing
@@ -120,13 +124,15 @@ pub fn status(protocol: Option<u32>) -> ServerStatus {
         service_installed: installed,
         service_enabled: systemctl(&["is-enabled", UNIT_NAME]).is_ok_and(|s| s == "enabled"),
         protocol,
+        installed: find_openrgb().is_some(),
+        can_install: false,
     }
 }
 
 /// No systemd service outside Linux: chroma-desk starts the server itself when it is needed.
 #[cfg(not(target_os = "linux"))]
 pub fn status(protocol: Option<u32>) -> ServerStatus {
-    ServerStatus { running: crate::sdk::server_running(), gui_open: openrgb_gui_open(), service_installed: false, service_enabled: false, protocol }
+    ServerStatus { running: crate::sdk::server_running(), gui_open: openrgb_gui_open(), service_installed: false, service_enabled: false, protocol, installed: find_openrgb().is_some(), can_install: cfg!(windows) }
 }
 
 /// Installs (if not provided by the package) and enables, or disables, the server service.
@@ -180,4 +186,48 @@ mod tests {
         let c = openrgb_candidates();
         assert!(!c.is_empty() && c.iter().all(|p| p.is_absolute() || cfg!(windows)));
     }
+}
+
+/// Official portable OpenRGB build, pinned and checked against its SHA-256.
+#[cfg(windows)]
+const PORTABLE_URL: &str = "https://github.com/CalcProgrammer1/OpenRGB/releases/download/release_1.1/OpenRGB_1.1_Windows_64_8e16de2.zip";
+#[cfg(windows)]
+const PORTABLE_SHA256: &str = "63291726C6FC84EB479EF2EE752E97E1187F6CE9C49FD27EEE40DED588A8172A";
+
+/// Downloads the portable OpenRGB into `%LOCALAPPDATA%\Programs\OpenRGB` (no admin needed;
+/// it is one of [`openrgb_candidates`]). Uses PowerShell to avoid HTTP/zip dependencies.
+#[cfg(windows)]
+pub fn install_portable() -> Result<PathBuf, String> {
+    let base = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA not set")?;
+    let dest = PathBuf::from(base).join("Programs").join("OpenRGB");
+    let script = format!(
+        r#"$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
+$t = Join-Path $env:TEMP ('openrgb-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory $t | Out-Null
+try {{
+  $z = Join-Path $t 'openrgb.zip'
+  [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+  Invoke-WebRequest -UseBasicParsing -Uri '{PORTABLE_URL}' -OutFile $z
+  if ((Get-FileHash -Algorithm SHA256 $z).Hash -ne '{PORTABLE_SHA256}') {{ throw 'checksum mismatch' }}
+  Expand-Archive $z (Join-Path $t 'x')
+  $exe = Get-ChildItem (Join-Path $t 'x') -Recurse -Filter OpenRGB.exe | Select-Object -First 1
+  if (-not $exe) {{ throw 'OpenRGB.exe not in archive' }}
+  New-Item -ItemType Directory -Force '{dest}' | Out-Null
+  Copy-Item (Join-Path $exe.DirectoryName '*') '{dest}' -Recurse -Force
+}} finally {{ Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue }}"#,
+        dest = dest.display().to_string().replace('\'', "''"),
+    );
+    let out = crate::fsutil::quiet_command("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let exe = dest.join("OpenRGB.exe");
+    exe.is_file().then_some(exe).ok_or_else(|| "OpenRGB.exe missing after install".into())
+}
+
+#[cfg(not(windows))]
+pub fn install_portable() -> Result<PathBuf, String> {
+    Err("only available on Windows".into())
 }

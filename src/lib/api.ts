@@ -292,6 +292,8 @@ export interface ServerStatus {
   service_installed: boolean;
   service_enabled: boolean;
   protocol: number | null;
+  installed: boolean;
+  can_install: boolean;
 }
 
 export interface TrayLabels {
@@ -438,6 +440,7 @@ export const api = {
   getAutostart: () => invoke<boolean>("get_autostart"),
   setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),
   serverStatus: () => invoke<ServerStatus>("server_status"),
+  installOpenrgb: () => invoke<void>("install_openrgb"),
   setServerService: (enabled: boolean) => invoke<void>("set_server_service", { enabled }),
   setTrayLabels: (labels: TrayLabels) => invoke<void>("set_tray_labels", { labels }),
   refreshTray: () => invoke<void>("refresh_tray"),

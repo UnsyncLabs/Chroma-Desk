@@ -410,6 +410,16 @@ pub async fn wait_startup(state: State<'_, AppState>) -> Res<()> {
 
 // ---------- background, autostart and server ----------
 
+/// Downloads the portable OpenRGB (Windows) and starts its server.
+#[tauri::command]
+pub async fn install_openrgb() -> Res<()> {
+    tauri::async_runtime::spawn_blocking(server::install_portable)
+        .await
+        .map_err(|e| ApiError::new("install_failed", e))?
+        .map_err(|e| ApiError::new("install_failed", e))?;
+    crate::sdk::ensure_server().await
+}
+
 #[tauri::command]
 pub fn get_autostart(app: tauri::AppHandle) -> Res<bool> {
     use tauri_plugin_autostart::ManagerExt;
