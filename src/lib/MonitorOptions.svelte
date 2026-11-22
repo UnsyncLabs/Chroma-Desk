@@ -37,7 +37,7 @@
     if (on) {
       const [min, max] = defaultRange(m);
       const keys = steps.find((s) => s.effect === "meter")?.keys ?? [];
-      seq.kind.steps.push({ effect: "meter", params: { metric: m, color: COLORS[m] as never, min, max, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [...keys], duration_ms: 3200 });
+      seq.kind.steps.push({ effect: "meter", params: { metric: m, color: COLORS[m] as never, min, max, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [...keys], duration_ms: 6000 });
     } else if (used.length > 1) {
       seq.kind.steps = seq.kind.steps.filter((s) => !(s.effect === "meter" && s.params.metric === m));
     }

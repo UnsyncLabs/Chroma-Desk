@@ -76,3 +76,17 @@ mod tests {
         assert!(p.exists());
     }
 }
+
+/// A `Command` that never opens a console window on Windows (the app is a GUI process, so
+/// every console child would otherwise flash a terminal).
+pub fn quiet_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}

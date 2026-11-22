@@ -5,7 +5,6 @@
 use super::{Metric, Sample};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -119,7 +118,7 @@ pub fn parse_smi(text: &str) -> SmiRows {
 }
 
 fn run_smi() -> Option<SmiRows> {
-    let out = Command::new("nvidia-smi").args(["--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"]).output().ok()?;
+    let out = crate::fsutil::quiet_command("nvidia-smi").args(["--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"]).output().ok()?;
     out.status.success().then(|| parse_smi(&String::from_utf8_lossy(&out.stdout)))
 }
 

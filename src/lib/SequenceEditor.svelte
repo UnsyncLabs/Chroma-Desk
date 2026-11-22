@@ -35,7 +35,7 @@
   function fresh(style: Style): SeqStep {
     switch (style) {
       case "meter":
-        return { effect: "meter", params: { metric: "cpu.usage", color: slot("ok"), min: 0, max: 100, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [], duration_ms: 3200 };
+        return { effect: "meter", params: { metric: "cpu.usage", color: slot("ok"), min: 0, max: 100, style: "sweep", sweep_ms: 1200, background: "none" }, keys: [], duration_ms: 6000 };
       case "blink":
         return { effect: "blink", params: { color: slot("alert"), count: 5, on_ms: 150, off_ms: 150 }, keys: [], duration_ms: 1500 };
       case "orbit":

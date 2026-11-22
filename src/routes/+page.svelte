@@ -20,6 +20,21 @@
   import Tour from "$lib/Tour.svelte";
 
   let guiOpen = $state(false);
+  let missingOpenrgb = $state(false);
+  let installing = $state(false);
+
+  async function installOpenrgb() {
+    installing = true;
+    try {
+      await api.installOpenrgb();
+      missingOpenrgb = false;
+      await start();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      installing = false;
+    }
+  }
 
   const device = $derived(app.view.kind === "device" ? (app.devices.find((d) => d.key === (app.view as { key: string }).key) ?? null) : null);
 
@@ -30,7 +45,10 @@
     await loadPalette();
     loadAnimations();
     await loadDevices(api.connect);
-    if (app.error) return;
+    if (app.error) {
+      api.serverStatus().then((s) => (missingOpenrgb = !s.installed && s.can_install)).catch(() => {});
+      return;
+    }
     await loadEngine();
     syncPositions(app.devices);
     api.serverStatus().then((s) => (guiOpen = s.gui_open)).catch(() => {});
@@ -154,8 +172,14 @@
       <div class="empty">
         <h2>{t("empty.errorTitle")}</h2>
         <p class="error">{app.error}</p>
-        <p class="muted">{t("empty.errorHint")}</p>
-        <button class="primary" onclick={start}>{t("common.retry")}</button>
+        {#if missingOpenrgb}
+          <p class="muted">{t("empty.notInstalled")}</p>
+          <button class="primary" onclick={installOpenrgb} disabled={installing}>{installing ? t("empty.installing") : t("empty.installOpenrgb")}</button>
+          <button onclick={start} disabled={installing}>{t("common.retry")}</button>
+        {:else}
+          <p class="muted">{t("empty.errorHint")}</p>
+          <button class="primary" onclick={start}>{t("common.retry")}</button>
+        {/if}
       </div>
     {:else if app.loading && !app.devices.length}
       <div class="skeleton big" aria-hidden="true"></div>

@@ -16,6 +16,12 @@ use std::time::{Duration, Instant};
 
 const SCENE: [u8; 3] = [20, 0, 80];
 
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("desktop_demo needs D-Bus: Linux only");
+}
+
+#[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() {
     let bus = std::env::var("DESKTOP_DEMO_BUS").expect("set DESKTOP_DEMO_BUS to the private bus address");

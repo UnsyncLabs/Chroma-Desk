@@ -40,6 +40,7 @@ pub mod templates;
 pub mod themes;
 pub mod tray;
 pub mod triggers;
+pub mod winadmin;
 
 use config::Config;
 use state::AppState;
@@ -159,6 +160,11 @@ pub fn run() {
             commands::get_autostart,
             commands::set_autostart,
             commands::server_status,
+            commands::install_openrgb,
+            commands::restart_openrgb,
+            commands::install_pawnio,
+            commands::set_admin_autostart,
+            commands::relaunch_elevated,
             commands::set_server_service,
             commands::set_tray_labels,
             commands::refresh_tray,

@@ -410,6 +410,65 @@ pub async fn wait_startup(state: State<'_, AppState>) -> Res<()> {
 
 // ---------- background, autostart and server ----------
 
+/// Restarts the OpenRGB server (unfreezes the LEDs); the UI reconnects afterwards.
+#[tauri::command]
+pub async fn restart_openrgb() -> Res<()> {
+    let by_service = tauri::async_runtime::spawn_blocking(server::stop_openrgb)
+        .await
+        .map_err(|e| ApiError::new("server_start_failed", e))?
+        .map_err(|e| ApiError::new("server_start_failed", e))?;
+    if by_service {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    crate::sdk::ensure_server().await
+}
+
+/// Downloads the portable OpenRGB (Windows) and starts its server.
+#[tauri::command]
+pub async fn install_openrgb() -> Res<()> {
+    tauri::async_runtime::spawn_blocking(server::install_portable)
+        .await
+        .map_err(|e| ApiError::new("install_failed", e))?
+        .map_err(|e| ApiError::new("install_failed", e))?;
+    // PawnIO lets OpenRGB reach RAM and motherboard LEDs; a declined UAC prompt is not fatal.
+    if !crate::winadmin::pawnio_installed() {
+        let _ = tauri::async_runtime::spawn_blocking(crate::winadmin::install_pawnio).await;
+    }
+    crate::sdk::ensure_server().await
+}
+
+fn admin_err(e: impl std::fmt::Display) -> ApiError {
+    ApiError::new("admin_failed", e)
+}
+
+/// Installs the PawnIO driver (Windows, UAC prompt).
+#[tauri::command]
+pub async fn install_pawnio() -> Res<()> {
+    tauri::async_runtime::spawn_blocking(crate::winadmin::install_pawnio).await.map_err(admin_err)?.map_err(admin_err)
+}
+
+/// Creates or removes the elevated logon task (Windows, UAC prompt). Enabling it turns the
+/// plain autostart entry off so chroma-desk does not start twice.
+#[tauri::command]
+pub async fn set_admin_autostart(app: tauri::AppHandle, enabled: bool) -> Res<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::winadmin::set_admin_autostart(enabled)).await.map_err(admin_err)?.map_err(admin_err)?;
+    if enabled {
+        use tauri_plugin_autostart::ManagerExt;
+        let _ = app.autolaunch().disable();
+    }
+    Ok(())
+}
+
+/// Restarts chroma-desk elevated through the logon task, stopping the non-elevated OpenRGB
+/// first so the new instance starts it with admin rights.
+#[tauri::command]
+pub async fn relaunch_elevated(app: tauri::AppHandle) -> Res<()> {
+    let _ = tauri::async_runtime::spawn_blocking(server::stop_openrgb).await;
+    crate::winadmin::relaunch_elevated().map_err(admin_err)?;
+    app.exit(0);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_autostart(app: tauri::AppHandle) -> Res<bool> {
     use tauri_plugin_autostart::ManagerExt;

@@ -105,8 +105,11 @@ async fn engine() {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("c.sock");
     let listener = socket::bind(&path).await.unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    println!("  socket mode: {:o}", std::fs::metadata(&path).unwrap().permissions().mode() & 0o777);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        println!("  socket mode: {:o}", std::fs::metadata(&path).unwrap().permissions().mode() & 0o777);
+    }
     tokio::spawn(socket::serve(listener, state.engine.clone(), animations::animations_dir(), None));
     tokio::time::sleep(Duration::from_millis(500)).await;
     show("before", &colors(&state, &wasd).await);
